@@ -317,12 +317,17 @@ _meta_cache = {"time": 0, "data": None}
 
 @app.route("/api/cache/clear")
 def api_cache_clear():
-    global _cache, _meta_cache, _iso_cache
+    global _cache, _meta_cache, _iso_cache, _building
     with _lock: _cache.clear()
     _meta_cache = {"time": 0, "data": None}
     _iso_cache  = {"time": 0, "data": []}
-    print("[cache] All caches cleared manually")
-    return jsonify({"status": "ok", "message": "All caches cleared"})
+    print("[cache] All caches cleared manually — starting background rebuild")
+    # Immediately kick off background rebuild so next /api/dashboard call is fast
+    with _lock:
+        if not _building:
+            _building = True
+            threading.Thread(target=_build, daemon=True).start()
+    return jsonify({"status": "ok", "message": "All caches cleared, rebuild started"})
 
 @app.route("/api/meta", methods=["GET"])
 def api_meta():
@@ -512,7 +517,8 @@ def api_iso_summary():
         f_system   = request.args.get("system",    "").strip()
         f_unit     = request.args.get("unit",      "").strip()
         f_area     = request.args.get("area",      "").strip()
-        has_filter = bool(f_system or f_unit or f_area)
+        f_subarea  = request.args.get("sub_area",  "").strip()
+        has_filter = bool(f_system or f_unit or f_area or f_subarea)
 
         # Use cache only when no specific filter is applied
         now = time.time()
@@ -529,9 +535,10 @@ def api_iso_summary():
                         "unit,area,sub_area,system,line_no,iso_drawing,sf,size_inch,date_completed,completed"
                     )
                     # Server-side filters - same approach as /api/joints
-                    if f_system: q = q.eq("system", f_system)
-                    if f_unit:   q = q.eq("unit",   f_unit)
-                    if f_area:   q = q.eq("area",   f_area)
+                    if f_system:  q = q.eq("system",   f_system)
+                    if f_unit:    q = q.eq("unit",     f_unit)
+                    if f_area:    q = q.eq("area",     f_area)
+                    if f_subarea: q = q.eq("sub_area", f_subarea)
                     chunk_res = q.range(offset, offset + limit - 1).execute()
                     chunk = chunk_res.data or []
                     jm_all.extend(chunk)

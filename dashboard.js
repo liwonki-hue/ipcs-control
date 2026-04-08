@@ -110,7 +110,7 @@ function navigate(page) {
         case "overview":    loadOverview();     break;
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
-        case "unitarea":    loadUnitArea();     break;
+        case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "joint_master":loadJointMaster();  break;
         case "week_plan":   loadWeekPlan();     break;
     }
@@ -372,7 +372,6 @@ async function loadUnitArea() {
                     },
                     {
                         label: "Completed DI",
-                        // null when 0 → Chart.js renders nothing (no minBarLength ghost)
                         data: allUnits.map(u => u.completed_di > 0 ? u.completed_di : null),
                         backgroundColor: "rgba(37,99,235,0.85)",
                         borderColor: "#2563eb",
@@ -390,6 +389,7 @@ async function loadUnitArea() {
                 plugins: { ...chartOpts("DI").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: 12, font: { size: 10 } } } }
             }
         });
+        charts["unitChart"].resize();
 
         // ── Area Chart: ALL areas shown (gray total_di bars for all)
         //    Completed DI bar only when > 0 → null = 0px
@@ -415,7 +415,6 @@ async function loadUnitArea() {
                         },
                         {
                             label: "Completed DI",
-                            // null when 0 → no ghost bar
                             data: sortedAreas.map(a => a.completed_di > 0 ? a.completed_di : null),
                             backgroundColor: "rgba(245,197,66,0.85)",
                             borderColor: "#f5c542",
@@ -434,6 +433,7 @@ async function loadUnitArea() {
                     plugins: { ...chartOpts("DI").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: 12, font: { size: 10 } } } }
                 }
             });
+            charts["areaChart"].resize();
         }
     } catch(e) { console.error("UnitArea failed",e); }
 }
@@ -484,8 +484,9 @@ async function applyIsoBulkDate(){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:dateVal})});
             const el=document.getElementById(`date-${r.id}`);if(el)el.value=dateVal;saved++;
         }
-        toast(`✓ ${saved} joints saved (${isoVal})`);
-        fetch("/api/cache/clear").then(()=>{_dashData=null;getDashData(true).then(fresh=>{if(fresh)renderKPI(fresh.kpi,fresh.weekly);}).catch(()=>{});}).catch(()=>{});
+        toast(`✓ ${saved} joints saved (${isoVal}) — Refresh to update KPI`);
+        _dashData=null;
+        fetch("/api/cache/clear").catch(()=>{});
         updateIsoBulkPanel(isoVal,jmData);
     }catch(e){toast(`✗ Bulk save failed: ${e.message}`,"error");}
     finally{if(btn){btn.disabled=false;btn.textContent="Apply to All";}}
@@ -502,8 +503,9 @@ async function clearIsoBulkDate(){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
             const el=document.getElementById(`date-${r.id}`);if(el)el.value="";
         }
-        toast(`✓ ${targets.length} joints cleared (${isoVal})`);
-        fetch("/api/cache/clear").then(()=>{_dashData=null;getDashData(true).then(fresh=>{if(fresh)renderKPI(fresh.kpi,fresh.weekly);}).catch(()=>{});}).catch(()=>{});
+        toast(`✓ ${targets.length} joints cleared (${isoVal}) — Refresh to update KPI`);
+        _dashData=null;
+        fetch("/api/cache/clear").catch(()=>{});
         updateIsoBulkPanel(isoVal,jmData);
     }catch(e){toast(`✗ Bulk clear failed: ${e.message}`,"error");}
 }
@@ -544,8 +546,9 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} date cleared!`);
-        fetch("/api/cache/clear").then(()=>{_dashData=null;getDashData(true).then(fresh=>{if(fresh)renderKPI(fresh.kpi,fresh.weekly);}).catch(()=>{});}).catch(()=>{});
+        toast(`✓ ID ${id} date cleared! (Refresh to update KPI)`);
+        _dashData=null;
+        fetch("/api/cache/clear").catch(()=>{});
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
 
@@ -555,8 +558,9 @@ async function saveJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} saved!`);
-        fetch("/api/cache/clear").then(()=>{_dashData=null;getDashData(true).then(fresh=>{if(fresh)renderKPI(fresh.kpi,fresh.weekly);}).catch(()=>{});}).catch(()=>{});
+        toast(`✓ ID ${id} saved! (Refresh to update KPI)`);
+        _dashData=null;
+        fetch("/api/cache/clear").catch(()=>{});
     }catch(e){toast(`✗ Save failed: ${e.message}`,"error");}
 }
 
@@ -594,20 +598,21 @@ async function loadWeekPlan(){
     }catch(e){console.error("WeekPlan load failed",e);}
 }
 
-async function loadIsoSummary(filterSystem="", filterUnit="", filterArea=""){
+async function loadIsoSummary(filterSystem="", filterUnit="", filterArea="", filterSubArea=""){
     const loadingEl=document.getElementById("wp-iso-loading");
     const countEl=document.getElementById("wp-iso-count");
     if(loadingEl)loadingEl.style.display="inline";
     try{
         const showAll=document.getElementById("wp-show-all")?.checked||false;
         const params=new URLSearchParams({show_all:showAll?"true":"false"});
-        if(filterSystem)params.set("system",filterSystem);
-        if(filterUnit)  params.set("unit",  filterUnit);
-        if(filterArea)  params.set("area",  filterArea);
+        if(filterSystem)  params.set("system",   filterSystem);
+        if(filterUnit)    params.set("unit",     filterUnit);
+        if(filterArea)    params.set("area",     filterArea);
+        if(filterSubArea) params.set("sub_area", filterSubArea);
         console.log(`[ISO] Requesting: /api/iso-summary?${params}`);
         isoSummaryData=await apiFetch(`/api/iso-summary?${params}`);
         console.log(`[ISO] Loaded ${isoSummaryData.length} records`);
-        if(!filterSystem&&!filterUnit&&!filterArea)populateIsoFilters();
+        if(!filterSystem&&!filterUnit&&!filterArea&&!filterSubArea)populateIsoFilters();
         renderIsoSearchTable();
     }catch(e){
         if(countEl)countEl.textContent="Failed to load ISO data";
@@ -616,10 +621,10 @@ async function loadIsoSummary(filterSystem="", filterUnit="", filterArea=""){
 }
 
 function searchIsoDrawings(){
-    const filterSystem=(document.getElementById("wp-filter-system")?.value||"").trim();
-    const filterUnit  =(document.getElementById("wp-filter-unit")?.value||"").trim();
-    const filterArea  =(document.getElementById("wp-filter-area")?.value||"").trim();
-    loadIsoSummary(filterSystem,filterUnit,filterArea);
+    const filterSystem  =(document.getElementById("wp-filter-system")?.value||"").trim();
+    const filterUnit    =(document.getElementById("wp-filter-unit")?.value||"").trim();
+    const filterSubArea =(document.getElementById("wp-filter-subarea")?.value||"").trim();
+    loadIsoSummary(filterSystem,filterUnit,"",filterSubArea);
 }
 
 function populateIsoFilters(){
