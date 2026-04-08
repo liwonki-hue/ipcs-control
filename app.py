@@ -224,11 +224,11 @@ def _build():
 
         try:
             offset = 0
-            limit = 1000
+            limit = 3000
             jm_all = []
             print(f"[bop-debug] Scanning joints for aggregation...")
             while True:
-                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,date_completed,completed").order("id").range(offset, offset + limit - 1).execute()
+                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,date_completed,completed").range(offset, offset + limit - 1).execute()
                 chunk = chunk_res.data or []
                 jm_all.extend(chunk)
                 offset += len(chunk)
