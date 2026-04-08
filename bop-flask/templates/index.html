@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BOP Piping Progress Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/static/css/index.css">
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">&#9889;</div>
+    <div class="logo-title">BOP DASHBOARD</div>
+    <div class="logo-sub">CCGT PIPING PROGRESS</div>
+  </div>
+  <div class="nav-section">Monitoring</div>
+  <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon">&#128200;</span> Overview</button>
+  <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
+  <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
+  <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#127981;</span> Unit / Area</button>
+  <div class="nav-section">Data Entry</div>
+  <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
+  <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
+  <div class="nav-footer">
+    <button class="nav-btn refresh-btn" onclick="refreshData()"><span class="nav-icon">&#128260;</span> Refresh</button>
+    <a href="/static/USER_MANUAL_EN.html" target="_blank" class="nav-btn" style="text-decoration:none;display:flex;align-items:center;"><span class="nav-icon">&#128214;</span> English Manual</a>
+    <div class="nav-version">ICK-DPGU-PIPING v2.0</div>
+  </div>
+</nav>
+
+<div class="main-area">
+  <header class="top-header">
+    <div>
+      <div class="header-title">&#9889; CCGT BOP PIPING PROGRESS DASHBOARD</div>
+      <div class="header-sub">DOOSAN ENERBILITY &middot; LLP INTEGRA CONSTRUCTION KZ &middot; KAZAKHSTAN CCGT</div>
+    </div>
+    <div class="header-right">
+      <div class="header-date-label">REPORT DATE</div>
+      <div class="header-date" id="reportDate">&mdash;</div>
+    </div>
+  </header>
+  <div id="loading-status" style="display:none;background:rgba(0,200,255,0.08);border-bottom:1px solid rgba(0,200,255,0.2);color:#00c8ff;font-family:'DM Mono',monospace;font-size:12px;text-align:center;padding:7px 16px;letter-spacing:1px;"></div>
+
+  <div class="kpi-row" id="kpiRow">
+    <div class="kpi-card accent"><div class="kpi-label">Overall Progress</div><div class="kpi-value" id="kpi-overall">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="kpi-bar" style="width:0%"></div></div><div class="kpi-sub" id="kpi-overall-sub">&mdash;</div></div>
+    <div class="kpi-card white"><div class="kpi-label">Total DI</div><div class="kpi-value kpi-val-white" id="kpi-total-di">&mdash;</div><div class="kpi-sub" id="kpi-total-di-sub">&mdash;</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Fabrication (S) DI</div><div class="kpi-value cyan" id="kpi-fab">&mdash;</div><div class="kpi-sub kpi-pct-sub cyan-pct" id="kpi-fab-sub">&mdash;</div></div>
+    <div class="kpi-card green"><div class="kpi-label">Erection (F) DI</div><div class="kpi-value green" id="kpi-erect">&mdash;</div><div class="kpi-sub kpi-pct-sub green-pct" id="kpi-erect-sub">&mdash;</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Remaining DI</div><div class="kpi-value yellow" id="kpi-remain">&mdash;</div><div class="kpi-sub" id="kpi-remain-sub">&mdash;</div></div>
+    <div class="kpi-card" id="kpi-week-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="kpi-week">&mdash;</div><div class="kpi-sub" id="kpi-week-sub">&mdash;</div></div>
+  </div>
+
+  <div class="page-body">
+    <div class="page" id="page-overview">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div></div>
+      <div class="grid-3">
+        <div class="col">
+          <div class="panel"><div class="panel-title">Overall DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f5c542" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">OVERALL PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
+          <div class="panel"><div class="panel-title">By Discipline</div><div id="disciplineList"></div></div>
+        </div>
+        <div class="col col-wide">
+          <div class="panel"><div class="panel-title">Cumulative S-Curve &mdash; Plan vs Actual</div><div style="position:relative;height:220px"><canvas id="scurveChart"></canvas></div></div>
+          <div class="panel"><div class="panel-title">Weekly DI Productivity</div><div style="position:relative;height:170px"><canvas id="weeklyBar"></canvas></div></div>
+        </div>
+        <div class="col"><div class="panel"><div class="panel-title">Progress by Unit</div><div id="unitOverview"></div></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-systems">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Systems &amp; Sub Area</div></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">System Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('system')">&#11015; Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">&#128424; Print</button></div></div><div id="systemBars" class="scroll-list" style="max-height:600px"></div></div>
+        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">Sub Area Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('subarea')">&#11015; Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">&#128424; Print</button></div></div><div id="subareaBars" class="scroll-list" style="max-height:600px"></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-weekly">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly</div></div>
+      <div class="panel" style="margin-bottom:14px"><div class="panel-title">Current Week Performance (Overall)</div><div class="grid-4" id="weeklyKpi"></div></div>
+      <div class="grid-3" style="grid-template-columns: 2fr 1.2fr; gap:14px">
+        <div class="panel"><div class="panel-title">Overall Weekly Trend</div><div style="position:relative;height:300px"><canvas id="weeklyTrend"></canvas></div></div>
+        <div class="panel"><div class="panel-title">Overall Productivity Log</div><div class="table-wrap"><table class="data-table" id="weeklyTable"><thead><tr><th>Week</th><th>Plan</th><th>Actual</th><th>Dev</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-unitarea">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Unit / Area Progress</div></div>
+      <div class="panel" style="margin-bottom:14px"><div class="panel-title">Unit Progress %</div><div id="unitCards" class="grid-4" style="gap:14px"></div></div>
+      <div class="panel" style="margin-bottom:14px"><div class="panel-title">Area Progress % (MB#1, MB#2, YARD, YD BLDG)</div><div id="areaCards" class="grid-4" style="gap:14px"></div></div>
+      <div class="grid-2">
+        <div class="panel"><div class="panel-title">Unit Trend</div><div style="position:relative;height:240px"><canvas id="unitChart"></canvas></div></div>
+        <div class="panel"><div class="panel-title">Area Distribution</div><div style="position:relative;height:240px"><canvas id="areaChart"></canvas></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-joint_master">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Joint Master Data</div></div>
+      <div class="panel">
+        <div class="jm-top-row">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="jm-unit" class="filter-sel"><option value="">Unit</option></select>
+            <select id="jm-system" class="filter-sel"><option value="">System</option></select>
+            <select id="jm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
+            <select id="jm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
+            <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()">
+            <button class="btn-primary" onclick="loadJointMaster()">&#128269; Search</button>
+            <button class="btn-primary" style="background:#22d3a1" onclick="openAddJointModal()">+ Add Joint</button>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn-de btn-de-export" onclick="exportJMExcel()">&#11015; Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('joint_master')">&#128424; Print</button>
+          </div>
+        </div>
+        <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:12px;background:#f0f7ff;border:1px solid #c8e0f4;border-radius:6px;align-items:center;gap:15px">
+          <div style="font-size:12px;font-weight:700;color:#2e75b6">BULK UPDATE: <span id="jm-iso-info" style="color:#111827"></span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" id="jm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:6px;border:1px solid #c8e0f4;border-radius:4px;font-size:12px">
+            <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:6px 14px" onclick="applyIsoBulkDate()">Apply to All</button>
+            <button class="btn-clear-row" style="padding:6px 14px" onclick="clearIsoBulkDate()">Clear All</button>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
+        <div class="de-pagination"><div id="jm-count" style="color:#7a95b8;font-size:11px">0 rows loaded</div><div style="display:flex;gap:6px;align-items:center"><button class="nav-btn" onclick="jmPage(-1)">Prev</button><span id="jm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span><button class="nav-btn" onclick="jmPage(1)">Next</button></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-week_plan">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Planning (ISO Drawing Based)</div></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e2e8f0;margin-bottom:15px">
+          <div style="display:flex;flex-direction:column;gap:4px">
+            <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Select Planning Week</div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <select id="wp-sel-week" onchange="onWeekSelected()" style="min-width:320px;font-size:14px;height:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:0 12px"></select>
+              <div id="wp-period" style="font-size:13px;color:#1e293b;font-weight:600"></div>
+            </div>
+          </div>
+          <div style="display:flex;gap:60px">
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">This Week Plan DI</div><div id="wp-total-di" style="font-size:24px;font-weight:800;color:var(--accent);font-family:'DM Mono',monospace;line-height:38px">0</div></div>
+            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">PLAN ISO DRAWINGS</div><div id="wp-item-count" style="font-size:24px;font-weight:800;color:var(--indigo);font-family:'DM Mono',monospace;line-height:38px">0</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title" style="display:flex;align-items:center;gap:10px">
+          ISO Drawing Search
+          <span id="wp-iso-loading" style="display:none;font-size:11px;color:var(--text-dim);margin-left:8px">&#9203; Loading...</span>
+        </div>
+        <!-- Filter row: identical structure to Joint Master -->
+        <div style="display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:10px;align-items:center;overflow-x:auto;padding-bottom:2px">
+          <input id="wp-iso-search" class="filter-sel" type="text" placeholder="&#128269; ISO / Line No" style="min-width:200px;flex-shrink:0" onkeydown="if(event.key==='Enter')searchIsoDrawings()">
+          <select id="wp-filter-unit" class="filter-sel" style="min-width:100px;flex-shrink:0"><option value="">All Units</option></select>
+          <select id="wp-filter-subarea" class="filter-sel" style="min-width:100px;flex-shrink:0"><option value="">All Sub Areas</option></select>
+          <select id="wp-filter-system" class="filter-sel" style="min-width:110px;flex-shrink:0"><option value="">All Systems</option></select>
+          <!-- Search button calls searchIsoDrawings() = server-side filter (same as Joint Master) -->
+          <button class="btn-primary" onclick="searchIsoDrawings()" style="padding:6px 14px;white-space:nowrap;flex-shrink:0;font-size:12px;cursor:pointer">&#128269; Search</button>
+          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);cursor:pointer;white-space:nowrap;flex-shrink:0;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:4px">
+            <input type="checkbox" id="wp-show-all" style="accent-color:var(--accent)"> Include Completed
+          </label>
+        </div>
+        <div class="table-wrap" style="max-height:300px;overflow:auto">
+          <table class="data-table" id="wpIsoSearchTable" style="min-width:900px">
+            <thead><tr><th style="min-width:55px">Unit</th><th style="min-width:70px">Area</th><th style="min-width:80px">Sub Area</th><th style="min-width:70px">System</th><th style="min-width:140px">Line No</th><th style="min-width:200px">ISO Drawing</th><th style="color:var(--green);min-width:100px">Remain Fab DI</th><th style="color:var(--indigo);min-width:110px">Remain Erect DI</th><th style="min-width:80px">Total Fab</th><th style="min-width:85px">Total Erect</th><th style="min-width:70px">Action</th></tr></thead>
+            <tbody id="wpIsoSearchBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title">This Week Plan</div>
+        <div class="table-wrap" style="max-height:340px">
+          <table class="data-table editable-table" id="wpPlanItemsTable">
+            <thead>
+              <tr><th colspan="8" style="background:#dbeafe;border-bottom:none"></th><th colspan="2" class="th-group-plan">&#8212; PLAN &#8212;</th><th colspan="1" style="background:#dbeafe;border-bottom:none"></th></tr>
+              <tr><th>Unit</th><th>Area</th><th>Sub Area</th><th>System</th><th>Line No</th><th>ISO Drawing</th><th style="color:var(--green)">Remain Fab</th><th style="color:var(--indigo)">Remain Erect</th><th class="col-plan">Plan Fab DI</th><th class="col-plan">Plan Erect DI</th><th>Action</th></tr>
+            </thead>
+            <tbody id="wpPlanItemsBody"></tbody>
+            <tfoot><tr style="background:#eff6ff;font-weight:700"><td colspan="8" style="text-align:right;color:var(--text-dim);padding:8px 10px">TOTAL</td><td id="wp-foot-fab" style="color:var(--accent);padding:8px 10px">&#8212;</td><td id="wp-foot-erect" style="color:var(--green);padding:8px 10px">&#8212;</td><td></td></tr></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title" style="display:flex;align-items:center;gap:10px">Weekly Schedule Summary<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportWeekScheduleExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" onclick="printPage('week_plan')">&#128424; Print</button></div></div>
+        <div class="table-wrap" style="max-height:320px;overflow:auto;position:relative">
+          <table class="data-table" id="wpTable" style="min-width:1100px;border-collapse:separate;border-spacing:0">
+            <thead>
+              <tr>
+                <th colspan="4" style="position:sticky;top:0;z-index:4;background:#f8fafc;border-bottom:none;box-shadow:inset 0 -1px 0 #e2e8f0"></th>
+                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#334155;background:#e2e8f0;border-bottom:2px solid rgba(148,163,184,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">IDEAL&nbsp;PLAN</th>
+                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#065f46;background:#d1fae5;border-bottom:2px solid rgba(16,185,129,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">ACTUAL&nbsp;PLAN</th>
+                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#1e40af;background:#dbeafe;border-bottom:2px solid rgba(59,130,246,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">PLAN&nbsp;VS&nbsp;COMPLETED</th>
+              </tr>
+              <tr>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">ID</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">Wk</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">Start Date</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">End Date</th>
+                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">FAB DI</th>
+                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">ERECT DI</th>
+                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">TOTAL DI</th>
+                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">FAB DI</th>
+                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">ERECT DI</th>
+                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">TOTAL DI</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">COMPLETED DI</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">REMAINING DI</th>
+                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">PROGRESS %</th>
+              </tr>
+            </thead>
+            <tbody id="wpBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<style>
+@media print {
+  .sidebar,.top-header,.kpi-row,.de-toolbar,.jm-top-row,.de-pagination,.page:not(.page-print-active){display:none!important;}
+  .main-area{margin-left:0!important;} .page-body{padding:0!important;}
+  .table-wrap{max-height:none!important;overflow:visible!important;}
+  .data-table th{background:#1a2b4a!important;color:#fff!important;font-size:9px!important;padding:4px 6px!important;}
+  .data-table td{color:#000!important;background:#fff!important;font-size:9px!important;padding:3px 6px!important;border-bottom:1px solid #ccc!important;}
+  .btn-save-row,.btn-clear-row{display:none!important;}
+  .cell-input{border:none!important;color:#000!important;background:transparent!important;width:auto!important;}
+  body{background:white!important;}
+}
+</style>
+
+<div id="addJointModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add New Joint</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Unit</label><br><input type="text" id="new-unit" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. B1"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. CCP"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Area</label><br><input type="text" id="new-area" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. MB #1"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Line No</label><br><input type="text" id="new-line_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">ISO Drawing</label><br><input type="text" id="new-iso" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Rev</label><br><input type="text" id="new-rev" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" value="0"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Spool No</label><br><input type="text" id="new-spool" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Material</label><br><input type="text" id="new-mat" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Size (Inch)</label><br><input type="number" id="new-size" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" step="0.1"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">S/F</label><br><select id="new-sf" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="S">S - Shop</option><option value="F">F - Field</option></select></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Joint No</label><br><input type="text" id="new-joint_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+    </div>
+    <div style="margin-top:20px;text-align:right;">
+      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeAddJointModal()">Cancel</button>
+      <button class="btn-primary" style="background:#2563eb;" onclick="submitNewJoint()">Save Joint</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+  Chart.register(ChartDataLabels);
+  Chart.defaults.set('plugins.datalabels', { display: false });
+</script>
+<script src="/static/js/dashboard.js?v=18.7"></script>
+</body>
+</html>
