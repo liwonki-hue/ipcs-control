@@ -395,7 +395,17 @@ def api_debug():
 
 @app.route("/api/health")
 def api_health():
-    return jsonify({"status": "ok", "uptime": "running"})
+    # Pre-warm cache if empty — ping services call this endpoint
+    global _building
+    with _lock: has = "data" in _cache
+    if not has:
+        with _lock:
+            if not _building:
+                _building = True
+                print("[health] Cache empty — starting background pre-build")
+                threading.Thread(target=_build, daemon=True).start()
+    with _lock: cache_ready = "data" in _cache
+    return jsonify({"status": "ok", "uptime": "running", "cache": "ready" if cache_ready else "building"})
 
 # ── Weeks (Schedule) ──────────────────────────────────────────────────
 @app.route("/api/weeks", methods=["GET"])
