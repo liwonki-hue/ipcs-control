@@ -266,7 +266,7 @@ async function renderOverview(kpi, wkData, units) {
             data:{labels:last4Wks.map(w=>w.week_label),datasets:[
                 {label:"Actual Work",type:"line",data:last4Wks.map(w=>w.completed_di||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,1):''}},
                 {label:"Ideal Plan",data:last4Wks.map(w=>(w.ideal_di>0)?w.ideal_di:null),backgroundColor:"rgba(148,163,184,0.2)",borderColor:"rgba(148,163,184,0.4)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:2},
-                {label:"Actual Plan",data:last4Wks.map(w=>(w.plan_di>0)?w.plan_di:null),backgroundColor:"rgba(34,197,94,0.45)",borderColor:"rgba(34,197,94,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
+                {label:"Actual Plan",data:last4Wks.map(w=>(w.plan_di>0)?w.plan_di:null),backgroundColor:"rgba(34,197,94,0.45)",borderColor:"rgba(34,197,94,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1,datalabels:{display:true,anchor:'end',align:'top',offset:2,color:'#22c55e',font:{weight:'bold',size:10},formatter:(v)=>v>0?fmtNum(v,1):''}}
             ]},
             options:{...chartOpts("DI"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
@@ -366,7 +366,7 @@ async function loadUnitArea() {
                         data: allUnits.map(u => u.completed_di || 0),
                         backgroundColor: "rgba(37,99,235,0.85)",
                         borderColor: "#2563eb",
-                        borderWidth: 1, barPercentage: 0.55, stack: "s",
+                        borderWidth: 1, barPercentage: 0.28, categoryPercentage: 0.6, stack: "s",
                         datalabels: { display: ctx => (allUnits[ctx.dataIndex]?.completed_di||0) > 0,
                             anchor: "end", align: "top", offset: 2,
                             color: "#93c5fd", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
@@ -377,7 +377,7 @@ async function loadUnitArea() {
                         data: allUnits.map(u => (u.total_di||0) - (u.completed_di||0)),
                         backgroundColor: "rgba(100,116,139,0.3)",
                         borderColor: "rgba(100,116,139,0.5)",
-                        borderWidth: 1, barPercentage: 0.55, stack: "s",
+                        borderWidth: 1, barPercentage: 0.28, categoryPercentage: 0.6, stack: "s",
                         datalabels: { display: false }
                     }
                 ]
@@ -794,8 +794,9 @@ async function refreshData(){
 async function _autoRefreshKpi(){
     _dashData=null;
     fetch("/api/cache/clear").catch(()=>{});
-    for(let i=0;i<12;i++){
-        await new Promise(r=>setTimeout(r,3000));
+    await new Promise(r=>setTimeout(r,1000));
+    for(let i=0;i<20;i++){
+        await new Promise(r=>setTimeout(r,1500));
         try{
             const res=await fetch("/api/dashboard");
             if(res.status===200){

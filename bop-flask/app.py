@@ -224,7 +224,7 @@ def _build():
 
         try:
             offset = 0
-            limit = 3000
+            limit = 10000
             jm_all = []
             print(f"[bop-debug] Scanning joints for aggregation...")
             while True:
