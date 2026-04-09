@@ -179,18 +179,6 @@ _lock       = threading.Lock()
 _building   = False
 _build_fail = False
 
-# ── Startup cache pre-warm (runs immediately when worker boots) ────────
-def _start_cache_build_if_needed():
-    global _building
-    with _lock:
-        if not _building and "data" not in _cache:
-            _building = True
-            print("[startup] Starting background cache pre-build...")
-            threading.Thread(target=_build, daemon=True).start()
-
-# Pre-warm on module load (when Gunicorn worker imports app)
-_start_cache_build_if_needed()
-
 def _build():
     global _building, _build_fail
     try:
