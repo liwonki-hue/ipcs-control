@@ -340,21 +340,20 @@ async function loadUnitArea() {
     try {
         const dash = await getDashData();
 
-        // ── KPI Cards: show only active units/areas (with some completed work)
-        const activeUnits = (dash.units||[]).filter(u => (u.completed_di||0) > 0);
-        document.getElementById("unitCards").innerHTML = activeUnits.map(u => {
+        // ── KPI Cards: show all units/areas regardless of completion
+        const allUnitsKpi = dash.units || [];
+        document.getElementById("unitCards").innerHTML = allUnitsKpi.map(u => {
             const p=u.progress_pct, c=pctColor(p);
             return `<div class="unit-card"><div class="unit-card-name">Unit ${u.unit}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(u.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(u.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-di">${u.total_joints.toLocaleString()} joints</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
-        const activeAreas = (dash.areas||[]).filter(a => (a.completed_di||0) > 0);
-        document.getElementById("areaCards").innerHTML = activeAreas.map(a => {
+        const allAreasKpi = dash.areas || [];
+        document.getElementById("areaCards").innerHTML = allAreasKpi.map(a => {
             const p=a.progress_pct, c=pctColor(p);
             return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${a.area}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
-        // ── Unit Chart: ALL units shown (gray total_di bars for all)
-        //    Completed DI bar only when > 0 → null = 0px (no ghost bars)
+        // ── Unit Chart: Stacked (Completed DI + Remaining DI)
         const allUnits = dash.units || [];
         destroyChart("unitChart");
         charts["unitChart"] = new Chart(document.getElementById("unitChart").getContext("2d"), {
@@ -363,36 +362,35 @@ async function loadUnitArea() {
                 labels: allUnits.map(u => `Unit ${u.unit}`),
                 datasets: [
                     {
-                        label: "Total DI",
-                        data: allUnits.map(u => u.total_di),
-                        backgroundColor: "rgba(100,116,139,0.3)",
-                        borderColor: "rgba(100,116,139,0.5)",
-                        borderWidth: 1, borderRadius: 3, barPercentage: 0.55,
-                        order: 2, datalabels: { display: false }
-                    },
-                    {
                         label: "Completed DI",
-                        data: allUnits.map(u => u.completed_di > 0 ? u.completed_di : null),
+                        data: allUnits.map(u => u.completed_di || 0),
                         backgroundColor: "rgba(37,99,235,0.85)",
                         borderColor: "#2563eb",
-                        borderWidth: 1, borderRadius: 3, barPercentage: 0.55,
-                        order: 1,
-                        datalabels: { display: true, anchor: "end", align: "top", offset: 3,
-                            color: "#e2eaf6", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
-                            formatter: v => v > 0 ? fmtNum(v, 0) : "" }
+                        borderWidth: 1, barPercentage: 0.55, stack: "s",
+                        datalabels: { display: ctx => (allUnits[ctx.dataIndex]?.completed_di||0) > 0,
+                            anchor: "end", align: "top", offset: 2,
+                            color: "#93c5fd", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
+                            formatter: v => fmtNum(v, 0) }
+                    },
+                    {
+                        label: "Remaining DI",
+                        data: allUnits.map(u => (u.total_di||0) - (u.completed_di||0)),
+                        backgroundColor: "rgba(100,116,139,0.3)",
+                        borderColor: "rgba(100,116,139,0.5)",
+                        borderWidth: 1, barPercentage: 0.55, stack: "s",
+                        datalabels: { display: false }
                     }
                 ]
             },
             options: {
                 ...chartOpts("DI"),
-                scales: { ...chartOpts("DI").scales, y: { ...chartOpts("DI").scales.y, beginAtZero: true } },
+                scales: { ...chartOpts("DI").scales, y: { ...chartOpts("DI").scales.y, beginAtZero: true, stacked: true } },
                 plugins: { ...chartOpts("DI").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: 12, font: { size: 10 } } } }
             }
         });
         charts["unitChart"].resize();
 
-        // ── Area Chart: ALL areas shown (gray total_di bars for all)
-        //    Completed DI bar only when > 0 → null = 0px
+        // ── Area Chart: Stacked horizontal (Completed DI + Remaining DI)
         const allAreas = dash.areas || [];
         const areaOrder = { "MB #1": 1, "MB #2": 2, "YD BLDG": 3, "YARD": 4 };
         const sortedAreas = [...allAreas].sort((a, b) => (areaOrder[a.area]||99) - (areaOrder[b.area]||99));
@@ -406,30 +404,30 @@ async function loadUnitArea() {
                     labels: sortedAreas.map(a => a.area),
                     datasets: [
                         {
-                            label: "Total DI",
-                            data: sortedAreas.map(a => a.total_di),
-                            backgroundColor: "rgba(100,116,139,0.3)",
-                            borderColor: "rgba(100,116,139,0.5)",
-                            borderWidth: 1, borderRadius: 3, barPercentage: 0.6,
-                            order: 2, datalabels: { display: false }
-                        },
-                        {
                             label: "Completed DI",
-                            data: sortedAreas.map(a => a.completed_di > 0 ? a.completed_di : null),
+                            data: sortedAreas.map(a => a.completed_di || 0),
                             backgroundColor: "rgba(245,197,66,0.85)",
                             borderColor: "#f5c542",
-                            borderWidth: 1, borderRadius: 3, barPercentage: 0.6,
-                            order: 1,
-                            datalabels: { display: true, anchor: "end", align: "right", offset: 4,
-                                color: "#e2eaf6", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
-                                formatter: v => v > 0 ? fmtNum(v, 0) : "" }
+                            borderWidth: 1, barPercentage: 0.6, stack: "s",
+                            datalabels: { display: ctx => (sortedAreas[ctx.dataIndex]?.completed_di||0) > 0,
+                                anchor: "end", align: "right", offset: 4,
+                                color: "#fef08a", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
+                                formatter: v => fmtNum(v, 0) }
+                        },
+                        {
+                            label: "Remaining DI",
+                            data: sortedAreas.map(a => (a.total_di||0) - (a.completed_di||0)),
+                            backgroundColor: "rgba(100,116,139,0.3)",
+                            borderColor: "rgba(100,116,139,0.5)",
+                            borderWidth: 1, barPercentage: 0.6, stack: "s",
+                            datalabels: { display: false }
                         }
                     ]
                 },
                 options: {
                     ...chartOpts("DI"),
                     indexAxis: "y",
-                    scales: { ...chartOpts("DI").scales, x: { ...chartOpts("DI").scales.x, beginAtZero: true }, y: { ...chartOpts("DI").scales.y } },
+                    scales: { ...chartOpts("DI").scales, x: { ...chartOpts("DI").scales.x, beginAtZero: true, stacked: true }, y: { ...chartOpts("DI").scales.y, stacked: true } },
                     plugins: { ...chartOpts("DI").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: 12, font: { size: 10 } } } }
                 }
             });
@@ -484,9 +482,8 @@ async function applyIsoBulkDate(){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:dateVal})});
             const el=document.getElementById(`date-${r.id}`);if(el)el.value=dateVal;saved++;
         }
-        toast(`✓ ${saved} joints saved (${isoVal}) — Refresh to update KPI`);
-        _dashData=null;
-        fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
+        _autoRefreshKpi();
         updateIsoBulkPanel(isoVal,jmData);
     }catch(e){toast(`✗ Bulk save failed: ${e.message}`,"error");}
     finally{if(btn){btn.disabled=false;btn.textContent="Apply to All";}}
@@ -503,9 +500,8 @@ async function clearIsoBulkDate(){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
             const el=document.getElementById(`date-${r.id}`);if(el)el.value="";
         }
-        toast(`✓ ${targets.length} joints cleared (${isoVal}) — Refresh to update KPI`);
-        _dashData=null;
-        fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ${targets.length} joints cleared (${isoVal}) — KPI updating...`);
+        _autoRefreshKpi();
         updateIsoBulkPanel(isoVal,jmData);
     }catch(e){toast(`✗ Bulk clear failed: ${e.message}`,"error");}
 }
@@ -546,9 +542,8 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} date cleared! (Refresh to update KPI)`);
-        _dashData=null;
-        fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ID ${id} date cleared! KPI updating...`);
+        _autoRefreshKpi();
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
 
@@ -558,9 +553,8 @@ async function saveJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} saved! (Refresh to update KPI)`);
-        _dashData=null;
-        fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ID ${id} saved! KPI updating...`);
+        _autoRefreshKpi();
     }catch(e){toast(`✗ Save failed: ${e.message}`,"error");}
 }
 
@@ -794,6 +788,27 @@ async function refreshData(){
         if(visPage)navigate(visPage);
         toast("↺ Data refreshed!");
     }catch(e){toast("Refresh failed: "+e.message,"error");}
+}
+
+// Auto-refresh KPI in background after save operations
+async function _autoRefreshKpi(){
+    _dashData=null;
+    fetch("/api/cache/clear").catch(()=>{});
+    for(let i=0;i<12;i++){
+        await new Promise(r=>setTimeout(r,3000));
+        try{
+            const res=await fetch("/api/dashboard");
+            if(res.status===200){
+                _dashData=await res.json();
+                renderKPI(_dashData.kpi,_dashData.weekly);
+                const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
+                if(visPage==="unitarea")loadUnitArea();
+                else if(visPage==="overview")loadOverview();
+                toast("✓ KPI updated");
+                return;
+            }
+        }catch(e){}
+    }
 }
 
 // ================================================================================
