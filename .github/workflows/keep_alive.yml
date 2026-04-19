@@ -1,0 +1,22 @@
+name: Keep Render Alive (ALMT Business Hours)
+
+on:
+  schedule:
+    # 카자흐스탄 표준시(ALMT, UTC+5) 기준 오전 06:50부터 오후 05:00까지 작동하도록 설정.
+    # Render Free Plan은 15분간 요청이 없으면 Sleep 모드로 전환되므로, 매시간 50분에 요청을 보내 상시 유지함.
+    # UTC 기준 변환: 01:50 ~ 11:50 (ALMT 06:50 ~ 16:50)
+    - cron: '50 1-11 * * *'
+  workflow_dispatch: # 수동 실행을 위한 설정
+
+jobs:
+  keep-alive:
+    name: Send Ping Request
+    runs-on: ubuntu-latest
+    steps:
+      - name: HTTP GET Request to Render Service
+        run: |
+          # 아래 URL을 실제 Render 서비스 주소로 수정하여 사용하세요.
+          curl -s -o /dev/null -w "%{http_code}" https://ipcs-bop-dashboard.onrender.com
+        # -s: Silent 모드
+        # -o /dev/null: 응답 바디를 버림
+        # -w "%{http_code}": HTTP 상태 코드만 출력 (로깅용)
