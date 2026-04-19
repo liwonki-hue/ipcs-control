@@ -2,10 +2,10 @@ name: Keep Render Alive (ALMT Business Hours)
 
 on:
   schedule:
-    # 카자흐스탄 표준시(ALMT, UTC+5) 기준 오전 06:50부터 오후 05:00까지 작동하도록 설정.
+    # 카자흐스탄 표준시(ALMT, UTC+5) 기준 오전 07:00부터 오후 05:00까지 작동하도록 설정.
     # Render Free Plan은 15분간 요청이 없으면 Sleep 모드로 전환되므로, 12분 간격으로 요청을 보내 활성 상태를 유지함.
-    # UTC 기준 01:00 ~ 11:59 (ALMT 06:00 ~ 16:59) 동안 12분마다 실행
-    - cron: '*/12 1-11 * * *'
+    # UTC 기준 02:00 ~ 12:59 (ALMT 07:00 ~ 17:59) 동안 12분마다 실행
+    - cron: '*/12 2-12 * * *'
   workflow_dispatch: # 수동 실행을 위한 설정
 
 jobs:
