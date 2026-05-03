@@ -103,18 +103,50 @@ function navigate(page) {
     document.querySelectorAll(".nav-btn").forEach(b => {
         b.classList.toggle("active", b.dataset.page === page);
     });
-    document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
-    document.getElementById(`page-${page}`)?.classList.remove("hidden");
+
+    // Hide all pages
+    document.querySelectorAll(".page").forEach(p => {
+        p.classList.add("hidden");
+        p.style.display = "";   // reset any inline display override
+    });
+
+    // Reset scroll to top on every page transition
+    const pageBody = document.querySelector(".page-body");
+    if (pageBody) pageBody.scrollTop = 0;
+    window.scrollTo(0, 0);
+
+    // Show target page
+    const target = document.getElementById(`page-${page}`);
+    if (target) {
+        target.classList.remove("hidden");
+        // Simulation page needs flex layout explicitly (CSS default is none for #page-simulation)
+        if (page === "simulation") {
+            target.style.display = "flex";
+            target.style.flexDirection = "column";
+            target.style.height = "calc(100vh - 130px)";
+            // Reload iframe to ensure it always displays
+            const frame = document.getElementById("simulationFrame");
+            if (frame && !frame.src.includes("localhost:8501")) {
+                frame.src = "http://localhost:8501";
+            }
+        }
+    }
 
     switch(page) {
         case "overview":    loadOverview();     break;
+        case "early_power": loadEarlyPower();   break;
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "joint_master":loadJointMaster();  break;
         case "week_plan":   loadWeekPlan();     break;
+        case "welder":      loadWelder();       break;
+        case "support_master": loadSupportMaster(); break;
+        case "testpkg_master": loadTestPkgMaster(); break;
+        case "simulation":  /* handled above */ break;
     }
 }
+
 
 // ================================================================================
 //  API HELPERS
@@ -228,7 +260,7 @@ async function loadOverview() {
 
 async function renderOverview(kpi, wkData, units) {
     try {
-        const d = kpi, pct = d.overall_pct;
+        const d = kpi, pct = d.unified_readiness || d.overall_pct || 0;
         const r = 84, circ = Math.PI * r;
         const offset = circ * (1 - Math.min(pct/100,1));
         const gc = pct>=80?"#22d3a1":pct>=50?"#f5c542":"#ff8c42";
@@ -238,8 +270,13 @@ async function renderOverview(kpi, wkData, units) {
         document.getElementById("gaugeText").style.fill = gc;
 
         const stats = document.getElementById("overviewStats");
-        stats.innerHTML = [["Total Plan DI",fmtNum(d.total_plan_di,0)],["Completed DI",fmtNum(d.completed_di,0)],["Remaining DI",fmtNum(d.remaining_di,0)],["Completed Joints",`${d.completed_joints.toLocaleString()} / ${d.total_joints.toLocaleString()}`]]
-            .map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+        stats.innerHTML = [
+            ["D/I Completion (wt 60%)", `${d.overall_pct||0}%`],
+            ["Support (EA) (wt 20%)", `${d.support_pct||0}%`],
+            ["Test Package (wt 20%)", `${d.testpkg_pct||0}%`],
+            ["Total Plan DI", fmtNum(d.total_plan_di,0)],
+            ["Completed DI", fmtNum(d.completed_di,0)]
+        ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
 
         const disc = document.getElementById("disciplineList");
         disc.innerHTML = [["Fabrication (S)",d.fab_pct,"var(--accent)"],["Erection (F)",d.erect_pct,"var(--green)"]]
@@ -288,16 +325,140 @@ async function renderOverview(kpi, wkData, units) {
 }
 
 // ================================================================================
+//  EARLY POWER OVERVIEW
+// ================================================================================
+async function loadEarlyPower() {
+    const data = await getDashData();
+    renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly);
+}
+
+async function renderEarlyPower(d, units, systems, areas, weekly) {
+    if(!d) return;
+    try {
+        const d_total_di = d.total_di || 0;
+        const d_completed_di = d.completed_di || 0;
+        const pct = d_total_di > 0 ? Math.round((d_completed_di / d_total_di) * 100) : 0;
+        
+        let bottleneck = "";
+        if(systems && systems.length > 0) {
+            let maxRem = -1;
+            let btnSys = "";
+            for(const s of systems) {
+                const rem = (s.total_di || 0) - (s.completed_di || 0);
+                if(rem > maxRem && rem > 0) {
+                    maxRem = rem;
+                    btnSys = s.system;
+                }
+            }
+            if(btnSys) bottleneck = `delayed by System ${btnSys} (${fmtNum(maxRem, 0)} DI remaining)`;
+            else bottleneck = "All EP systems completed!";
+        }
+        
+        const rdPct = document.getElementById("epReadinessPct");
+        const rdTxt = document.getElementById("epReadinessText");
+        if(rdPct) rdPct.textContent = `${pct}%`;
+        if(rdTxt) rdTxt.textContent = `Early Power is ${pct}% ready, ${bottleneck}`;
+
+        const r = 84, circ = Math.PI * r;
+        const offset = circ * (1 - Math.min(pct/100,1));
+        const gc = pct>=80?"#22d3a1":pct>=50?"#f5c542":"#ff8c42";
+        const gp = document.getElementById("epGaugePath");
+        if(gp) { gp.style.stroke = gc; gp.style.strokeDashoffset = offset; }
+        const gt = document.getElementById("epGaugeText");
+        if(gt) { gt.textContent = `${pct}%`; gt.style.fill = gc; }
+
+        const stats = document.getElementById("epStats");
+        if(stats) {
+            stats.innerHTML = [["EP Plan DI",fmtNum(d_total_di,0)],["EP Completed DI",fmtNum(d_completed_di,0)],["EP Remaining DI",fmtNum(Math.max(0, d_total_di - d_completed_di),0)],["EP Completed Joints",`${(d.completed_joints||0).toLocaleString()} / ${(d.total_joints||0).toLocaleString()}`]]
+                .map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+        }
+
+        const disc = document.getElementById("epDisciplineList");
+        if(disc) {
+            const fab_pct = d.fab_total_di > 0 ? Math.round((d.fab_completed_di / d.fab_total_di) * 100) : 0;
+            const erect_pct = d.erect_total_di > 0 ? Math.round((d.erect_completed_di / d.erect_total_di) * 100) : 0;
+            disc.innerHTML = [["Fabrication (S)",fab_pct,"var(--accent)"],["Erection (F)",erect_pct,"var(--green)"]]
+                .map(([n,p,c]) => `<div class="disc-row"><div class="disc-head"><span class="disc-name">${n}</span><span class="disc-pct" style="color:${c}">${p}%</span></div><div class="disc-track"><div class="disc-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`).join("");
+        }
+
+        const uDiv = document.getElementById("epUnitOverview");
+        if(uDiv && units) {
+            uDiv.innerHTML = units.map(u => {
+                const u_pct = u.total_di > 0 ? Math.round((u.completed_di / u.total_di) * 100) : 0;
+                const c = pctColor(u_pct);
+                return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #162032"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px"><div><div style="font-size:13px;font-weight:600">Unit ${u.unit}</div><div style="font-size:10px;color:#7a95b8">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:20px;font-weight:700;color:${c};font-family:'DM Mono',monospace">${u_pct}%</div></div><div style="height:4px;background:#1e2d45;border-radius:2px"><div style="height:100%;width:${Math.min(u_pct,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:#7a95b8;margin-top:3px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
+            }).join("");
+        }
+
+        const sDiv = document.getElementById("epSysOverview");
+        if(sDiv && systems) {
+            sDiv.innerHTML = systems.map(s => {
+                const s_pct = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
+                const c = pctColor(s_pct);
+                return `<div class="prog-row"><div class="prog-head"><span class="prog-name">${s.system}</span><div class="prog-stats"><span>${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)} DI</span><span class="prog-pct" style="color:${c}">${s_pct}%</span></div></div><div class="prog-track"><div class="prog-fill" style="width:${Math.min(s_pct,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`;
+            }).join("");
+        }
+
+        const aDiv = document.getElementById("epAreaOverview");
+        if(aDiv && areas) {
+            aDiv.innerHTML = areas.map(a => {
+                const a_pct = a.total_di > 0 ? Math.round((a.completed_di / a.total_di) * 100) : 0;
+                const c = pctColor(a_pct);
+                return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #162032"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px"><div><div style="font-size:13px;font-weight:600">${a.area}</div><div style="font-size:10px;color:#7a95b8">Plan: ${fmtNum(a.total_di,0)} DI</div></div><div style="font-size:20px;font-weight:700;color:${c};font-family:'DM Mono',monospace">${a_pct}%</div></div><div style="height:4px;background:#1e2d45;border-radius:2px"><div style="height:100%;width:${Math.min(a_pct,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:#7a95b8;margin-top:3px;font-family:'DM Mono',monospace">${fmtNum(a.completed_di,0)} / ${fmtNum(a.total_di,0)} DI</div></div>`;
+            }).join("");
+        }
+
+        if(weekly && weekly.length > 0) {
+            const wkView = weekly.slice(0, 60);
+            destroyChart("epScurveChart");
+            const ctx = document.getElementById("epScurveChart")?.getContext("2d");
+            if(ctx) {
+                charts["epScurveChart"] = new Chart(ctx, {
+                    type: "bar",
+                    data: { labels: wkView.map(w=>w.week_label), datasets: [
+                        { label:"Target DI", type:"line", data:wkView.map(w=>d_total_di), borderColor:"rgba(255,82,82,0.6)", borderDash:[5,5], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1 },
+                        { label:"Cumulative Actual", type:"line", data:wkView.map(w=>w.cumul_actual), borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:0, tension:0.1, order:2 },
+                        { label:"Actual Work DI", type:"bar", data:wkView.map(w=>w.completed_di>0?w.completed_di:null), backgroundColor:"rgba(37,99,235,0.6)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.7, order:3, datalabels:{display:true,align:'top',anchor:'end',offset:2,color:'#2563eb',font:{size:9,weight:'600'},formatter:(v)=>v>0?fmtNum(v,0):''} }
+                    ]},
+                    options: { ...chartOpts("Cumulative DI (Lines) / Weekly DI (Bars)"),
+                        scales: { ...chartOpts("").scales, x:{...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){const label=this.getLabelForValue(val);const wkNum=parseInt(label.replace("W",""));if(wkNum===1||wkNum%5===0)return label;return "";}}}, y:{...chartOpts("").scales.y,beginAtZero:true} },
+                        plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
+                });
+            }
+        }
+
+    } catch(e) { console.error("EP Overview failed", e); }
+}
+
+// ================================================================================
 //  SYSTEMS
 // ================================================================================
 async function loadSystems() {
     try {
         const dash=await getDashData(), data=dash.systems;
-        document.getElementById("systemBars").innerHTML = data.map(s=>{ const p=s.progress_pct,c=pctColor(p); return `<div class="prog-row"><div class="prog-head"><span class="prog-name">${s.system}</span><div class="prog-stats"><span>${fmtNum(s.completed_di,0)} / ${fmtNum(s.plan_di,0)} DI</span><span class="prog-pct" style="color:${c}">${p}%</span></div></div><div class="prog-track"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`; }).join("");
-        const sorted=[...data].sort((a,b)=>a.progress_pct-b.progress_pct);
-        destroyChart("systemChart");
-        const ctxSys=document.getElementById("systemChart");
-        if(ctxSys) charts["systemChart"]=new Chart(ctxSys.getContext("2d"),{type:"bar",data:{labels:sorted.map(s=>s.system),datasets:[{label:"Plan",data:sorted.map(s=>s.plan_di),backgroundColor:"rgba(74,96,128,0.4)"},{label:"Actual",data:sorted.map(s=>s.completed_di),backgroundColor:sorted.map(s=>pctColor(s.progress_pct))}]},options:{...chartOpts("DI"),indexAxis:"y",plugins:{...chartOpts("DI").plugins}}});
+        document.getElementById("systemBars").innerHTML = data.map(s=>{
+            const p=s.progress_pct, c=pctColor(p);
+            const p2=s.support_pct||0, c2=pctColor(p2);
+            const p3=s.testpkg_pct||0, c3=pctColor(p3);
+            let warn = "";
+            if (p3 > 0 && (p < 100 || p2 < 100) && (p3 > p || p3 > p2)) {
+                warn = `<div style="font-size:11px;color:#ff5252;margin-top:4px;">&#9888; Test Pkg ahead of D/I or Support</div>`;
+            }
+            return `<div class="prog-row" style="margin-bottom:12px; border-bottom:1px solid #162032; padding-bottom:8px;">
+                <div class="prog-head"><span class="prog-name">${s.system} <span style="color:#a1b2c6;font-size:11px">(Readiness: ${s.unified_readiness||0}%)</span></span></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>D/I (${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)})</span><span style="color:${c}">${p}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Support EA (${fmtNum(s.support_comp||0,0)} / ${fmtNum(s.support_total||0,0)})</span><span style="color:${c2}">${p2}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p2,100)}%;background:linear-gradient(90deg,${c2}60,${c2})"></div></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Test Package (${fmtNum(s.testpkg_comp||0,0)} / ${fmtNum(s.testpkg_total||0,0)})</span><span style="color:${c3}">${p3}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p3,100)}%;background:linear-gradient(90deg,${c3}60,${c3})"></div></div>
+                
+                ${warn}
+            </div>`;
+        }).join("");
     } catch(e) { console.error("Systems failed",e); }
 }
 
@@ -307,12 +468,30 @@ async function loadSystems() {
 async function loadSubArea() {
     try {
         const dash=await getDashData(), data=dash.subareas||[];
-        if(!data.length){document.getElementById("subareaBars").innerHTML='<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No sub_area data found in joint_master</div>';return;}
-        document.getElementById("subareaBars").innerHTML=data.map(s=>{const p=s.progress_pct,c=pctColor(p);return `<div class="prog-row"><div class="prog-head"><span class="prog-name">${s.sub_area}</span><div class="prog-stats"><span>${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)} DI</span><span class="prog-pct" style="color:${c}">${p}%</span></div></div><div class="prog-track"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`;}).join("");
-        const sorted=[...data].sort((a,b)=>a.progress_pct-b.progress_pct);
-        destroyChart("subareaChart");
-        const ctxSub=document.getElementById("subareaChart");
-        if(ctxSub) charts["subareaChart"]=new Chart(ctxSub.getContext("2d"),{type:"bar",data:{labels:sorted.map(s=>s.sub_area),datasets:[{label:"Plan DI",data:sorted.map(s=>s.total_di),backgroundColor:"rgba(74,96,128,0.4)"},{label:"Actual DI",data:sorted.map(s=>s.completed_di),backgroundColor:sorted.map(s=>pctColor(s.progress_pct))}]},options:{...chartOpts("DI"),indexAxis:"y"}});
+        if(!data.length){document.getElementById("subareaBars").innerHTML='<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No sub_area data found</div>';return;}
+        document.getElementById("subareaBars").innerHTML = data.map(s=>{
+            const p=s.progress_pct, c=pctColor(p);
+            const p2=s.support_pct||0, c2=pctColor(p2);
+            const p3=s.testpkg_pct||0, c3=pctColor(p3);
+            let warn = "";
+            if (p3 > 0 && (p < 100 || p2 < 100) && (p3 > p || p3 > p2)) {
+                warn = `<div style="font-size:11px;color:#ff5252;margin-top:4px;">&#9888; Test Pkg ahead of D/I or Support</div>`;
+            }
+            return `<div class="prog-row" style="margin-bottom:12px; border-bottom:1px solid #162032; padding-bottom:8px;">
+                <div class="prog-head"><span class="prog-name">${s.sub_area} <span style="color:#a1b2c6;font-size:11px">(Readiness: ${s.unified_readiness||0}%)</span></span></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>D/I (${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)})</span><span style="color:${c}">${p}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Support EA (${fmtNum(s.support_comp||0,0)} / ${fmtNum(s.support_total||0,0)})</span><span style="color:${c2}">${p2}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p2,100)}%;background:linear-gradient(90deg,${c2}60,${c2})"></div></div>
+                
+                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Test Package (${fmtNum(s.testpkg_comp||0,0)} / ${fmtNum(s.testpkg_total||0,0)})</span><span style="color:${c3}">${p3}%</span></div>
+                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p3,100)}%;background:linear-gradient(90deg,${c3}60,${c3})"></div></div>
+                
+                ${warn}
+            </div>`;
+        }).join("");
     } catch(e) { console.error("SubArea failed",e); }
 }
 
@@ -451,12 +630,12 @@ async function loadUnitArea() {
 async function loadJointMaster() {
     const unit=document.getElementById("jm-unit")?.value||"", system=document.getElementById("jm-system")?.value||"",
           status=document.getElementById("jm-status")?.value||"", isoVal=document.getElementById("jm-iso")?.value?.trim()||"",
-          subarea=document.getElementById("jm-subarea")?.value||"", early=document.getElementById("jm-early")?.value||"", 
+          subarea=document.getElementById("jm-subarea")?.value||"", phase=document.getElementById("jm-phase")?.value||"", 
           offset=jmCurrentPage*JM_PAGE_SIZE;
     try {
         const params=new URLSearchParams({limit:JM_PAGE_SIZE,offset});
         if(unit)params.set("unit",unit); if(system)params.set("system",system); if(status)params.set("status",status);
-        if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(early)params.set("early_power",early);
+        if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(phase)params.set("phase",phase);
         const res=await apiFetch(`/api/joints?${params}`);
         jmData=res.data;
         document.getElementById("jm-count").textContent=`${res.count.toLocaleString()} rows loaded (page ${jmCurrentPage+1})`;
@@ -523,8 +702,8 @@ function renderJMTable(rows){
     tbody.innerHTML=rows.map(r=>{
         const dStr=r.date_completed?r.date_completed.substring(0,10):"";
         const wVal=r.welder||"";
-        const epChecked=r.early_power?'checked':'';
-        return `<tr id="jmrow-${r.id}"><td>${r.id}</td><td>${r.unit||""}</td><td>${r.system||""}</td><td>${r.sub_area||""}</td><td>${r.iso_drawing||""}</td><td>${r.rev||""}</td><td>${r.spool_no||""}</td><td>${r.mat||""}</td><td>${r.size_inch||""}</td><td>${r.sf||""}</td><td>${r.joint_no||""}</td><td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" placeholder="Welder" style="width:70px"></td><td><input type="checkbox" id="early-${r.id}" ${epChecked}></td><td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td><td style="white-space:nowrap"><button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button><button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button></td></tr>`;
+        const phaseVal=r.phase||"";
+        return `<tr id="jmrow-${r.id}"><td>${r.id}</td><td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:50px"></td><td>${r.unit||""}</td><td>${r.system||""}</td><td>${r.sub_area||""}</td><td>${r.iso_drawing||""}</td><td>${r.rev||""}</td><td>${r.spool_no||""}</td><td>${r.mat||""}</td><td>${r.size_inch||""}</td><td>${r.sf||""}</td><td>${r.joint_no||""}</td><td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" style="width:100px" title="Use comma for multiple welders"></td><td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td><td style="white-space:nowrap"><button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button><button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button></td></tr>`;
     }).join("");
 }
 
@@ -533,7 +712,7 @@ function openAddJointModal(){document.getElementById("addJointModal").style.disp
 function closeAddJointModal(){document.getElementById("addJointModal").style.display="none";}
 
 async function submitNewJoint(){
-    const data={unit:document.getElementById("new-unit").value.trim(),system:document.getElementById("new-system").value.trim(),sub_area:document.getElementById("new-area").value.trim(),line_no:document.getElementById("new-line_no").value.trim(),iso_drawing:document.getElementById("new-iso").value.trim(),rev:document.getElementById("new-rev").value.trim(),spool_no:document.getElementById("new-spool").value.trim(),mat:document.getElementById("new-mat").value.trim(),size_inch:parseFloat(document.getElementById("new-size").value)||0,sf:document.getElementById("new-sf").value.trim(),joint_no:document.getElementById("new-joint_no").value.trim(),welder:document.getElementById("new-welder").value.trim(),early_power:document.getElementById("new-early").checked,completed:false};
+    const data={unit:document.getElementById("new-unit").value.trim(),system:document.getElementById("new-system").value.trim(),sub_area:document.getElementById("new-area").value.trim(),line_no:document.getElementById("new-line_no").value.trim(),iso_drawing:document.getElementById("new-iso").value.trim(),rev:document.getElementById("new-rev").value.trim(),spool_no:document.getElementById("new-spool").value.trim(),mat:document.getElementById("new-mat").value.trim(),size_inch:parseFloat(document.getElementById("new-size").value)||0,sf:document.getElementById("new-sf").value.trim(),joint_no:document.getElementById("new-joint_no").value.trim(),welder:document.getElementById("new-welder").value.trim(),phase:document.getElementById("new-phase").value.trim(),completed:false};
     try{
         const r=await fetch(`${API}/api/joints`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
         if(!r.ok)throw new Error('HTTP '+r.status);
@@ -563,10 +742,10 @@ async function clearJointDate(id){
 async function saveJointDate(id){
     let val=document.getElementById(`date-${id}`)?.value?.trim()||'';
     let welder=document.getElementById(`welder-${id}`)?.value?.trim()||'';
-    let early=document.getElementById(`early-${id}`)?.checked||false;
+    let phase=document.getElementById(`phase-${id}`)?.value?.trim()||'';
     if(val){if(!/^\d{2,4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format (YY-MM-DD)","error");return;}if(val.length===8)val="20"+val;}
     try{
-        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, early_power:early})});
+        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
         toast(`✓ ID ${id} saved! KPI updating...`);
         _autoRefreshKpi();
@@ -858,7 +1037,15 @@ async function exportSystemsExcel(type){
 
 async function exportJMExcel(){
     if(!jmData||jmData.length===0){toast("No data to export","error");return;}
-    const exportData=jmData.map(r=>({"ID":r.id,"UNIT":r.unit||"","SYSTEM":r.system||"","SUB AREA":r.sub_area||"","ISO DRAWING":r.iso_drawing||"","REV":r.rev||"","SPOOL NO":r.spool_no||"","MAT":r.mat||"","SIZE":r.size_inch||"","S/F":r.sf||"","JOINT NO":r.joint_no||"","COMPLETED DATE":r.date_completed?r.date_completed.substring(0,10):""}));
+    const exportData=jmData.map(r=>({
+        "ID":r.id, "UNIT":r.unit||"", "SYSTEM":r.system||"", "AREA":r.area||"",
+        "SUB AREA":r.sub_area||"", "LINE NO":r.line_no||"", "ISO DRAWING":r.iso_drawing||"",
+        "REV":r.rev||"", "SPOOL NO":r.spool_no||"", "MAT":r.mat||"",
+        "SIZE":r.size_inch||"", "S/F":r.sf||"", "JOINT NO":r.joint_no||"",
+        "DI":r.di||"", "WELDER":r.welder||"", "PHASE":r.phase||"",
+        "COMPLETED DATE":r.date_completed?r.date_completed.substring(0,10):"",
+        "REMARK":r.remark||""
+    }));
     const ws=XLSX.utils.json_to_sheet(exportData),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"JointMaster");
     const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast("Exported to .xlsx successfully");
 }
@@ -867,4 +1054,523 @@ function printPage(pageId){
     const pages=document.querySelectorAll('.page');pages.forEach(p=>p.classList.remove('page-print-active'));
     const target=document.getElementById("page-"+pageId);if(target)target.classList.add('page-print-active');
     window.print();pages.forEach(p=>p.classList.remove('page-print-active'));
+}
+
+// ================================================================================
+//  JOINT MASTER - TEMPLATE DOWNLOAD & EXCEL IMPORT
+// ================================================================================
+function downloadJMTemplate() {
+    const headers = [
+        "unit","system","area","sub_area","line_no","iso_drawing","rev",
+        "spool_no","mat","size_inch","sf","joint_no","di","welder","phase",
+        "date_completed","remark"
+    ];
+    const sample = [
+        {unit:"B1",system:"CCP",area:"MB #1",sub_area:"PR#3",line_no:"L-001",iso_drawing:"ISO-001",
+         rev:"0",spool_no:"",mat:"CS",size_inch:"4",sf:"F",joint_no:"J-001",di:"4",
+         welder:"",phase:"Normal",date_completed:"",remark:""}
+    ];
+    const ws = XLSX.utils.json_to_sheet(sample, {header: headers});
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "JointMaster");
+    XLSX.writeFile(wb, "Joint_Master_Template.xlsx");
+    toast("✓ Template downloaded");
+}
+
+async function importJMExcel() {
+    const fileInput = document.getElementById("jm-import-file");
+    if (!fileInput || !fileInput.files.length) {
+        toast("Please select an Excel file first", "error"); return;
+    }
+    const file = fileInput.files[0];
+    const statusEl = document.getElementById("jm-import-status");
+    if (statusEl) statusEl.textContent = "Uploading...";
+
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+        const res = await fetch("/api/joints/import", { method: "POST", body: formData });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error);
+        const msg = `✓ Imported ${data.inserted} rows${data.skipped > 0 ? ` (${data.skipped} skipped)` : ""}`;
+        if (statusEl) statusEl.textContent = msg;
+        toast(msg);
+        fileInput.value = "";
+        // Trigger KPI refresh
+        _autoRefreshKpi();
+        setTimeout(() => loadJointMaster(), 2000);
+    } catch(e) {
+        const msg = `✗ Import failed: ${e.message}`;
+        if (statusEl) statusEl.textContent = msg;
+        toast(msg, "error");
+    }
+}
+
+// ================================================================================
+//  WELDER PERFORMANCE  (Enhanced v2)
+// ================================================================================
+let _welderData = null;
+let _selectedWelder = null;
+
+async function loadWelder() {
+    _selectedWelder = null;
+    const dateFrom = document.getElementById("wd-from")?.value || "";
+    const dateTo   = document.getElementById("wd-to")?.value   || "";
+    const system   = document.getElementById("wd-system")?.value || "";
+    const params   = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo)   params.set("date_to",   dateTo);
+    if (system)   params.set("system",    system);
+
+    try {
+        const res = await fetch("/api/welder-summary?" + params);
+        if (!res.ok) throw new Error("API error " + res.status);
+        _welderData = await res.json();
+        renderWelder(_welderData);
+    } catch(e) {
+        console.error("Welder load failed", e);
+        document.getElementById("welderRankBody").innerHTML =
+            `<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">${e.message}</td></tr>`;
+    }
+}
+
+function renderWelder(data) {
+    const s = data.stats;
+    document.getElementById("welder-active").textContent       = s.active_welders;
+    document.getElementById("welder-total-joints").textContent = s.total_joints.toLocaleString();
+    document.getElementById("welder-total-di").textContent     = fmtNum(s.total_di, 0);
+    document.getElementById("welder-avg-di").textContent       = fmtNum(s.avg_di, 1);
+
+    // ── Ranking table ──
+    const tbody = document.getElementById("welderRankBody");
+    if (!data.ranking || data.ranking.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:20px">No data found. Enter completion dates in Joint Master.</td></tr>`;
+    } else {
+        const maxDI = data.ranking[0]?.total_di || 1;
+        tbody.innerHTML = data.ranking.map((r, i) => {
+            const barW = Math.max(2, Math.round((r.total_di / maxDI) * 100));
+            const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i+1}`;
+            return `<tr style="cursor:pointer" onclick="drillWelder('${r.welder}')" title="Click for detail">
+                <td style="font-weight:700;font-size:13px">${medal}</td>
+                <td style="font-weight:600;color:var(--accent)">${r.welder}</td>
+                <td>${r.joints}</td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <div style="flex:1;background:rgba(0,200,255,0.1);border-radius:3px;height:6px">
+                      <div style="width:${barW}%;background:var(--accent);height:6px;border-radius:3px"></div>
+                    </div>
+                    <span style="font-family:'DM Mono',monospace;font-size:12px;min-width:55px;text-align:right">${fmtNum(r.total_di,1)}</span>
+                  </div>
+                </td>
+                <td style="font-size:11px;color:var(--text-dim)">${r.last_active || '-'}</td>
+                <td><button class="btn-sm" onclick="event.stopPropagation();drillWelder('${r.welder}')" style="background:rgba(0,200,255,0.15);color:var(--accent);border:1px solid rgba(0,200,255,0.3);padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer">Detail ▸</button></td>
+            </tr>`;
+        }).join("");
+    }
+
+    // ── Overall daily trend chart ──
+    destroyChart("welderTrendChart");
+    if (data.trend && data.trend.length > 0) {
+        charts["welderTrendChart"] = new Chart(
+            document.getElementById("welderTrendChart").getContext("2d"), {
+            type: "bar",
+            data: {
+                labels: data.trend.map(t => t.date),
+                datasets: [{
+                    label: "Daily Completed DI",
+                    data: data.trend.map(t => t.di),
+                    backgroundColor: "rgba(34,211,161,0.6)",
+                    borderColor: "#22d3a1",
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...chartOpts("DI"),
+                plugins: { ...chartOpts().plugins,
+                    legend: { display: false },
+                    datalabels: { display: false }
+                }
+            }
+        });
+    }
+
+    // ── System breakdown chart ──
+    destroyChart("welderSysChart");
+    const sysEl = document.getElementById("welderSysChart");
+    if (sysEl && data.system_breakdown && data.system_breakdown.length > 0) {
+        const top10 = data.system_breakdown.slice(0, 10);
+        charts["welderSysChart"] = new Chart(sysEl.getContext("2d"), {
+            type: "bar",
+            data: {
+                labels: top10.map(s => s.system),
+                datasets: [{
+                    label: "Completed DI",
+                    data: top10.map(s => s.total_di),
+                    backgroundColor: "rgba(99,102,241,0.6)",
+                    borderColor: "#6366f1",
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                indexAxis: "y",
+                ...chartOpts("DI"),
+                plugins: { legend: { display: false }, datalabels: { display: false } }
+            }
+        });
+    }
+
+    // Hide drill-down panel initially
+    const drillPanel = document.getElementById("welder-drill-panel");
+    if (drillPanel) drillPanel.style.display = "none";
+}
+
+function drillWelder(welderId) {
+    if (!_welderData) return;
+    _selectedWelder = welderId;
+    const wInfo = _welderData.ranking.find(r => r.welder === welderId);
+    if (!wInfo) return;
+
+    const panel = document.getElementById("welder-drill-panel");
+    if (!panel) return;
+    panel.style.display = "block";
+
+    document.getElementById("drill-welder-name").textContent = `👷 ${welderId}`;
+    document.getElementById("drill-joints").textContent      = wInfo.joints;
+    document.getElementById("drill-total-di").textContent    = fmtNum(wInfo.total_di, 1);
+    document.getElementById("drill-last-active").textContent = wInfo.last_active || "-";
+
+    // Per-welder daily trend
+    destroyChart("drillDailyChart");
+    const dEl = document.getElementById("drillDailyChart");
+    if (dEl && wInfo.daily_list && wInfo.daily_list.length > 0) {
+        charts["drillDailyChart"] = new Chart(dEl.getContext("2d"), {
+            type: "bar",
+            data: {
+                labels: wInfo.daily_list.map(d => d.date),
+                datasets: [{
+                    label: "DI",
+                    data: wInfo.daily_list.map(d => d.di),
+                    backgroundColor: "rgba(0,200,255,0.5)",
+                    borderColor: "#00c8ff",
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                ...chartOpts("DI"),
+                plugins: { legend: { display: false }, datalabels: { display: false } }
+            }
+        });
+    }
+
+    // Per-welder system breakdown
+    destroyChart("drillSysChart");
+    const sEl = document.getElementById("drillSysChart");
+    if (sEl && wInfo.system_list && wInfo.system_list.length > 0) {
+        charts["drillSysChart"] = new Chart(sEl.getContext("2d"), {
+            type: "doughnut",
+            data: {
+                labels: wInfo.system_list.map(s => s.system),
+                datasets: [{
+                    data: wInfo.system_list.map(s => s.di),
+                    backgroundColor: [
+                        "#00c8ff","#22d3a1","#f5c542","#ef4444","#6366f1",
+                        "#ec4899","#14b8a6","#f97316","#8b5cf6","#a3e635"
+                    ]
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: "#7a95b8", font: { size: 10 }, boxWidth: 10 } },
+                    datalabels: {
+                        display: true, color: "#fff", font: { size: 9 },
+                        formatter: (v, ctx) => {
+                            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                            return total > 0 ? (v/total*100).toFixed(0)+"%" : "";
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+async function exportWelderExcel() {
+    if (!_welderData || !_welderData.ranking.length) {
+        toast("No welder data to export", "error"); return;
+    }
+    const rows = [];
+    for (const r of _welderData.ranking) {
+        rows.push({
+            "Welder ID": r.welder,
+            "Total Joints": r.joints,
+            "Total DI": r.total_di,
+            "Last Active": r.last_active
+        });
+    }
+    const ws  = XLSX.utils.json_to_sheet(rows);
+    const wb  = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "WelderRanking");
+
+    // Add daily trend sheet
+    if (_welderData.trend.length) {
+        const ws2 = XLSX.utils.json_to_sheet(_welderData.trend.map(t => ({"Date": t.date, "Completed DI": t.di})));
+        XLSX.utils.book_append_sheet(wb, ws2, "DailyTrend");
+    }
+    const success = await downloadWithPicker(wb, "Welder_Performance.xlsx");
+    if (success) toast("✓ Welder performance exported");
+}
+
+// ================================================================================
+//  SUPPORT MASTER
+// ================================================================================
+let smData = [], smCurrentPage = 0;
+const SM_PAGE = 100;
+
+async function loadSupportMaster() {
+    const system  = document.getElementById("sm-system")?.value  || "";
+    const subarea = document.getElementById("sm-subarea")?.value || "";
+    const status  = document.getElementById("sm-status")?.value  || "";
+    const iso     = document.getElementById("sm-iso")?.value?.trim() || "";
+    const offset  = smCurrentPage * SM_PAGE;
+    try {
+        const smSys = document.getElementById("sm-system");
+        const smSub = document.getElementById("sm-subarea");
+        if (smSys && smSys.options.length <= 1) (metaData.systems||[]).forEach(s => smSys.add(new Option(s,s)));
+        if (smSub && smSub.options.length <= 1) (metaData.sub_areas||[]).forEach(s => smSub.add(new Option(s,s)));
+        const params = new URLSearchParams({limit: SM_PAGE, offset});
+        if (system)  params.set("system",   system);
+        if (subarea) params.set("sub_area", subarea);
+        if (status)  params.set("status",   status);
+        if (iso)     params.set("iso",      iso);
+        const res = await apiFetch(`/api/support-master?${params}`);
+        smData = res.data;
+        document.getElementById("sm-count").textContent = `${(res.count||0).toLocaleString()} rows (page ${smCurrentPage+1})`;
+        document.getElementById("sm-page-info").textContent = `Page ${smCurrentPage+1}`;
+        renderSMTable(smData);
+    } catch(e) { console.error("Support Master load failed", e); }
+}
+
+function smPage(dir) { smCurrentPage = Math.max(0, smCurrentPage + dir); loadSupportMaster(); }
+
+function renderSMTable(rows) {
+    const tbody = document.getElementById("smBody");
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel template.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
+        return `<tr id="smrow-${r.id}">
+          <td>${r.id}</td>
+          <td>${r.system||""}</td>
+          <td>${r.sub_area||""}</td>
+          <td style="font-size:11px;font-family:'DM Mono',monospace">${r.iso_drawing||""}</td>
+          <td style="font-weight:600;color:var(--accent)">${r.support_no||""}</td>
+          <td><input class="cell-input" id="sm-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:110px"></td>
+          <td style="font-size:11px;color:var(--text-dim)">${r.remark||""}</td>
+          <td style="white-space:nowrap">
+            <button class="btn-save-row" onclick="saveSMDate(${r.id})">Save</button>
+            <button class="btn-clear-row" onclick="deleteSMItem(${r.id})">Del</button>
+          </td>
+        </tr>`;
+    }).join("");
+}
+
+async function saveSMDate(id) {
+    let val = document.getElementById(`sm-date-${id}`)?.value?.trim() || "";
+    if (val && !/^\d{2,4}-\d{2}-\d{2}$/.test(val)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
+    if (val && val.length === 8) val = "20" + val;
+    try {
+        const r = await fetch(`/api/support-master/${id}`, {
+            method: "PATCH", headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({date_completed: val||null, completed: !!val})
+        });
+        if (!r.ok) throw new Error("HTTP "+r.status);
+        toast(`✓ Support #${id} saved`); fetch("/api/cache/clear");
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+async function deleteSMItem(id) {
+    if (!confirm(`Delete Support ID ${id}?`)) return;
+    try {
+        const r = await fetch(`/api/support-master/${id}`, {method:"DELETE"});
+        if (!r.ok) throw new Error("HTTP "+r.status);
+        toast("✓ Deleted"); loadSupportMaster();
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+function openSMModal()  { document.getElementById("addSMModal").style.display = "flex"; }
+function closeSMModal() { document.getElementById("addSMModal").style.display = "none"; }
+
+async function submitSMItem() {
+    const data = {
+        system:      document.getElementById("sm-new-system").value.trim(),
+        sub_area:    document.getElementById("sm-new-subarea").value.trim(),
+        iso_drawing: document.getElementById("sm-new-iso").value.trim(),
+        support_no:  document.getElementById("sm-new-support_no").value.trim(),
+        remark:      document.getElementById("sm-new-remark").value.trim(),
+        completed:   false
+    };
+    if (!data.system && !data.iso_drawing) { toast("System or ISO required", "error"); return; }
+    try {
+        const r = await fetch("/api/support-master", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
+        const d = await r.json(); if (!d.ok) throw new Error(d.error);
+        toast("✓ Added"); closeSMModal(); loadSupportMaster();
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+function downloadSMTemplate() {
+    const sample = [{system:"CCP", sub_area:"PR#3", iso_drawing:"ISO-001", support_no:"SP-001", completed:"", date_completed:"", remark:""}];
+    const ws = XLSX.utils.json_to_sheet(sample); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SupportMaster");
+    XLSX.writeFile(wb, "Support_Master_Template.xlsx"); toast("✓ Template downloaded");
+}
+
+async function importSMExcel() {
+    const fi = document.getElementById("sm-import-file");
+    if (!fi?.files.length) { toast("Select file first", "error"); return; }
+    const st = document.getElementById("sm-import-status"); if (st) st.textContent = "Uploading...";
+    const fd = new FormData(); fd.append("file", fi.files[0]);
+    try {
+        const res = await fetch("/api/support-master/import", {method:"POST", body:fd});
+        const data = await res.json(); if (!data.ok) throw new Error(data.error);
+        const msg = `✓ Imported ${data.inserted} rows${data.skipped>0?` (${data.skipped} skipped)`:""}`;
+        if (st) st.textContent = msg; toast(msg); fi.value = "";
+        fetch("/api/cache/clear"); loadSupportMaster();
+    } catch(e) { const m=`✗ ${e.message}`; if(st) st.textContent=m; toast(m,"error"); }
+}
+
+async function exportSMExcel() {
+    if (!smData?.length) { toast("No data", "error"); return; }
+    const rows = smData.map(r => ({"ID":r.id,"System":r.system||"","Sub Area":r.sub_area||"","ISO Drawing":r.iso_drawing||"","Support No":r.support_no||"","Completed":r.completed?"Y":"N","Date Completed":r.date_completed?r.date_completed.substring(0,10):"","Remark":r.remark||""}));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SupportMaster");
+    const ok = await downloadWithPicker(wb, "Support_Master_Export.xlsx"); if (ok) toast("✓ Exported");
+}
+
+// ================================================================================
+//  TEST PACKAGE MASTER
+// ================================================================================
+let tpData = [], tpCurrentPage = 0;
+const TP_PAGE = 100;
+
+async function loadTestPkgMaster() {
+    const system  = document.getElementById("tp-system")?.value  || "";
+    const subarea = document.getElementById("tp-subarea")?.value || "";
+    const status  = document.getElementById("tp-status")?.value  || "";
+    const offset  = tpCurrentPage * TP_PAGE;
+    try {
+        const tpSys = document.getElementById("tp-system");
+        const tpSub = document.getElementById("tp-subarea");
+        if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
+        if (tpSub && tpSub.options.length <= 1) (metaData.sub_areas||[]).forEach(s => tpSub.add(new Option(s,s)));
+        const params = new URLSearchParams({limit: TP_PAGE, offset});
+        if (system)  params.set("system",   system);
+        if (subarea) params.set("sub_area", subarea);
+        if (status)  params.set("status",   status);
+        const res = await apiFetch(`/api/testpkg-master?${params}`);
+        tpData = res.data;
+        document.getElementById("tp-count").textContent = `${(res.count||0).toLocaleString()} rows (page ${tpCurrentPage+1})`;
+        document.getElementById("tp-page-info").textContent = `Page ${tpCurrentPage+1}`;
+        renderTPTable(tpData);
+    } catch(e) { console.error("Test Pkg Master load failed", e); }
+}
+
+function tpPage(dir) { tpCurrentPage = Math.max(0, tpCurrentPage + dir); loadTestPkgMaster(); }
+
+function renderTPTable(rows) {
+    const tbody = document.getElementById("tpBody");
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel template.</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
+        return `<tr id="tprow-${r.id}">
+          <td>${r.id}</td>
+          <td>${r.system||""}</td>
+          <td>${r.sub_area||""}</td>
+          <td style="font-weight:600;color:var(--indigo)">${r.test_pkg||""}</td>
+          <td><input class="cell-input" id="tp-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:110px"></td>
+          <td style="font-size:11px;color:var(--text-dim)">${r.remark||""}</td>
+          <td style="white-space:nowrap">
+            <button class="btn-save-row" onclick="saveTPDate(${r.id})">Save</button>
+            <button class="btn-clear-row" onclick="deleteTPItem(${r.id})">Del</button>
+          </td>
+        </tr>`;
+    }).join("");
+}
+
+async function saveTPDate(id) {
+    let val = document.getElementById(`tp-date-${id}`)?.value?.trim() || "";
+    if (val && !/^\d{2,4}-\d{2}-\d{2}$/.test(val)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
+    if (val && val.length === 8) val = "20" + val;
+    try {
+        const r = await fetch(`/api/testpkg-master/${id}`, {
+            method:"PATCH", headers:{"Content-Type":"application/json"},
+            body: JSON.stringify({date_completed: val||null, completed: !!val})
+        });
+        if (!r.ok) throw new Error("HTTP "+r.status);
+        toast(`✓ Test Pkg #${id} saved`); fetch("/api/cache/clear");
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+async function deleteTPItem(id) {
+    if (!confirm(`Delete Test Pkg ID ${id}?`)) return;
+    try {
+        const r = await fetch(`/api/testpkg-master/${id}`, {method:"DELETE"});
+        if (!r.ok) throw new Error("HTTP "+r.status);
+        toast("✓ Deleted"); loadTestPkgMaster();
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+function openTPModal()  { document.getElementById("addTPModal").style.display = "flex"; }
+function closeTPModal() { document.getElementById("addTPModal").style.display = "none"; }
+
+async function submitTPItem() {
+    const data = {
+        system:   document.getElementById("tp-new-system").value.trim(),
+        sub_area: document.getElementById("tp-new-subarea").value.trim(),
+        test_pkg: document.getElementById("tp-new-testpkg").value.trim(),
+        remark:   document.getElementById("tp-new-remark").value.trim(),
+        completed: false
+    };
+    if (!data.system && !data.test_pkg) { toast("System or Test Pkg No required", "error"); return; }
+    try {
+        const r = await fetch("/api/testpkg-master", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
+        const d = await r.json(); if (!d.ok) throw new Error(d.error);
+        toast("✓ Test package added"); closeTPModal(); loadTestPkgMaster();
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+function downloadTPTemplate() {
+    const sample = [{system:"CCP", sub_area:"PR#3", test_pkg:"TP-CCP-001", completed:"", date_completed:"", remark:""}];
+    const ws = XLSX.utils.json_to_sheet(sample); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
+    XLSX.writeFile(wb, "TestPkg_Master_Template.xlsx"); toast("✓ Template downloaded");
+}
+
+async function importTPExcel() {
+    const fi = document.getElementById("tp-import-file");
+    if (!fi?.files.length) { toast("Select file first", "error"); return; }
+    const st = document.getElementById("tp-import-status"); if (st) st.textContent = "Uploading...";
+    const fd = new FormData(); fd.append("file", fi.files[0]);
+    try {
+        const res = await fetch("/api/testpkg-master/import", {method:"POST", body:fd});
+        const data = await res.json(); if (!data.ok) throw new Error(data.error);
+        const msg = `✓ Imported ${data.inserted} rows${data.skipped>0?` (${data.skipped} skipped)`:""}`;
+        if (st) st.textContent = msg; toast(msg); fi.value = "";
+        fetch("/api/cache/clear"); loadTestPkgMaster();
+    } catch(e) { const m=`✗ ${e.message}`; if(st) st.textContent=m; toast(m,"error"); }
+}
+
+async function exportTPExcel() {
+    if (!tpData?.length) { toast("No data", "error"); return; }
+    const rows = tpData.map(r => ({"ID":r.id,"System":r.system||"","Sub Area":r.sub_area||"","Test Pkg No":r.test_pkg||"","Completed":r.completed?"Y":"N","Date Completed":r.date_completed?r.date_completed.substring(0,10):"","Remark":r.remark||""}));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
+    const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
 }

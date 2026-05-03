@@ -21,12 +21,18 @@
   </div>
   <div class="nav-section">Monitoring</div>
   <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon">&#128200;</span> Overview</button>
+  <button class="nav-btn" data-page="early_power" onclick="navigate('early_power')"><span class="nav-icon">&#9889;</span> Early Power</button>
   <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
   <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
-  <div class="nav-section">Data Entry</div>
+  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
+  <div class="nav-section">Data Input</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
+  <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
+  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Master</button>
+  <div class="nav-section">Report</div>
+  <button class="nav-btn" data-page="simulation" onclick="navigate('simulation')"><span class="nav-icon">&#128640;</span> Simulation Report</button>
   <div class="nav-footer">
     <button class="nav-btn refresh-btn" onclick="refreshData()"><span class="nav-icon">&#128260;</span> Refresh</button>
     <a href="/static/USER_MANUAL_EN.html" target="_blank" class="nav-btn" style="text-decoration:none;display:flex;align-items:center;"><span class="nav-icon">&#128214;</span> English Manual</a>
@@ -61,7 +67,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div></div>
       <div class="grid-3">
         <div class="col">
-          <div class="panel"><div class="panel-title">Overall DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f5c542" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">OVERALL PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
+          <div class="panel"><div class="panel-title">Overall Piping Readiness</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f5c542" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING READINESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
           <div class="panel"><div class="panel-title">By Discipline</div><div id="disciplineList"></div></div>
         </div>
         <div class="col col-wide">
@@ -69,6 +75,31 @@
           <div class="panel"><div class="panel-title">Weekly DI Productivity</div><div style="position:relative;height:170px"><canvas id="weeklyBar"></canvas></div></div>
         </div>
         <div class="col"><div class="panel"><div class="panel-title">Progress by Unit</div><div id="unitOverview"></div></div></div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-early_power">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview</div></div>
+      <div class="panel" style="margin-bottom:14px; background:linear-gradient(90deg, #162032, #1e2d45); border-left:4px solid #f5c542">
+        <div style="padding:10px; display:flex; align-items:center; gap:20px;">
+          <div style="font-size:36px; font-weight:700; color:#f5c542" id="epReadinessPct">0%</div>
+          <div>
+            <div style="font-size:16px; font-weight:600; margin-bottom:4px">Event Readiness</div>
+            <div style="font-size:13px; color:#a1b2c6" id="epReadinessText">Analyzing bottlenecks...</div>
+          </div>
+        </div>
+      </div>
+      <div class="grid-3">
+        <div class="col">
+          <div class="panel"><div class="panel-title">EP DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats"></div></div>
+          <div class="panel"><div class="panel-title">EP By Discipline</div><div id="epDisciplineList"></div></div>
+        </div>
+        <div class="col col-wide">
+          <div class="panel"><div class="panel-title">EP S-Curve &mdash; Target vs Actual</div><div style="position:relative;height:220px"><canvas id="epScurveChart"></canvas></div></div>
+          <div class="panel"><div class="panel-title">Progress by EP Unit</div><div id="epUnitOverview"></div></div>
+          <div class="panel"><div class="panel-title">Progress by EP System</div><div id="epSysOverview" class="scroll-list" style="max-height:220px"></div></div>
+        </div>
+        <div class="col"><div class="panel"><div class="panel-title">Progress by EP Area</div><div id="epAreaOverview"></div></div></div>
       </div>
     </div>
 
@@ -108,13 +139,19 @@
             <select id="jm-system" class="filter-sel"><option value="">System</option></select>
             <select id="jm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
             <select id="jm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
-            <select id="jm-early" class="filter-sel"><option value="">Early Power</option><option value="true">EP Only</option><option value="false">Non-EP</option></select>
+            <select id="jm-phase" class="filter-sel"><option value="">Phase</option><option value="EP">EP</option><option value="Normal">Normal</option></select>
             <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()">
             <button class="btn-primary" onclick="loadJointMaster()">&#128269; Search</button>
             <button class="btn-primary" style="background:#22d3a1" onclick="openAddJointModal()">+ Add Joint</button>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button class="btn-de btn-de-export" onclick="exportJMExcel()">&#11015; Export Excel</button>
+            <button class="btn-de" onclick="downloadJMTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)" title="Download blank template for bulk import">&#128462; Template</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0" title="Select Excel file to bulk import">
+              &#128196; Import
+              <input type="file" id="jm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importJMExcel()">
+            </label>
+            <span id="jm-import-status" style="font-size:11px;color:var(--text-dim)"></span>
             <button class="btn-de btn-de-print" onclick="printPage('joint_master')">&#128424; Print</button>
           </div>
         </div>
@@ -126,7 +163,7 @@
             <button class="btn-clear-row" style="padding:6px 14px" onclick="clearIsoBulkDate()">Clear All</button>
           </div>
         </div>
-        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Welder</th><th>EP</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
+        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Phase</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Welder</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
         <div class="de-pagination"><div id="jm-count" style="color:#7a95b8;font-size:11px">0 rows loaded</div><div style="display:flex;gap:6px;align-items:center"><button class="nav-btn" onclick="jmPage(-1)">Prev</button><span id="jm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span><button class="nav-btn" onclick="jmPage(1)">Next</button></div></div>
       </div>
     </div>
@@ -221,6 +258,184 @@
       </div>
     </div>
     </div>
+    
+    <div class="page hidden" id="page-welder">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div></div>
+
+      <!-- Filter bar -->
+      <div class="panel" style="margin-bottom:10px;padding:12px 16px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:12px;color:var(--text-dim)">FILTER</span>
+          <input type="date" id="wd-from" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="From date">
+          <span style="color:var(--text-dim)">~</span>
+          <input type="date" id="wd-to" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="To date">
+          <select id="wd-system" class="cell-input" style="width:150px;padding:5px 8px;font-size:12px">
+            <option value="">All Systems</option>
+          </select>
+          <button class="btn-de" onclick="(() => { const m = metaData.systems||[]; const sel=document.getElementById('wd-system'); const cur=sel.value; sel.innerHTML='<option value=\'\'>All Systems</option>'+m.map(s=>`<option value='${s}'>${s}</option>`).join(''); sel.value=cur; loadWelder(); })()" style="padding:5px 14px;font-size:12px">&#128269; Apply</button>
+          <button class="btn-de" onclick="document.getElementById('wd-from').value='';document.getElementById('wd-to').value='';document.getElementById('wd-system').value='';loadWelder()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,0.1);color:#ff5252">&#10005; Clear</button>
+          <div style="margin-left:auto">
+            <button class="btn-de btn-de-export" onclick="exportWelderExcel()" style="padding:5px 14px;font-size:12px">&#11015; Export Excel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="panel" style="margin-bottom:10px">
+        <div class="grid-4" id="welderKpi">
+          <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Joints Completed</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Avg DI per Welder</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div></div>
+        </div>
+      </div>
+
+      <!-- Main grid: Ranking + Daily Trend + System Breakdown -->
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="panel">
+          <div class="panel-title">Welder Ranking (Click for detail)</div>
+          <div class="table-wrap" style="max-height:420px">
+            <table class="data-table" id="welderRankTable">
+              <thead><tr><th>Rank</th><th>Welder ID</th><th>Joints</th><th>Total DI (bar)</th><th>Last Active</th><th></th></tr></thead>
+              <tbody id="welderRankBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="panel" style="flex:1">
+            <div class="panel-title">Daily Completed DI (All Welders)</div>
+            <div style="position:relative;height:190px"><canvas id="welderTrendChart"></canvas></div>
+          </div>
+          <div class="panel" style="flex:1">
+            <div class="panel-title">Top System Breakdown (Completed DI)</div>
+            <div style="position:relative;height:190px"><canvas id="welderSysChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Welder Drill-down Panel (hidden until row clicked) -->
+      <div id="welder-drill-panel" style="display:none">
+        <div class="panel">
+          <div class="panel-title" style="display:flex;align-items:center;gap:10px">
+            <span id="drill-welder-name" style="color:var(--accent);font-size:15px;font-weight:700"></span>
+            <span style="font-size:11px;color:var(--text-dim)">Individual Analysis</span>
+            <button onclick="document.getElementById('welder-drill-panel').style.display='none'" style="margin-left:auto;background:rgba(255,82,82,0.1);color:#ff5252;border:1px solid rgba(255,82,82,0.3);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px">&#10005; Close</button>
+          </div>
+          <div style="display:flex;gap:24px;margin-bottom:12px;flex-wrap:wrap">
+            <div><span style="font-size:11px;color:var(--text-dim)">JOINTS</span><br><span id="drill-joints" style="font-size:18px;font-weight:700;color:var(--green)"></span></div>
+            <div><span style="font-size:11px;color:var(--text-dim)">TOTAL DI</span><br><span id="drill-total-di" style="font-size:18px;font-weight:700;color:var(--accent)"></span></div>
+            <div><span style="font-size:11px;color:var(--text-dim)">LAST ACTIVE</span><br><span id="drill-last-active" style="font-size:18px;font-weight:700;color:var(--text)"></span></div>
+          </div>
+          <div class="grid-2">
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:6px">DAILY OUTPUT TREND</div>
+              <div style="position:relative;height:200px"><canvas id="drillDailyChart"></canvas></div>
+            </div>
+            <div>
+              <div style="font-size:11px;font-weight:600;color:var(--text-dim);margin-bottom:6px">SYSTEM DISTRIBUTION</div>
+              <div style="position:relative;height:200px"><canvas id="drillSysChart"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SUPPORT MASTER ═══════════ -->
+    <div class="page hidden" id="page-support_master">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master</div></div>
+      <div class="panel">
+        <div class="jm-top-row">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="sm-system" class="filter-sel"><option value="">System</option></select>
+            <select id="sm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
+            <select id="sm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
+            <input id="sm-iso" class="filter-sel" type="text" placeholder="ISO Drawing">
+            <button class="btn-primary" onclick="loadSupportMaster()">&#128269; Search</button>
+            <button class="btn-primary" style="background:#22d3a1" onclick="openSMModal()">+ Add</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn-de btn-de-export" onclick="exportSMExcel()">&#11015; Export</button>
+            <button class="btn-de" onclick="downloadSMTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)">&#128462; Template</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0">
+              &#128196; Import
+              <input type="file" id="sm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importSMExcel()">
+            </label>
+            <span id="sm-import-status" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="smTable">
+            <thead><tr><th>ID</th><th>System</th><th>Sub Area</th><th>ISO Drawing</th><th>Support No</th><th>Completed Date</th><th>Remark</th><th>Action</th></tr></thead>
+            <tbody id="smBody"></tbody>
+          </table>
+        </div>
+        <div class="de-pagination">
+          <div id="sm-count" style="color:#7a95b8;font-size:11px">0 rows</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="nav-btn" onclick="smPage(-1)">Prev</button>
+            <span id="sm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span>
+            <button class="nav-btn" onclick="smPage(1)">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TEST PACKAGE MASTER ═══════════ -->
+    <div class="page hidden" id="page-testpkg_master">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Master</div></div>
+      <div class="panel">
+        <div class="jm-top-row">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <select id="tp-system" class="filter-sel"><option value="">System</option></select>
+            <select id="tp-subarea" class="filter-sel"><option value="">Sub Area</option></select>
+            <select id="tp-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
+            <button class="btn-primary" onclick="loadTestPkgMaster()">&#128269; Search</button>
+            <button class="btn-primary" style="background:#22d3a1" onclick="openTPModal()">+ Add</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn-de btn-de-export" onclick="exportTPExcel()">&#11015; Export</button>
+            <button class="btn-de" onclick="downloadTPTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)">&#128462; Template</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0">
+              &#128196; Import
+              <input type="file" id="tp-import-file" accept=".xlsx,.xls" style="display:none" onchange="importTPExcel()">
+            </label>
+            <span id="tp-import-status" style="font-size:11px;color:var(--text-dim)"></span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="tpTable">
+            <thead><tr><th>ID</th><th>System</th><th>Sub Area</th><th>Test Pkg No</th><th>Completed Date</th><th>Remark</th><th>Action</th></tr></thead>
+            <tbody id="tpBody"></tbody>
+          </table>
+        </div>
+        <div class="de-pagination">
+          <div id="tp-count" style="color:#7a95b8;font-size:11px">0 rows</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="nav-btn" onclick="tpPage(-1)">Prev</button>
+            <span id="tp-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span>
+            <button class="nav-btn" onclick="tpPage(1)">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="page hidden" id="page-simulation" style="display:flex;flex-direction:column;height:calc(100vh - 130px);min-height:500px;">
+      <div class="page-header" style="flex-shrink:0"><div class="page-bar"></div><div class="page-title">&#128640; Simulation Board &mdash; Early Power Schedule Analysis</div></div>
+      <div style="flex:1;min-height:0;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.15);border:1px solid rgba(0,200,255,0.15);background:#0d1a2b">
+        <iframe
+          id="simulationFrame"
+          src="http://localhost:8501"
+          style="width:100%;height:100%;border:none;display:block;"
+          allowfullscreen
+          loading="lazy"
+        ></iframe>
+      </div>
+      <div style="flex-shrink:0;padding:6px 2px;font-size:11px;color:#4a6080;display:flex;align-items:center;gap:12px">
+        <span>&#127760; Streamlit running on <code style="background:rgba(0,200,255,0.08);padding:2px 6px;border-radius:3px;color:#00c8ff">localhost:8501</code></span>
+        <button onclick="document.getElementById('simulationFrame').src='http://localhost:8501'" style="background:rgba(0,200,255,0.1);color:#00c8ff;border:1px solid rgba(0,200,255,0.3);padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px">&#8635; Reload</button>
+        <span style="margin-left:auto;color:#2e4060">If the board is blank, ensure the Streamlit server is running: <code style="color:#f5c542">streamlit run app.py --server.port 8501</code></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -239,6 +454,41 @@
 }
 </style>
 
+<!-- Modal: Add Support Item -->
+<div id="addSMModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;width:440px;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+    <h3 style="margin-top:0;margin-bottom:14px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Support Item</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="sm-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Sub Area</label><br><input type="text" id="sm-new-subarea" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">ISO Drawing</label><br><input type="text" id="sm-new-iso" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Support No</label><br><input type="text" id="sm-new-support_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Remark</label><br><input type="text" id="sm-new-remark" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+    </div>
+    <div style="margin-top:18px;text-align:right;">
+      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeSMModal()">Cancel</button>
+      <button class="btn-primary" style="background:#2563eb;" onclick="submitSMItem()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Add Test Package -->
+<div id="addTPModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;width:440px;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+    <h3 style="margin-top:0;margin-bottom:14px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Test Package</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="tp-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Sub Area</label><br><input type="text" id="tp-new-subarea" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Test Pkg No</label><br><input type="text" id="tp-new-testpkg" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. TP-CCP-001"></div>
+      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Remark</label><br><input type="text" id="tp-new-remark" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+    </div>
+    <div style="margin-top:18px;text-align:right;">
+      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeTPModal()">Cancel</button>
+      <button class="btn-primary" style="background:#2563eb;" onclick="submitTPItem()">Save</button>
+    </div>
+  </div>
+</div>
+
 <div id="addJointModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
     <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add New Joint</h3>
@@ -254,8 +504,8 @@
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Size (Inch)</label><br><input type="number" id="new-size" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" step="0.1"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">S/F</label><br><select id="new-sf" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="S">S - Shop</option><option value="F">F - Field</option></select></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Joint No</label><br><input type="text" id="new-joint_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder ID</label><br><input type="text" id="new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. W001"></div>
-      <div style="display:flex;align-items:center;gap:8px;padding-top:15px"><input type="checkbox" id="new-early" style="width:18px;height:18px"><label style="font-size:11px;font-weight:600;color:#7a95b8">Early Power Item</label></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder ID</label><br><input type="text" id="new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. W001, W002" title="Use comma for multiple welders"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><select id="new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="">Select Phase</option><option value="EP">EP</option><option value="Normal">Normal</option></select></div>
     </div>
     <div style="margin-top:20px;text-align:right;">
       <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeAddJointModal()">Cancel</button>
@@ -269,6 +519,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=18.7"></script>
+<script src="/static/js/dashboard.js?v=19.3"></script>
 </body>
 </html>
