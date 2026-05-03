@@ -151,6 +151,15 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 /* ── Page ── */
 .page { display: block; }
 .page.hidden { display: none; }
+
+/* Simulation page overrides: bypass page-body scroll so iframe fills viewport */
+#page-simulation {
+    display: none;         /* overridden to flex when visible via inline style */
+    overflow: hidden;
+    padding: 0;
+}
+#page-simulation.hidden { display: none !important; }
+
 .page-header { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .page-bar { width: 3px; height: 18px; background: var(--accent); border-radius: 2px; }
 .page-bar.green  { background: var(--green); }
