@@ -84,22 +84,11 @@ def _parse_rpc(raw):
         kpi["total_plan_joints"] = kpi.get("total_joints", 0)
         kpi["completed_plan_di"] = cdi
 
-        sup_pct = calc_pct(kpi.get("support_comp"), kpi.get("support_total"))
-        tst_pct = calc_pct(kpi.get("testpkg_comp"), kpi.get("testpkg_total"))
-        kpi["support_pct"] = sup_pct
-        kpi["testpkg_pct"] = tst_pct
-        kpi["unified_readiness"] = round(kpi["overall_pct"] * 0.6 + sup_pct * 0.2 + tst_pct * 0.2, 2)
-
     def inject_pct(arr):
         for item in arr:
-            di_pct = calc_pct(item.get("completed_di"), item.get("total_di"))
-            sup_pct = calc_pct(item.get("support_comp"), item.get("support_total"))
-            tst_pct = calc_pct(item.get("testpkg_comp"), item.get("testpkg_total"))
-            item["progress_pct"] = di_pct
-            item["progress_perc"] = di_pct
-            item["support_pct"] = sup_pct
-            item["testpkg_pct"] = tst_pct
-            item["unified_readiness"] = round(di_pct * 0.6 + sup_pct * 0.2 + tst_pct * 0.2, 2)
+            pct = calc_pct(item.get("completed_di"), item.get("total_di"))
+            item["progress_pct"] = pct
+            item["progress_perc"] = pct
         return arr
 
     actual_raw = lst(raw.get("act"))
@@ -153,8 +142,6 @@ def _parse_rpc(raw):
                 all_weeks[wk]["plan_di"] = pfab + perect
         except (ValueError, TypeError): continue
 
-    actual_raw = lst(raw.get("act"))
-    ep_actual_raw = lst(raw.get("ep_act"))
     for a in actual_raw:
         try:
             wk = int(a.get("week_no") or 0)
@@ -162,41 +149,21 @@ def _parse_rpc(raw):
                 all_weeks[wk]["completed_di"] = float(a.get("completed_di", 0) or 0)
         except: continue
 
-    ep_week_map = {}
-    for a in ep_actual_raw:
-        try:
-            wk = int(a.get("week_no") or 0)
-            if wk in all_weeks:
-                ep_week_map[wk] = float(a.get("completed_di", 0) or 0)
-        except: continue
-
-    cum_p = cum_i = cum_a = ep_cum_a = 0.0
+    cum_p = cum_i = cum_a = 0.0
     final_weekly = []
-    ep_weekly = []
     for i in range(1, max_wk + 1):
         w = all_weeks[i]
         cum_i += w.get("ideal_di", 0.0)
         cum_p += w.get("plan_di", 0.0)
         cum_a += w.get("completed_di", 0.0)
-        ep_c = ep_week_map.get(i, 0.0)
-        ep_cum_a += ep_c
-        
         w["cumul_ideal"] = round(cum_i, 2)
         w["cumul_plan"] = round(cum_p, 2)
         w["cumul_actual"] = round(cum_a, 2)
         w["progress_perc"] = calc_pct(w["completed_di"], w.get("plan_di", 0.0))
         final_weekly.append(w)
-        
-        ep_w = {"week_no": i, "week_label": w["week_label"], "completed_di": ep_c, "cumul_actual": round(ep_cum_a, 2)}
-        ep_weekly.append(ep_w)
 
     return {
         "kpi":        kpi,
-        "ep_kpi":     raw.get("ep_kpi"),
-        "ep_weekly":  ep_weekly,
-        "ep_unit":    raw.get("ep_unit"),
-        "ep_area":    raw.get("ep_area"),
-        "ep_sys":     raw.get("ep_sys"),
         "weekly":     final_weekly,
         "weeks":      final_weekly,
         "systems":    inject_pct(lst(raw.get("sys"))),
@@ -263,23 +230,13 @@ def _build():
             raw["week_schedule"] = []
 
         try:
-            sup_res = sb.table("support_master").select("system,sub_area,completed,date_completed").limit(10000).execute()
-            support_all = sup_res.data or []
-        except: support_all = []
-
-        try:
-            tst_res = sb.table("test_package_master").select("system,sub_area,completed,date_completed").limit(10000).execute()
-            testpkg_all = tst_res.data or []
-        except: testpkg_all = []
-
-        try:
             offset = 0
             limit = 10000
             jm_all = []
             print(f"[bop-debug] Scanning joints for aggregation...")
             while True:
                 # IMPORTANT: Must select 'di' and 'sf' for correct KPI calculation
-                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,di,sf,date_completed,completed,welder,phase").range(offset, offset + limit - 1).execute()
+                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,di,sf,date_completed,completed,welder,early_power").range(offset, offset + limit - 1).execute()
                 chunk = chunk_res.data or []
                 jm_all.extend(chunk)
                 offset += len(chunk)
@@ -320,7 +277,7 @@ def _build():
                 except: pass
                 return 0
             
-            unit_map, area_map, sys_map, week_comp_map, ep_week_comp_map = {}, {}, {}, {}, {}
+            unit_map, area_map, sys_map, week_comp_map = {}, {}, {}, {}
             kpi_totals = {
                 "total_di": 0.0, "completed_di": 0.0,
                 "fab_total_di": 0.0, "fab_completed_di": 0.0,
@@ -329,8 +286,6 @@ def _build():
                 "fab_total_joints": 0, "fab_completed_joints": 0,
                 "erect_total_joints": 0, "erect_completed_joints": 0
             }
-            ep_kpi = {k:0.0 if isinstance(v, float) else 0 for k,v in kpi_totals.items()}
-            ep_unit_map, ep_area_map, ep_sys_map = {}, {}, {}
             
             print(f"[bop-debug] Starting aggregation of {len(jm_all)} joints...")
             for idx, r in enumerate(jm_all):
@@ -348,134 +303,57 @@ def _build():
                 
                 is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
                 sf = str(r.get("sf") or "").upper().strip()
-                is_ep = (str(r.get("phase") or "").strip().upper() == "EP")
                 
                 kpi_totals["total_di"] += sz
                 kpi_totals["total_joints"] += 1
-                if is_ep:
-                    ep_kpi["total_di"] += sz
-                    ep_kpi["total_joints"] += 1
                 if is_comp: 
                     kpi_totals["completed_di"] += sz
                     kpi_totals["completed_joints"] += 1
-                    if is_ep:
-                        ep_kpi["completed_di"] += sz
-                        ep_kpi["completed_joints"] += 1
                 
                 if sf == "S" or "FAB" in sf:
                     kpi_totals["fab_total_di"] += sz
                     kpi_totals["fab_total_joints"] += 1
-                    if is_ep:
-                        ep_kpi["fab_total_di"] += sz; ep_kpi["fab_total_joints"] += 1
                     if is_comp: 
                         kpi_totals["fab_completed_di"] += sz
                         kpi_totals["fab_completed_joints"] += 1
-                        if is_ep:
-                            ep_kpi["fab_completed_di"] += sz; ep_kpi["fab_completed_joints"] += 1
                 elif sf == "F" or "ERE" in sf or "FIELD" in sf:
                     kpi_totals["erect_total_di"] += sz
                     kpi_totals["erect_total_joints"] += 1
-                    if is_ep:
-                        ep_kpi["erect_total_di"] += sz; ep_kpi["erect_total_joints"] += 1
                     if is_comp: 
                         kpi_totals["erect_completed_di"] += sz
                         kpi_totals["erect_completed_joints"] += 1
-                        if is_ep:
-                            ep_kpi["erect_completed_di"] += sz; ep_kpi["erect_completed_joints"] += 1
 
                 if is_comp and r.get("date_completed"):
                     try:
                         wk_no = get_week_no(r.get("date_completed"))
-                        if wk_no: 
-                            week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
-                            if is_ep:
-                                ep_week_comp_map[wk_no] = ep_week_comp_map.get(wk_no, 0.0) + sz
+                        if wk_no: week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
                     except Exception as wek:
                         pass # Silently skip one bad date
                 
                 if u:
                     if u not in unit_map: unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    unit_map[u]["total_di"] += sz; unit_map[u]["total_joints"] += 1
+                    unit_map[u]["total_di"] += sz
+                    unit_map[u]["total_joints"] += 1
                     if is_comp: unit_map[u]["completed_di"] += sz; unit_map[u]["completed_joints"] += 1
-                    if is_ep:
-                        if u not in ep_unit_map: ep_unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_unit_map[u]["total_di"] += sz; ep_unit_map[u]["total_joints"] += 1
-                        if is_comp: ep_unit_map[u]["completed_di"] += sz; ep_unit_map[u]["completed_joints"] += 1
                 if a:
                     if a not in area_map: area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    area_map[a]["total_di"] += sz; area_map[a]["total_joints"] += 1
+                    area_map[a]["total_di"] += sz
+                    area_map[a]["total_joints"] += 1
                     if is_comp: area_map[a]["completed_di"] += sz; area_map[a]["completed_joints"] += 1
-                    if is_ep:
-                        if a not in ep_area_map: ep_area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_area_map[a]["total_di"] += sz; ep_area_map[a]["total_joints"] += 1
-                        if is_comp: ep_area_map[a]["completed_di"] += sz; ep_area_map[a]["completed_joints"] += 1
                 if s:
                     if s not in sys_map: sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    sys_map[s]["total_di"] += sz; sys_map[s]["total_joints"] += 1
+                    sys_map[s]["total_di"] += sz
+                    sys_map[s]["total_joints"] += 1
                     if is_comp: sys_map[s]["completed_di"] += sz; sys_map[s]["completed_joints"] += 1
-                    if is_ep:
-                        if s not in ep_sys_map: ep_sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_sys_map[s]["total_di"] += sz; ep_sys_map[s]["total_joints"] += 1
-                        if is_comp: ep_sys_map[s]["completed_di"] += sz; ep_sys_map[s]["completed_joints"] += 1
-
-            kpi_totals["support_total"] = len(support_all)
-            kpi_totals["support_comp"] = sum(1 for s in support_all if str(s.get("completed")).upper() in ["TRUE", "Y", "O", "1"] or s.get("date_completed"))
-            kpi_totals["testpkg_total"] = len(testpkg_all)
-            kpi_totals["testpkg_comp"] = sum(1 for t in testpkg_all if str(t.get("completed")).upper() in ["TRUE", "Y", "O", "1"] or t.get("date_completed"))
-
-            sys_sup, sys_tst, area_sup, area_tst = {}, {}, {}, {}
-            for s in support_all:
-                sy = (s.get("system") or "").strip()
-                ar = (s.get("sub_area") or "").strip()
-                is_c = str(s.get("completed")).upper() in ["TRUE", "Y", "O", "1"] or s.get("date_completed")
-                if sy:
-                    if sy not in sys_sup: sys_sup[sy] = {"tot":0, "cmp":0}
-                    sys_sup[sy]["tot"] += 1
-                    if is_c: sys_sup[sy]["cmp"] += 1
-                if ar:
-                    if ar not in area_sup: area_sup[ar] = {"tot":0, "cmp":0}
-                    area_sup[ar]["tot"] += 1
-                    if is_c: area_sup[ar]["cmp"] += 1
-            for t in testpkg_all:
-                sy = (t.get("system") or "").strip()
-                ar = (t.get("sub_area") or "").strip()
-                is_c = str(t.get("completed")).upper() in ["TRUE", "Y", "O", "1"] or t.get("date_completed")
-                if sy:
-                    if sy not in sys_tst: sys_tst[sy] = {"tot":0, "cmp":0}
-                    sys_tst[sy]["tot"] += 1
-                    if is_c: sys_tst[sy]["cmp"] += 1
-                if ar:
-                    if ar not in area_tst: area_tst[ar] = {"tot":0, "cmp":0}
-                    area_tst[ar]["tot"] += 1
-                    if is_c: area_tst[ar]["cmp"] += 1
-
-            for s_name, s_data in sys_map.items():
-                s_data["support_total"] = sys_sup.get(s_name, {}).get("tot", 0)
-                s_data["support_comp"]  = sys_sup.get(s_name, {}).get("cmp", 0)
-                s_data["testpkg_total"] = sys_tst.get(s_name, {}).get("tot", 0)
-                s_data["testpkg_comp"]  = sys_tst.get(s_name, {}).get("cmp", 0)
-            
-            for a_name, a_data in area_map.items():
-                a_data["support_total"] = area_sup.get(a_name, {}).get("tot", 0)
-                a_data["support_comp"]  = area_sup.get(a_name, {}).get("cmp", 0)
-                a_data["testpkg_total"] = area_tst.get(a_name, {}).get("tot", 0)
-                a_data["testpkg_comp"]  = area_tst.get(a_name, {}).get("cmp", 0)
 
             print(f"[bop-debug] Manual aggregation finished. Totals: {kpi_totals}")
             raw["kpi"] = [kpi_totals]
-            raw["ep_kpi"] = [ep_kpi]
 
             if unit_map: raw["unit"] = list(unit_map.values())
             if area_map: raw["area"] = list(area_map.values())
             if sys_map:  raw["sys"]  = list(sys_map.values())
-            
-            if ep_unit_map: raw["ep_unit"] = list(ep_unit_map.values())
-            if ep_area_map: raw["ep_area"] = list(ep_area_map.values())
-            if ep_sys_map:  raw["ep_sys"]  = list(ep_sys_map.values())
             if week_comp_map:
                 raw["act"] = [{"week_no": k, "completed_di": v} for k, v in week_comp_map.items()]
-            if ep_week_comp_map:
-                raw["ep_act"] = [{"week_no": k, "completed_di": v} for k, v in ep_week_comp_map.items()]
         except Exception as e:
             print(f"[bop-debug] Manual aggregation error: {e}")
 
@@ -613,13 +491,14 @@ def api_joints_get():
         status  = request.args.get("status",   "")
         iso     = request.args.get("iso",      "")
         subarea = request.args.get("sub_area", "")
-        phase   = request.args.get("phase", "")
+        early   = request.args.get("early_power", "")
         q = sb.table("joint_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
         if iso:     q = q.eq("iso_drawing", iso)
         if subarea: q = q.eq("sub_area",    subarea)
-        if phase:   q = q.eq("phase",       phase)
+        if early == "true":  q = q.eq("early_power", True)
+        if early == "false": q = q.eq("early_power", False)
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
@@ -779,366 +658,6 @@ def api_iso_summary():
     except Exception as e:
         print(f"[iso-summary] Error: {e}")
         return jsonify([]), 200
-
-@app.route("/api/welder-summary")
-def api_welder_summary():
-    import re
-    try:
-        sb = get_sb()
-        # Optional filters from query params
-        date_from = request.args.get("date_from", "").strip()
-        date_to   = request.args.get("date_to",   "").strip()
-        f_system  = request.args.get("system",    "").strip()
-        f_welder  = request.args.get("welder",    "").strip()
-
-        offset = 0
-        limit  = 5000
-        all_completed = []
-        while True:
-            q = sb.table("joint_master").select(
-                "welder, di, size_inch, date_completed, system, unit, area"
-            ).not_.is_("date_completed", "null")
-            if f_system: q = q.eq("system", f_system)
-            if date_from: q = q.gte("date_completed", date_from)
-            if date_to:   q = q.lte("date_completed", date_to)
-            chunk = q.range(offset, offset + limit - 1).execute().data or []
-            all_completed.extend(chunk)
-            if len(chunk) < limit: break
-            offset += limit
-
-        if not all_completed:
-            return jsonify({
-                "stats": {"active_welders": 0, "total_joints": 0, "total_di": 0, "avg_di": 0},
-                "ranking": [], "trend": [], "welder_daily": {}, "system_breakdown": []
-            })
-
-        welder_map  = {}  # welder -> {joints, total_di, last_active, systems: {}, daily: {}}
-        daily_map   = {}  # date -> total_di
-        sys_map     = {}  # system -> {joints, total_di}
-        total_di    = 0
-
-        for r in all_completed:
-            w_str = (r.get("welder") or "Unknown").strip()
-            welders = [w.strip() for w in re.split(r'[,/]+', w_str) if w.strip()] or ["Unknown"]
-
-            sz_val = r.get("di")
-            if sz_val is None or sz_val == "": sz_val = r.get("size_inch")
-            try:   di = float(sz_val or 0)
-            except: di = 0.0
-            dt  = (r.get("date_completed") or "")[:10]
-            sys = (r.get("system") or "").strip()
-            total_di += di
-            di_per_welder = di / len(welders)
-
-            # filter by specific welder if requested
-            matched_welders = [w for w in welders if not f_welder or w == f_welder] if f_welder else welders
-
-            for w in matched_welders:
-                if w not in welder_map:
-                    welder_map[w] = {"welder": w, "joints": 0, "total_di": 0,
-                                     "last_active": "", "systems": {}, "daily": {}}
-                wm = welder_map[w]
-                wm["joints"] += 1
-                wm["total_di"] += di_per_welder
-                if dt > wm["last_active"]: wm["last_active"] = dt
-                if sys:
-                    wm["systems"][sys] = wm["systems"].get(sys, 0) + di_per_welder
-                if dt:
-                    wm["daily"][dt] = wm["daily"].get(dt, 0) + di_per_welder
-
-            if dt:  daily_map[dt]  = daily_map.get(dt, 0) + di
-            if sys: sys_map[sys]   = sys_map.get(sys, {"system": sys, "joints": 0, "total_di": 0})
-            if sys:
-                sys_map[sys]["joints"] += 1
-                sys_map[sys]["total_di"] += di
-
-        ranking = sorted(welder_map.values(), key=lambda x: x["total_di"], reverse=True)
-        # Convert nested dicts to sorted lists for chart use
-        for wm in ranking:
-            wm["system_list"] = sorted(
-                [{"system": k, "di": round(v, 2)} for k, v in wm["systems"].items()],
-                key=lambda x: x["di"], reverse=True
-            )
-            wm["daily_list"] = sorted(
-                [{"date": k, "di": round(v, 2)} for k, v in wm["daily"].items()]
-            )
-            wm["total_di"] = round(wm["total_di"], 2)
-            del wm["systems"], wm["daily"]
-
-        trend   = [{"date": k, "di": round(v, 2)} for k, v in sorted(daily_map.items())]
-        sys_bkd = sorted(sys_map.values(), key=lambda x: x["total_di"], reverse=True)
-        stats   = {
-            "active_welders": len(welder_map),
-            "total_joints":   len(all_completed),
-            "total_di":       round(total_di, 2),
-            "avg_di":         round(total_di / len(welder_map), 2) if welder_map else 0
-        }
-        return jsonify({"stats": stats, "ranking": ranking, "trend": trend,
-                        "system_breakdown": sys_bkd})
-    except Exception as e:
-        print(f"[welder-summary] Error: {e}")
-        return jsonify({"error": str(e)}), 500
-
-
-# ── Joint Master Bulk Import (Excel) ──────────────────────────────────
-@app.route("/api/joints/import", methods=["POST"])
-def api_joints_import():
-    """Bulk upsert from uploaded Excel file.
-    Expected columns (case-insensitive, extra cols ignored):
-      unit, system, area, sub_area, line_no, iso_drawing, rev,
-      spool_no, mat, size_inch, sf, joint_no, di, welder, phase,
-      date_completed, remark
-    """
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        f = request.files["file"]
-        buf = io.BytesIO(f.read())
-        df = pd.read_excel(buf, dtype=str)
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-
-        FIELD_MAP = {
-            "unit": "unit", "system": "system", "area": "area",
-            "sub_area": "sub_area", "line_no": "line_no",
-            "iso_drawing": "iso_drawing", "rev": "rev",
-            "spool_no": "spool_no", "mat": "mat",
-            "size_inch": "size_inch", "sf": "sf", "joint_no": "joint_no",
-            "di": "di", "welder": "welder", "phase": "phase",
-            "date_completed": "date_completed", "remark": "remark"
-        }
-
-        records = []
-        skipped = 0
-        for _, row in df.iterrows():
-            rec = {}
-            for col, db_col in FIELD_MAP.items():
-                val = row.get(col, None)
-                if val is None or (isinstance(val, float) and pd.isna(val)): val = None
-                else: val = str(val).strip() or None
-                rec[db_col] = val
-
-            # Skip rows without iso_drawing
-            if not rec.get("iso_drawing"):
-                skipped += 1
-                continue
-
-            # Convert numeric fields
-            for num_col in ["size_inch", "di"]:
-                v = rec.get(num_col)
-                if v:
-                    try:   rec[num_col] = float(v)
-                    except: rec[num_col] = None
-
-            # Normalise date
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    parsed = pd.to_datetime(dc)
-                    rec["date_completed"] = parsed.strftime("%Y-%m-%d")
-                    rec["completed"] = True
-                except:
-                    rec["date_completed"] = None
-            else:
-                rec["completed"] = False
-
-            records.append(rec)
-
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows found (skipped {skipped})"}), 400
-
-        # Batch upsert in chunks of 500
-        sb = get_sb()
-        CHUNK = 500
-        inserted = 0
-        for i in range(0, len(records), CHUNK):
-            batch = records[i:i + CHUNK]
-            sb.table("joint_master").insert(batch).execute()
-            inserted += len(batch)
-
-        # Clear caches so dashboard refreshes
-        global _cache, _meta_cache, _iso_cache
-        with _lock: _cache.clear()
-        _meta_cache = {"time": 0, "data": None}
-        _iso_cache  = {"time": 0, "data": []}
-
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
-    except Exception as e:
-        print(f"[joints-import] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-# ── Support Master CRUD ───────────────────────────────────────────────
-@app.route("/api/support-master", methods=["GET"])
-def api_support_get():
-    try:
-        sb = get_sb()
-        limit   = int(request.args.get("limit",  100))
-        offset  = int(request.args.get("offset",   0))
-        system  = request.args.get("system",  "").strip()
-        subarea = request.args.get("sub_area","").strip()
-        status  = request.args.get("status",  "").strip()
-        iso     = request.args.get("iso",     "").strip()
-        q = sb.table("support_master").select("*", count="exact")
-        if system:  q = q.eq("system",      system)
-        if subarea: q = q.eq("sub_area",    subarea)
-        if iso:     q = q.eq("iso_drawing", iso)
-        if status == "completed": q = q.not_.is_("date_completed", "null")
-        if status == "pending":   q = q.is_("date_completed",      "null")
-        res = q.order("id").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": res.data, "count": res.count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/support-master", methods=["POST"])
-def api_support_post():
-    try:
-        res = get_sb().table("support_master").insert(request.get_json()).execute()
-        return jsonify({"ok": True, "data": res.data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/support-master/<int:rid>", methods=["PATCH"])
-def api_support_patch(rid):
-    try:
-        get_sb().table("support_master").update(request.get_json()).eq("id", rid).execute()
-        _cache.clear(); return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/support-master/<int:rid>", methods=["DELETE"])
-def api_support_delete(rid):
-    try:
-        get_sb().table("support_master").delete().eq("id", rid).execute()
-        _cache.clear(); return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/support-master/import", methods=["POST"])
-def api_support_import():
-    """Bulk import from Excel.
-    Expected columns: system, sub_area, iso_drawing, support_no, completed, date_completed, remark
-    """
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        buf = io.BytesIO(request.files["file"].read())
-        df  = pd.read_excel(buf, dtype=str)
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        FIELDS = ["system","sub_area","iso_drawing","support_no","completed","date_completed","remark"]
-        records, skipped = [], 0
-        for _, row in df.iterrows():
-            rec = {}
-            for f in FIELDS:
-                v = row.get(f)
-                rec[f] = None if (v is None or (isinstance(v, float) and pd.isna(v))) else str(v).strip() or None
-            if not rec.get("system") and not rec.get("iso_drawing"):
-                skipped += 1; continue
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"] = True
-                except: rec["date_completed"] = None
-            else:
-                cmp_val = str(rec.get("completed") or "").upper()
-                rec["completed"] = cmp_val in ["TRUE","Y","O","1"]
-            records.append(rec)
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
-        sb = get_sb(); inserted = 0
-        for i in range(0, len(records), 500):
-            sb.table("support_master").insert(records[i:i+500]).execute()
-            inserted += len(records[i:i+500])
-        with _lock: _cache.clear()
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-# ── Test Package Master CRUD ──────────────────────────────────────────
-@app.route("/api/testpkg-master", methods=["GET"])
-def api_testpkg_get():
-    try:
-        sb = get_sb()
-        limit   = int(request.args.get("limit",  100))
-        offset  = int(request.args.get("offset",   0))
-        system  = request.args.get("system",  "").strip()
-        subarea = request.args.get("sub_area","").strip()
-        status  = request.args.get("status",  "").strip()
-        q = sb.table("test_package_master").select("*", count="exact")
-        if system:  q = q.eq("system",   system)
-        if subarea: q = q.eq("sub_area", subarea)
-        if status == "completed": q = q.not_.is_("date_completed", "null")
-        if status == "pending":   q = q.is_("date_completed",      "null")
-        res = q.order("id").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": res.data, "count": res.count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/testpkg-master", methods=["POST"])
-def api_testpkg_post():
-    try:
-        res = get_sb().table("test_package_master").insert(request.get_json()).execute()
-        return jsonify({"ok": True, "data": res.data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/testpkg-master/<int:rid>", methods=["PATCH"])
-def api_testpkg_patch(rid):
-    try:
-        get_sb().table("test_package_master").update(request.get_json()).eq("id", rid).execute()
-        _cache.clear(); return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/testpkg-master/<int:rid>", methods=["DELETE"])
-def api_testpkg_delete(rid):
-    try:
-        get_sb().table("test_package_master").delete().eq("id", rid).execute()
-        _cache.clear(); return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/testpkg-master/import", methods=["POST"])
-def api_testpkg_import():
-    """Bulk import from Excel.
-    Expected columns: system, sub_area, test_pkg, completed, date_completed, remark
-    """
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        buf = io.BytesIO(request.files["file"].read())
-        df  = pd.read_excel(buf, dtype=str)
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        FIELDS = ["system","sub_area","test_pkg","completed","date_completed","remark"]
-        records, skipped = [], 0
-        for _, row in df.iterrows():
-            rec = {}
-            for f in FIELDS:
-                v = row.get(f)
-                rec[f] = None if (v is None or (isinstance(v, float) and pd.isna(v))) else str(v).strip() or None
-            if not rec.get("system") and not rec.get("test_pkg"):
-                skipped += 1; continue
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"] = True
-                except: rec["date_completed"] = None
-            else:
-                cmp_val = str(rec.get("completed") or "").upper()
-                rec["completed"] = cmp_val in ["TRUE","Y","O","1"]
-            records.append(rec)
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
-        sb = get_sb(); inserted = 0
-        for i in range(0, len(records), 500):
-            sb.table("test_package_master").insert(records[i:i+500]).execute()
-            inserted += len(records[i:i+500])
-        with _lock: _cache.clear()
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0",
