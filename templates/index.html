@@ -24,7 +24,6 @@
   <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
   <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
-  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
   <div class="nav-section">Data Entry</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
@@ -221,32 +220,6 @@
         </div>
       </div>
     </div>
-    <div class="page hidden" id="page-welder">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Daily Productivity</div></div>
-      <div class="panel" style="margin-bottom:14px">
-        <div class="panel-title">Overall Welder Statistics</div>
-        <div class="grid-4" id="welderKpi">
-          <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
-          <div class="kpi-card"><div class="kpi-label">Total Joints (L/M/S)</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
-          <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
-          <div class="kpi-card"><div class="kpi-label">Avg DI per Welder</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div></div>
-        </div>
-      </div>
-      <div class="grid-2">
-        <div class="panel">
-          <div class="panel-title">Welder Ranking (by Total DI)</div>
-          <div class="table-wrap" style="max-height:500px">
-            <table class="data-table" id="welderRankTable">
-              <thead><tr><th>Rank</th><th>Welder ID</th><th>Joints</th><th>Total DI</th><th>Last Active</th></tr></thead>
-              <tbody id="welderRankBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <div class="panel">
-          <div class="panel-title">Daily Productivity Trend (Combined)</div>
-          <div style="position:relative;height:300px"><canvas id="welderTrendChart"></canvas></div>
-        </div>
-      </div>
     </div>
   </div>
 </div>

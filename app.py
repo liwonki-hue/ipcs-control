@@ -659,60 +659,6 @@ def api_iso_summary():
         print(f"[iso-summary] Error: {e}")
         return jsonify([]), 200
 
-@app.route("/api/welder-summary")
-def api_welder_summary():
-    try:
-        sb = get_sb()
-        offset = 0
-        limit = 5000
-        all_completed = []
-        while True:
-            res = sb.table("joint_master").select("welder, di, date_completed").not_.is_("date_completed", "null").range(offset, offset + limit - 1).execute()
-            chunk = res.data or []
-            all_completed.extend(chunk)
-            if len(chunk) < limit: break
-            offset += limit
-        
-        if not all_completed:
-            return jsonify({
-                "stats": {"active_welders": 0, "total_joints": 0, "total_di": 0, "avg_di": 0},
-                "ranking": [],
-                "trend": []
-            })
-
-        welder_map = {}
-        daily_map = {}
-        total_di = 0
-        for r in all_completed:
-            w = (r.get("welder") or "Unknown").strip()
-            sz_val = r.get("di")
-            if sz_val is None or sz_val == "": sz_val = r.get("size_inch")
-            try: di = float(sz_val or 0)
-            except: di = 0.0
-            dt = (r.get("date_completed") or "").split("T")[0]
-            total_di += di
-            if w not in welder_map:
-                welder_map[w] = {"welder": w, "joints": 0, "total_di": 0, "last_active": ""}
-            welder_map[w]["joints"] += 1
-            welder_map[w]["total_di"] += di
-            if dt > welder_map[w]["last_active"]:
-                welder_map[w]["last_active"] = dt
-            if dt:
-                daily_map[dt] = daily_map.get(dt, 0) + di
-
-        ranking = sorted(welder_map.values(), key=lambda x: x["total_di"], reverse=True)
-        trend = [{"date": k, "di": v} for k, v in sorted(daily_map.items())]
-        stats = {
-            "active_welders": len(welder_map),
-            "total_joints": len(all_completed),
-            "total_di": total_di,
-            "avg_di": total_di / len(welder_map) if welder_map else 0
-        }
-        return jsonify({"stats": stats, "ranking": ranking, "trend": trend})
-    except Exception as e:
-        print(f"[welder-summary] Error: {e}")
-        return jsonify({"error": str(e)}), 500
-
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0",
             port=int(os.environ.get("PORT", 5001)))

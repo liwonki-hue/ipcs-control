@@ -113,7 +113,6 @@ function navigate(page) {
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "joint_master":loadJointMaster();  break;
         case "week_plan":   loadWeekPlan();     break;
-        case "welder":      loadWelder();       break;
     }
 }
 
@@ -529,61 +528,6 @@ function renderJMTable(rows){
     }).join("");
 }
 
-// ================================================================================
-//  WELDER PERFORMANCE
-// ================================================================================
-async function loadWelder() {
-    try {
-        const dash = await getDashData();
-        // Since we don't have a direct API yet, we'll aggregate from all joints in joint_master
-        // However, fetching all joints (47k) in the frontend is slow.
-        // We'll assume the backend will eventually provide this.
-        // For now, let's try to fetch a summary if it exists, or just show a message.
-        const res = await fetch("/api/welder-summary");
-        if (!res.ok) {
-            document.getElementById("welderRankBody").innerHTML = '<tr><td colspan="5" style="text-align:center">Welder API not implemented yet. Please add "welder" column to database.</td></tr>';
-            return;
-        }
-        const data = await res.json();
-        renderWelder(data);
-    } catch(e) { console.error("Welder load failed", e); }
-}
-
-function renderWelder(data) {
-    const d = data.stats;
-    document.getElementById("welder-active").textContent = d.active_welders;
-    document.getElementById("welder-total-joints").textContent = d.total_joints;
-    document.getElementById("welder-total-di").textContent = fmtNum(d.total_di, 0);
-    document.getElementById("welder-avg-di").textContent = fmtNum(d.avg_di, 1);
-
-    const tbody = document.getElementById("welderRankBody");
-    tbody.innerHTML = data.ranking.map((r, i) => `
-        <tr>
-            <td>${i+1}</td>
-            <td style="font-weight:600;color:var(--accent)">${r.welder}</td>
-            <td>${r.joints}</td>
-            <td>${fmtNum(r.total_di, 1)}</td>
-            <td style="font-size:11px;color:var(--text-dim)">${r.last_active || '-'}</td>
-        </tr>
-    `).join("");
-
-    destroyChart("welderTrendChart");
-    charts["welderTrendChart"] = new Chart(document.getElementById("welderTrendChart").getContext("2d"), {
-        type: 'line',
-        data: {
-            labels: data.trend.map(t => t.date),
-            datasets: [{
-                label: 'Daily DI',
-                data: data.trend.map(t => t.di),
-                borderColor: '#22d3a1',
-                backgroundColor: 'rgba(34,211,161,0.1)',
-                fill: true,
-                tension: 0.4
-            }]
-        },
-        options: chartOpts("DI")
-    });
-}
 
 function openAddJointModal(){document.getElementById("addJointModal").style.display="flex";}
 function closeAddJointModal(){document.getElementById("addJointModal").style.display="none";}
