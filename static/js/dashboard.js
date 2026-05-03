@@ -110,21 +110,35 @@ function navigate(page) {
         p.style.display = "";   // reset any inline display override
     });
 
-    // Reset scroll to top on every page transition
+    // Reset scroll to top on every page transition (forced)
     const pageBody = document.querySelector(".page-body");
-    if (pageBody) pageBody.scrollTop = 0;
+    if (pageBody) {
+        pageBody.scrollTop = 0;
+        // Reinforce with a small timeout to ensure it hits after content load
+        setTimeout(() => { pageBody.scrollTop = 0; }, 50);
+    }
     window.scrollTo(0, 0);
 
     // Show target page
     const target = document.getElementById(`page-${page}`);
+    const kpiRow = document.getElementById("kpiRow");
+
     if (target) {
         target.classList.remove("hidden");
-        // Simulation page needs flex layout explicitly (CSS default is none for #page-simulation)
+        
+        // --- PAGE SPECIFIC UI ADJUSTMENTS ---
+        
+        // Hide KPI row for Data Input and Reports to maximize workspace
+        const dataInputPages = ["joint_master", "support_master", "testpkg_master", "simulation", "week_plan"];
+        if (kpiRow) {
+            kpiRow.style.display = dataInputPages.includes(page) ? "none" : "flex";
+        }
+
+        // Simulation page specific (already handled but reinforced)
         if (page === "simulation") {
             target.style.display = "flex";
             target.style.flexDirection = "column";
-            target.style.height = "calc(100vh - 130px)";
-            // Reload iframe to ensure it always displays
+            target.style.height = "calc(100vh - 80px)"; // Increased height since KPI row is hidden
             const frame = document.getElementById("simulationFrame");
             if (frame && !frame.src.includes("localhost:8501")) {
                 frame.src = "http://localhost:8501";
@@ -146,6 +160,7 @@ function navigate(page) {
         case "simulation":  /* handled above */ break;
     }
 }
+
 
 
 // ================================================================================
@@ -435,31 +450,40 @@ async function renderEarlyPower(d, units, systems, areas, weekly) {
 // ================================================================================
 async function loadSystems() {
     try {
-        const dash=await getDashData(), data=dash.systems;
-        document.getElementById("systemBars").innerHTML = data.map(s=>{
-            const p=s.progress_pct, c=pctColor(p);
-            const p2=s.support_pct||0, c2=pctColor(p2);
-            const p3=s.testpkg_pct||0, c3=pctColor(p3);
-            let warn = "";
-            if (p3 > 0 && (p < 100 || p2 < 100) && (p3 > p || p3 > p2)) {
-                warn = `<div style="font-size:11px;color:#ff5252;margin-top:4px;">&#9888; Test Pkg ahead of D/I or Support</div>`;
-            }
-            return `<div class="prog-row" style="margin-bottom:12px; border-bottom:1px solid #162032; padding-bottom:8px;">
-                <div class="prog-head"><span class="prog-name">${s.system} <span style="color:#a1b2c6;font-size:11px">(Readiness: ${s.unified_readiness||0}%)</span></span></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>D/I (${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)})</span><span style="color:${c}">${p}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Support EA (${fmtNum(s.support_comp||0,0)} / ${fmtNum(s.support_total||0,0)})</span><span style="color:${c2}">${p2}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p2,100)}%;background:linear-gradient(90deg,${c2}60,${c2})"></div></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Test Package (${fmtNum(s.testpkg_comp||0,0)} / ${fmtNum(s.testpkg_total||0,0)})</span><span style="color:${c3}">${p3}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p3,100)}%;background:linear-gradient(90deg,${c3}60,${c3})"></div></div>
-                
-                ${warn}
+        const dash = await getDashData(), data = dash.systems || [];
+        if (!data.length) { document.getElementById("systemBars").innerHTML = '<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No systems data found</div>'; return; }
+        
+        document.getElementById("systemBars").innerHTML = data.map(s => {
+            const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
+            const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
+            const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
+            
+            const unified = Math.round((p1 * 0.7) + (p2 * 0.2) + (p3 * 0.1));
+            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="cursor:help">⚠️</span>` : "";
+
+            return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
+                <div class="prog-head">
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.system} ${warn}</span>
+                    <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">Ready: ${unified}%</span>
+                </div>
+                <!-- Triple Bar -->
+                <div class="triple-bar-container">
+                    <div class="bar-group">
+                        <div class="bar-label"><span>D/I Progress</span><span>${fmtNum(p1,1)}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p1,100)}%; background:${pctColor(p1)}"></div></div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-label"><span>Support EA</span><span>${fmtNum(p2,1)}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p2,100)}%; background:${pctColor(p2)}"></div></div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-label"><span>Test Package</span><span>${fmtNum(p3,1)}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p3,100)}%; background:${pctColor(p3)}"></div></div>
+                    </div>
+                </div>
             </div>`;
         }).join("");
-    } catch(e) { console.error("Systems failed",e); }
+    } catch(e) { console.error("Systems failed", e); }
 }
 
 // ================================================================================
@@ -467,32 +491,39 @@ async function loadSystems() {
 // ================================================================================
 async function loadSubArea() {
     try {
-        const dash=await getDashData(), data=dash.subareas||[];
-        if(!data.length){document.getElementById("subareaBars").innerHTML='<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No sub_area data found</div>';return;}
-        document.getElementById("subareaBars").innerHTML = data.map(s=>{
-            const p=s.progress_pct, c=pctColor(p);
-            const p2=s.support_pct||0, c2=pctColor(p2);
-            const p3=s.testpkg_pct||0, c3=pctColor(p3);
-            let warn = "";
-            if (p3 > 0 && (p < 100 || p2 < 100) && (p3 > p || p3 > p2)) {
-                warn = `<div style="font-size:11px;color:#ff5252;margin-top:4px;">&#9888; Test Pkg ahead of D/I or Support</div>`;
-            }
-            return `<div class="prog-row" style="margin-bottom:12px; border-bottom:1px solid #162032; padding-bottom:8px;">
-                <div class="prog-head"><span class="prog-name">${s.sub_area} <span style="color:#a1b2c6;font-size:11px">(Readiness: ${s.unified_readiness||0}%)</span></span></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>D/I (${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)})</span><span style="color:${c}">${p}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Support EA (${fmtNum(s.support_comp||0,0)} / ${fmtNum(s.support_total||0,0)})</span><span style="color:${c2}">${p2}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p2,100)}%;background:linear-gradient(90deg,${c2}60,${c2})"></div></div>
-                
-                <div style="font-size:10px; color:#7a95b8; margin:4px 0 2px 0; display:flex; justify-content:space-between;"><span>Test Package (${fmtNum(s.testpkg_comp||0,0)} / ${fmtNum(s.testpkg_total||0,0)})</span><span style="color:${c3}">${p3}%</span></div>
-                <div class="prog-track" style="height:4px"><div class="prog-fill" style="width:${Math.min(p3,100)}%;background:linear-gradient(90deg,${c3}60,${c3})"></div></div>
-                
-                ${warn}
+        const dash = await getDashData(), data = dash.subareas || [];
+        if (!data.length) { document.getElementById("subareaBars").innerHTML = '<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No sub_area data found</div>'; return; }
+        
+        document.getElementById("subareaBars").innerHTML = data.map(s => {
+            const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
+            const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
+            const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
+            const unified = Math.round((p1 * 0.7) + (p2 * 0.2) + (p3 * 0.1));
+            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="color:#ffcc00">⚠️</span>` : "";
+
+            return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
+                <div class="prog-head">
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.sub_area} ${warn}</span>
+                    <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">${unified}%</span>
+                </div>
+                <div class="triple-bar-container">
+                    <div class="bar-group">
+                        <div class="bar-label"><span>D/I Progress</span><span>${p1}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p1,100)}%; background:${pctColor(p1)}"></div></div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-label"><span>Supports</span><span>${p2}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p2,100)}%; background:${pctColor(p2)}"></div></div>
+                    </div>
+                    <div class="bar-group">
+                        <div class="bar-label"><span>Testing</span><span>${p3}%</span></div>
+                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p3,100)}%; background:${pctColor(p3)}"></div></div>
+                    </div>
+                </div>
             </div>`;
+
         }).join("");
-    } catch(e) { console.error("SubArea failed",e); }
+    } catch(e) { console.error("SubArea failed", e); }
 }
 
 // ================================================================================

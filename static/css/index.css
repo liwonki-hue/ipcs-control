@@ -145,8 +145,15 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 .kpi-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin: 6px 0 3px; overflow: hidden; }
 .kpi-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #3b82f6); border-radius: 2px; transition: width 0.8s ease; }
 
-/* ── Page Body ── */
+/* Triple Bar Layout */
+.triple-bar-container { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.bar-group { display: flex; flex-direction: column; gap: 3px; }
+.bar-label { font-size: 10px; color: #64748b; display: flex; justify-content: space-between; font-weight: 500; }
+.bar-track { height: 3px; background: #f1f5f9; border-radius: 2px; overflow: hidden; border: 1px solid #e2e8f0; }
+.bar-fill { height: 100%; border-radius: 1px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+
 .page-body { flex: 1; padding: 16px 20px 20px; overflow-y: auto; }
+
 
 /* ── Page ── */
 .page { display: block; }

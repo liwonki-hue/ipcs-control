@@ -28,9 +28,9 @@
   <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
   <div class="nav-section">Data Input</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
-  <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
   <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Master</button>
+  <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
   <div class="nav-section">Report</div>
   <button class="nav-btn" data-page="simulation" onclick="navigate('simulation')"><span class="nav-icon">&#128640;</span> Simulation Report</button>
   <div class="nav-footer">
@@ -266,9 +266,15 @@
       <div class="panel" style="margin-bottom:10px;padding:12px 16px">
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
           <span style="font-weight:600;font-size:12px;color:var(--text-dim)">FILTER</span>
-          <input type="date" id="wd-from" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="From date">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:10px;color:#7a95b8">From:</span>
+            <input type="date" id="wd-from" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="YYYY-MM-DD">
+          </div>
           <span style="color:var(--text-dim)">~</span>
-          <input type="date" id="wd-to" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="To date">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:10px;color:#7a95b8">To:</span>
+            <input type="date" id="wd-to" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="YYYY-MM-DD">
+          </div>
           <select id="wd-system" class="cell-input" style="width:150px;padding:5px 8px;font-size:12px">
             <option value="">All Systems</option>
           </select>
@@ -519,6 +525,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=19.3"></script>
+<script src="/static/js/dashboard.js?v=19.7"></script>
 </body>
 </html>
