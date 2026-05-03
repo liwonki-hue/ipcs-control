@@ -3,7 +3,7 @@ import io
 import threading
 import time
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, date
 from flask import Flask, render_template, jsonify, request, send_file
 from supabase import create_client, Client
 
@@ -34,6 +34,7 @@ app = Flask(__name__,
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 # ── Supabase (singleton) ───────────────────────────────────────────────
+from supabase import ClientOptions
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 _sb = None
@@ -41,7 +42,8 @@ _sb = None
 def get_sb():
     global _sb
     if _sb is None:
-        _sb = create_client(SUPABASE_URL, SUPABASE_KEY)
+        options = ClientOptions(schema="construction")
+        _sb = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
     return _sb
 
 # ── RPC key conversion ────────────────────────────────────────────────
@@ -181,12 +183,17 @@ _build_fail = False
 
 def _build():
     global _building, _build_fail
+    print("[bop-debug] _build() thread started")
     try:
         sb = get_sb()
-        res = sb.rpc("get_dashboard_summary_v17", {}).execute()
-        raw = res.data
-        if isinstance(raw, list) and len(raw) > 0: raw = raw[0]
-        if not isinstance(raw, dict): raw = {}
+        try:
+            res = sb.rpc("get_dashboard_summary_v17", {}).execute()
+            raw = res.data
+            if isinstance(raw, list) and len(raw) > 0: raw = raw[0]
+            if not isinstance(raw, dict): raw = {}
+        except Exception as rpc_e:
+            print(f"[cache] RPC Error: {rpc_e}")
+            raw = {}
             
         try:
             weeks_res = sb.table("week_schedule").select("*").order("week_no").execute()
@@ -228,7 +235,8 @@ def _build():
             jm_all = []
             print(f"[bop-debug] Scanning joints for aggregation...")
             while True:
-                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,date_completed,completed").range(offset, offset + limit - 1).execute()
+                # IMPORTANT: Must select 'di' and 'sf' for correct KPI calculation
+                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,di,sf,date_completed,completed,welder,early_power").range(offset, offset + limit - 1).execute()
                 chunk = chunk_res.data or []
                 jm_all.extend(chunk)
                 offset += len(chunk)
@@ -240,33 +248,77 @@ def _build():
             week_ranges = []
             for w in weeks:
                 try:
-                    s_str = str(w.get("week_start_date") or w.get("start_date") or "")[:10]
-                    e_str = str(w.get("week_end_date") or w.get("end_date") or "")[:10]
-                    if s_str and e_str:
-                        s = datetime.strptime(s_str, "%Y-%m-%d").date()
-                        e = datetime.strptime(e_str, "%Y-%m-%d").date()
-                        week_ranges.append({"week_no": int(w.get("week_no")), "start": s, "end": e})
-                except: pass
+                    s_val = w.get("week_start_date") or w.get("start_date")
+                    e_val = w.get("week_end_date") or w.get("end_date")
+                    if not s_val or not e_val: continue
+                    
+                    def to_date(v):
+                        if isinstance(v, date): return v
+                        if isinstance(v, datetime): return v.date()
+                        s = str(v)[:10]
+                        return datetime.strptime(s, "%Y-%m-%d").date()
+
+                    s = to_date(s_val)
+                    e = to_date(e_val)
+                    week_ranges.append({"week_no": int(w.get("week_no")), "start": s, "end": e})
+                except Exception as de:
+                    print(f"[bop-debug] Date parse error: {de} for w={w}")
+                    continue
                 
-            def get_week_no(d_str):
+            def get_week_no(d_val):
+                if not d_val: return 0
                 try:
-                    d = datetime.strptime(d_str[:10], "%Y-%m-%d").date()
+                    if isinstance(d_val, date): d = d_val
+                    elif isinstance(d_val, datetime): d = d_val.date()
+                    else: d = datetime.strptime(str(d_val)[:10], "%Y-%m-%d").date()
+                    
                     for wr in week_ranges:
                         if wr["start"] <= d <= wr["end"]: return wr["week_no"]
                 except: pass
                 return 0
             
             unit_map, area_map, sys_map, week_comp_map = {}, {}, {}, {}
-            for r in jm_all:
+            kpi_totals = {
+                "total_di": 0.0, "completed_di": 0.0,
+                "fab_total_di": 0.0, "fab_completed_di": 0.0,
+                "erect_total_di": 0.0, "erect_completed_di": 0.0,
+                "total_joints": 0
+            }
+            
+            print(f"[bop-debug] Starting aggregation of {len(jm_all)} joints...")
+            for idx, r in enumerate(jm_all):
+                if idx % 5000 == 0: print(f"[bop-debug] Processing joint {idx}...")
                 u = (r.get("unit") or "").strip()
                 a = (r.get("area") or "").strip()
                 s = (r.get("system") or "").strip()
-                sz = float(r.get("size_inch", 0) or 0)
-                is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
+                sz = 0.0
+                try:
+                    sz_val = r.get("di")
+                    if sz_val is None or sz_val == "":
+                        sz_val = r.get("size_inch")
+                    sz = float(sz_val or 0)
+                except: sz = 0.0
                 
+                is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
+                sf = str(r.get("sf") or "").upper().strip()
+                
+                kpi_totals["total_di"] += sz
+                kpi_totals["total_joints"] += 1
+                if is_comp: kpi_totals["completed_di"] += sz
+                
+                if sf == "S" or "FAB" in sf:
+                    kpi_totals["fab_total_di"] += sz
+                    if is_comp: kpi_totals["fab_completed_di"] += sz
+                elif sf == "F" or "ERE" in sf or "FIELD" in sf:
+                    kpi_totals["erect_total_di"] += sz
+                    if is_comp: kpi_totals["erect_completed_di"] += sz
+
                 if is_comp and r.get("date_completed"):
-                    wk_no = get_week_no(r.get("date_completed"))
-                    if wk_no: week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
+                    try:
+                        wk_no = get_week_no(r.get("date_completed"))
+                        if wk_no: week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
+                    except Exception as wek:
+                        pass # Silently skip one bad date
                 
                 if u:
                     if u not in unit_map: unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
@@ -283,6 +335,9 @@ def _build():
                     sys_map[s]["total_di"] += sz
                     sys_map[s]["total_joints"] += 1
                     if is_comp: sys_map[s]["completed_di"] += sz; sys_map[s]["completed_joints"] += 1
+
+            print(f"[bop-debug] Manual aggregation finished. Totals: {kpi_totals}")
+            raw["kpi"] = [kpi_totals]
 
             if unit_map: raw["unit"] = list(unit_map.values())
             if area_map: raw["area"] = list(area_map.values())
@@ -321,7 +376,7 @@ def api_cache_clear():
     with _lock: _cache.clear()
     _meta_cache = {"time": 0, "data": None}
     _iso_cache  = {"time": 0, "data": []}
-    print("[cache] All caches cleared manually — starting background rebuild")
+    print("[cache] All caches cleared manually - starting background rebuild")
     # Immediately kick off background rebuild so next /api/dashboard call is fast
     with _lock:
         if not _building:
@@ -426,11 +481,14 @@ def api_joints_get():
         status  = request.args.get("status",   "")
         iso     = request.args.get("iso",      "")
         subarea = request.args.get("sub_area", "")
+        early   = request.args.get("early_power", "")
         q = sb.table("joint_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
         if iso:     q = q.eq("iso_drawing", iso)
         if subarea: q = q.eq("sub_area",    subarea)
+        if early == "true":  q = q.eq("early_power", True)
+        if early == "false": q = q.eq("early_power", False)
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
@@ -591,7 +649,60 @@ def api_iso_summary():
         print(f"[iso-summary] Error: {e}")
         return jsonify([]), 200
 
-# ══════════════════════════════════════════════════════════════════════
+@app.route("/api/welder-summary")
+def api_welder_summary():
+    try:
+        sb = get_sb()
+        offset = 0
+        limit = 5000
+        all_completed = []
+        while True:
+            res = sb.table("joint_master").select("welder, di, date_completed").not_.is_("date_completed", "null").range(offset, offset + limit - 1).execute()
+            chunk = res.data or []
+            all_completed.extend(chunk)
+            if len(chunk) < limit: break
+            offset += limit
+        
+        if not all_completed:
+            return jsonify({
+                "stats": {"active_welders": 0, "total_joints": 0, "total_di": 0, "avg_di": 0},
+                "ranking": [],
+                "trend": []
+            })
+
+        welder_map = {}
+        daily_map = {}
+        total_di = 0
+        for r in all_completed:
+            w = (r.get("welder") or "Unknown").strip()
+            sz_val = r.get("di")
+            if sz_val is None or sz_val == "": sz_val = r.get("size_inch")
+            try: di = float(sz_val or 0)
+            except: di = 0.0
+            dt = (r.get("date_completed") or "").split("T")[0]
+            total_di += di
+            if w not in welder_map:
+                welder_map[w] = {"welder": w, "joints": 0, "total_di": 0, "last_active": ""}
+            welder_map[w]["joints"] += 1
+            welder_map[w]["total_di"] += di
+            if dt > welder_map[w]["last_active"]:
+                welder_map[w]["last_active"] = dt
+            if dt:
+                daily_map[dt] = daily_map.get(dt, 0) + di
+
+        ranking = sorted(welder_map.values(), key=lambda x: x["total_di"], reverse=True)
+        trend = [{"date": k, "di": v} for k, v in sorted(daily_map.items())]
+        stats = {
+            "active_welders": len(welder_map),
+            "total_joints": len(all_completed),
+            "total_di": total_di,
+            "avg_di": total_di / len(welder_map) if welder_map else 0
+        }
+        return jsonify({"stats": stats, "ranking": ranking, "trend": trend})
+    except Exception as e:
+        print(f"[welder-summary] Error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0",
-            port=int(os.environ.get("PORT", 5000)))
+            port=int(os.environ.get("PORT", 5001)))

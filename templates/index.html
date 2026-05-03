@@ -23,7 +23,8 @@
   <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon">&#128200;</span> Overview</button>
   <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
-  <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#127981;</span> Unit / Area</button>
+  <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
+  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
   <div class="nav-section">Data Entry</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
@@ -108,6 +109,7 @@
             <select id="jm-system" class="filter-sel"><option value="">System</option></select>
             <select id="jm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
             <select id="jm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
+            <select id="jm-early" class="filter-sel"><option value="">Early Power</option><option value="true">EP Only</option><option value="false">Non-EP</option></select>
             <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()">
             <button class="btn-primary" onclick="loadJointMaster()">&#128269; Search</button>
             <button class="btn-primary" style="background:#22d3a1" onclick="openAddJointModal()">+ Add Joint</button>
@@ -125,7 +127,7 @@
             <button class="btn-clear-row" style="padding:6px 14px" onclick="clearIsoBulkDate()">Clear All</button>
           </div>
         </div>
-        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
+        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Welder</th><th>EP</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
         <div class="de-pagination"><div id="jm-count" style="color:#7a95b8;font-size:11px">0 rows loaded</div><div style="display:flex;gap:6px;align-items:center"><button class="nav-btn" onclick="jmPage(-1)">Prev</button><span id="jm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span><button class="nav-btn" onclick="jmPage(1)">Next</button></div></div>
       </div>
     </div>
@@ -219,6 +221,33 @@
         </div>
       </div>
     </div>
+    <div class="page hidden" id="page-welder">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Daily Productivity</div></div>
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title">Overall Welder Statistics</div>
+        <div class="grid-4" id="welderKpi">
+          <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Joints (L/M/S)</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Avg DI per Welder</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-title">Welder Ranking (by Total DI)</div>
+          <div class="table-wrap" style="max-height:500px">
+            <table class="data-table" id="welderRankTable">
+              <thead><tr><th>Rank</th><th>Welder ID</th><th>Joints</th><th>Total DI</th><th>Last Active</th></tr></thead>
+              <tbody id="welderRankBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Daily Productivity Trend (Combined)</div>
+          <div style="position:relative;height:300px"><canvas id="welderTrendChart"></canvas></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -252,6 +281,8 @@
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Size (Inch)</label><br><input type="number" id="new-size" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" step="0.1"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">S/F</label><br><select id="new-sf" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="S">S - Shop</option><option value="F">F - Field</option></select></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Joint No</label><br><input type="text" id="new-joint_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder ID</label><br><input type="text" id="new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. W001"></div>
+      <div style="display:flex;align-items:center;gap:8px;padding-top:15px"><input type="checkbox" id="new-early" style="width:18px;height:18px"><label style="font-size:11px;font-weight:600;color:#7a95b8">Early Power Item</label></div>
     </div>
     <div style="margin-top:20px;text-align:right;">
       <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeAddJointModal()">Cancel</button>

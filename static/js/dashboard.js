@@ -113,6 +113,7 @@ function navigate(page) {
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "joint_master":loadJointMaster();  break;
         case "week_plan":   loadWeekPlan();     break;
+        case "welder":      loadWelder();       break;
     }
 }
 
@@ -167,45 +168,54 @@ async function loadMeta() {
 //  KPI RENDER
 // ================================================================================
 function renderKPI(d, wkData) {
-    document.getElementById("reportDate").textContent = d.report_date;
-    document.getElementById("kpi-overall").textContent     = `${d.overall_pct}%`;
-    document.getElementById("kpi-overall-sub").textContent = `${fmtNum(d.completed_di,0)} / ${fmtNum(d.total_plan_di,0)} DI · ${d.completed_joints.toLocaleString()} joints`;
-    document.getElementById("kpi-bar").style.width = `${Math.min(d.overall_pct,100)}%`;
+    if (!d) return;
+    document.getElementById("reportDate").textContent = d.report_date || "—";
+    document.getElementById("kpi-overall").textContent     = `${d.overall_pct || 0}%`;
+    document.getElementById("kpi-overall-sub").textContent = `${fmtNum(d.completed_di,0)} / ${fmtNum(d.total_plan_di,0)} DI · ${d.completed_joints?.toLocaleString() || "0"} joints`;
+    document.getElementById("kpi-bar").style.width = `${Math.min(d.overall_pct || 0, 100)}%`;
 
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
     if (totalEl)    totalEl.textContent    = fmtNum(d.total_plan_di, 0);
-    if (totalSubEl) totalSubEl.textContent = `${d.overall_pct}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
+    if (totalSubEl) totalSubEl.textContent = `${d.overall_pct || 0}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
 
     document.getElementById("kpi-fab").textContent     = fmtNum(d.fab_di, 0);
-    document.getElementById("kpi-fab-sub").textContent = `${d.fab_pct ?? "–"}% fabricated`;
+    document.getElementById("kpi-fab-sub").textContent = `${d.fab_pct ?? "0"}% fabricated`;
     document.getElementById("kpi-erect").textContent     = fmtNum(d.erect_di, 0);
-    document.getElementById("kpi-erect-sub").textContent = `${d.erect_pct ?? "–"}% erected`;
-    document.getElementById("kpi-remain").textContent     = fmtNum(d.remaining_di,0);
-    document.getElementById("kpi-remain-sub").textContent = `${(100-d.overall_pct).toFixed(1)}% remaining`;
+    document.getElementById("kpi-erect-sub").textContent = `${d.erect_pct ?? "0"}% erected`;
+    document.getElementById("kpi-remain").textContent     = fmtNum(d.remaining_di, 0);
+    document.getElementById("kpi-remain-sub").textContent = `${(100 - (d.overall_pct || 0)).toFixed(1)}% remaining`;
 
-    const actWks = (wkData||[]).filter(w => w.completed_di > 0);
+    const actWks = (wkData || []).filter(w => w.completed_di > 0);
     const kpiWeekVal = document.getElementById("kpi-week");
     const kpiWeekSub = document.getElementById("kpi-week-sub");
     if (actWks.length) {
-        const lw  = actWks[actWks.length-1];
+        const lw  = actWks[actWks.length - 1];
         const weeksTbl = (_dashData?.weeks || []).find(w => w.week_no === lw.week_no);
-        const realPlan = weeksTbl ? (weeksTbl.plan_fab_di||0) + (weeksTbl.plan_erect_di||0) : 0;
+        const realPlan = weeksTbl ? (weeksTbl.plan_fab_di || 0) + (weeksTbl.plan_erect_di || 0) : 0;
         const color = realPlan > 0 ? (lw.completed_di >= realPlan ? "#22d3a1" : "#ff5252") : "#f5c542";
-        document.getElementById("kpi-week-card").style.borderTopColor = color;
-        kpiWeekVal.textContent = fmtNum(lw.completed_di, 0);
-        kpiWeekVal.style.color = color;
-        if (realPlan > 0) {
-            const dev = lw.completed_di - realPlan;
-            kpiWeekSub.textContent = (dev >= 0 ? "▲" : "▼") + fmtNum(Math.abs(dev), 0) + " DI vs Plan " + fmtNum(realPlan, 0);
-        } else {
-            kpiWeekSub.textContent = fmtNum(lw.completed_di, 0) + " DI · No plan set";
+        const card = document.getElementById("kpi-week-card");
+        if (card) card.style.borderTopColor = color;
+        if (kpiWeekVal) {
+            kpiWeekVal.textContent = fmtNum(lw.completed_di, 0);
+            kpiWeekVal.style.color = color;
+        }
+        if (kpiWeekSub) {
+            if (realPlan > 0) {
+                const dev = lw.completed_di - realPlan;
+                kpiWeekSub.textContent = (dev >= 0 ? "▲" : "▼") + fmtNum(Math.abs(dev), 0) + " DI vs Plan " + fmtNum(realPlan, 0);
+            } else {
+                kpiWeekSub.textContent = fmtNum(lw.completed_di, 0) + " DI · No plan set";
+            }
         }
     } else {
-        document.getElementById("kpi-week-card").style.borderTopColor = "#1e2d45";
-        kpiWeekVal.textContent = "0";
-        kpiWeekVal.style.color = "#4a6080";
-        kpiWeekSub.textContent = "No activity this week";
+        const card = document.getElementById("kpi-week-card");
+        if (card) card.style.borderTopColor = "#1e2d45";
+        if (kpiWeekVal) {
+            kpiWeekVal.textContent = "0";
+            kpiWeekVal.style.color = "#4a6080";
+        }
+        if (kpiWeekSub) kpiWeekSub.textContent = "No activity this week";
     }
 }
 
@@ -442,11 +452,12 @@ async function loadUnitArea() {
 async function loadJointMaster() {
     const unit=document.getElementById("jm-unit")?.value||"", system=document.getElementById("jm-system")?.value||"",
           status=document.getElementById("jm-status")?.value||"", isoVal=document.getElementById("jm-iso")?.value?.trim()||"",
-          subarea=document.getElementById("jm-subarea")?.value||"", offset=jmCurrentPage*JM_PAGE_SIZE;
+          subarea=document.getElementById("jm-subarea")?.value||"", early=document.getElementById("jm-early")?.value||"", 
+          offset=jmCurrentPage*JM_PAGE_SIZE;
     try {
         const params=new URLSearchParams({limit:JM_PAGE_SIZE,offset});
         if(unit)params.set("unit",unit); if(system)params.set("system",system); if(status)params.set("status",status);
-        if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea);
+        if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(early)params.set("early_power",early);
         const res=await apiFetch(`/api/joints?${params}`);
         jmData=res.data;
         document.getElementById("jm-count").textContent=`${res.count.toLocaleString()} rows loaded (page ${jmCurrentPage+1})`;
@@ -512,15 +523,73 @@ function renderJMTable(rows){
     const tbody=document.getElementById("jmBody");
     tbody.innerHTML=rows.map(r=>{
         const dStr=r.date_completed?r.date_completed.substring(0,10):"";
-        return `<tr id="jmrow-${r.id}"><td>${r.id}</td><td>${r.unit||""}</td><td>${r.system||""}</td><td>${r.sub_area||""}</td><td>${r.iso_drawing||""}</td><td>${r.rev||""}</td><td>${r.spool_no||""}</td><td>${r.mat||""}</td><td>${r.size_inch||""}</td><td>${r.sf||""}</td><td>${r.joint_no||""}</td><td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td><td style="white-space:nowrap"><button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button><button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button><button class="btn-clear-row" style="color:#ff5252;border-color:#ff5252;margin-left:5px" onclick="deleteJoint(${r.id})">&#128465;</button></td></tr>`;
+        const wVal=r.welder||"";
+        const epChecked=r.early_power?'checked':'';
+        return `<tr id="jmrow-${r.id}"><td>${r.id}</td><td>${r.unit||""}</td><td>${r.system||""}</td><td>${r.sub_area||""}</td><td>${r.iso_drawing||""}</td><td>${r.rev||""}</td><td>${r.spool_no||""}</td><td>${r.mat||""}</td><td>${r.size_inch||""}</td><td>${r.sf||""}</td><td>${r.joint_no||""}</td><td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" placeholder="Welder" style="width:70px"></td><td><input type="checkbox" id="early-${r.id}" ${epChecked}></td><td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td><td style="white-space:nowrap"><button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button><button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button></td></tr>`;
     }).join("");
+}
+
+// ================================================================================
+//  WELDER PERFORMANCE
+// ================================================================================
+async function loadWelder() {
+    try {
+        const dash = await getDashData();
+        // Since we don't have a direct API yet, we'll aggregate from all joints in joint_master
+        // However, fetching all joints (47k) in the frontend is slow.
+        // We'll assume the backend will eventually provide this.
+        // For now, let's try to fetch a summary if it exists, or just show a message.
+        const res = await fetch("/api/welder-summary");
+        if (!res.ok) {
+            document.getElementById("welderRankBody").innerHTML = '<tr><td colspan="5" style="text-align:center">Welder API not implemented yet. Please add "welder" column to database.</td></tr>';
+            return;
+        }
+        const data = await res.json();
+        renderWelder(data);
+    } catch(e) { console.error("Welder load failed", e); }
+}
+
+function renderWelder(data) {
+    const d = data.stats;
+    document.getElementById("welder-active").textContent = d.active_welders;
+    document.getElementById("welder-total-joints").textContent = d.total_joints;
+    document.getElementById("welder-total-di").textContent = fmtNum(d.total_di, 0);
+    document.getElementById("welder-avg-di").textContent = fmtNum(d.avg_di, 1);
+
+    const tbody = document.getElementById("welderRankBody");
+    tbody.innerHTML = data.ranking.map((r, i) => `
+        <tr>
+            <td>${i+1}</td>
+            <td style="font-weight:600;color:var(--accent)">${r.welder}</td>
+            <td>${r.joints}</td>
+            <td>${fmtNum(r.total_di, 1)}</td>
+            <td style="font-size:11px;color:var(--text-dim)">${r.last_active || '-'}</td>
+        </tr>
+    `).join("");
+
+    destroyChart("welderTrendChart");
+    charts["welderTrendChart"] = new Chart(document.getElementById("welderTrendChart").getContext("2d"), {
+        type: 'line',
+        data: {
+            labels: data.trend.map(t => t.date),
+            datasets: [{
+                label: 'Daily DI',
+                data: data.trend.map(t => t.di),
+                borderColor: '#22d3a1',
+                backgroundColor: 'rgba(34,211,161,0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: chartOpts("DI")
+    });
 }
 
 function openAddJointModal(){document.getElementById("addJointModal").style.display="flex";}
 function closeAddJointModal(){document.getElementById("addJointModal").style.display="none";}
 
 async function submitNewJoint(){
-    const data={unit:document.getElementById("new-unit").value.trim(),system:document.getElementById("new-system").value.trim(),sub_area:document.getElementById("new-area").value.trim(),line_no:document.getElementById("new-line_no").value.trim(),iso_drawing:document.getElementById("new-iso").value.trim(),rev:document.getElementById("new-rev").value.trim(),spool_no:document.getElementById("new-spool").value.trim(),mat:document.getElementById("new-mat").value.trim(),size_inch:parseFloat(document.getElementById("new-size").value)||0,sf:document.getElementById("new-sf").value.trim(),joint_no:document.getElementById("new-joint_no").value.trim(),completed:false};
+    const data={unit:document.getElementById("new-unit").value.trim(),system:document.getElementById("new-system").value.trim(),sub_area:document.getElementById("new-area").value.trim(),line_no:document.getElementById("new-line_no").value.trim(),iso_drawing:document.getElementById("new-iso").value.trim(),rev:document.getElementById("new-rev").value.trim(),spool_no:document.getElementById("new-spool").value.trim(),mat:document.getElementById("new-mat").value.trim(),size_inch:parseFloat(document.getElementById("new-size").value)||0,sf:document.getElementById("new-sf").value.trim(),joint_no:document.getElementById("new-joint_no").value.trim(),welder:document.getElementById("new-welder").value.trim(),early_power:document.getElementById("new-early").checked,completed:false};
     try{
         const r=await fetch(`${API}/api/joints`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
         if(!r.ok)throw new Error('HTTP '+r.status);
@@ -549,9 +618,11 @@ async function clearJointDate(id){
 
 async function saveJointDate(id){
     let val=document.getElementById(`date-${id}`)?.value?.trim()||'';
+    let welder=document.getElementById(`welder-${id}`)?.value?.trim()||'';
+    let early=document.getElementById(`early-${id}`)?.checked||false;
     if(val){if(!/^\d{2,4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format (YY-MM-DD)","error");return;}if(val.length===8)val="20"+val;}
     try{
-        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null})});
+        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, early_power:early})});
         if(!r.ok)throw new Error('HTTP '+r.status);
         toast(`✓ ID ${id} saved! KPI updating...`);
         _autoRefreshKpi();

@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+server_log.txt
+debug_response.json
+check_cols.py
+verify_db.py
+bop-flask/.env
+bop-flask/__pycache__/
+node_modules/
+.DS_Store
