@@ -251,8 +251,6 @@ def _build():
                     if wk not in wpi_agg: wpi_agg[wk] = {"f":0.0, "e":0.0}
                     wpi_agg[wk]["f"] += f
                     wpi_agg[wk]["e"] += e
-                    if f > 0 or e > 0:
-                        print(f"  - Plan: W{wk}, ISO: {r.get('iso_drawing')}, F: {f}, E: {e}")
                 raw["actual_plan_agg"] = wpi_agg
             except Exception as e:
                 raw["actual_plan_agg"] = {}
@@ -273,20 +271,7 @@ def _build():
         except: testpkg_all = []
 
         try:
-            offset = 0
-            limit = 10000
-            jm_all = []
-            print(f"[bop-debug] Scanning joints for aggregation...")
-            while True:
-                # IMPORTANT: Must select 'di' and 'sf' for correct KPI calculation
-                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,di,sf,date_completed,completed,welder,phase").range(offset, offset + limit - 1).execute()
-                chunk = chunk_res.data or []
-                jm_all.extend(chunk)
-                offset += len(chunk)
-                if not chunk: break
-                if offset > 100000: break
-            
-            print(f"[bop-debug] Total joints scanned: {len(jm_all)}")
+            # Build week_ranges first so we can use get_week_no() during streaming
             weeks = raw.get("week_schedule", [])
             week_ranges = []
             for w in weeks:
@@ -294,7 +279,7 @@ def _build():
                     s_val = w.get("week_start_date") or w.get("start_date")
                     e_val = w.get("week_end_date") or w.get("end_date")
                     if not s_val or not e_val: continue
-                    
+
                     def to_date(v):
                         if isinstance(v, date): return v
                         if isinstance(v, datetime): return v.date()
@@ -307,19 +292,19 @@ def _build():
                 except Exception as de:
                     print(f"[bop-debug] Date parse error: {de} for w={w}")
                     continue
-                
+
             def get_week_no(d_val):
                 if not d_val: return 0
                 try:
                     if isinstance(d_val, date): d = d_val
                     elif isinstance(d_val, datetime): d = d_val.date()
                     else: d = datetime.strptime(str(d_val)[:10], "%Y-%m-%d").date()
-                    
+
                     for wr in week_ranges:
                         if wr["start"] <= d <= wr["end"]: return wr["week_no"]
                 except: pass
                 return 0
-            
+
             unit_map, area_map, sys_map, week_comp_map, ep_week_comp_map = {}, {}, {}, {}, {}
             kpi_totals = {
                 "total_di": 0.0, "completed_di": 0.0,
@@ -331,92 +316,106 @@ def _build():
             }
             ep_kpi = {k:0.0 if isinstance(v, float) else 0 for k,v in kpi_totals.items()}
             ep_unit_map, ep_area_map, ep_sys_map = {}, {}, {}
-            
-            print(f"[bop-debug] Starting aggregation of {len(jm_all)} joints...")
-            for idx, r in enumerate(jm_all):
-                if idx % 5000 == 0: print(f"[bop-debug] Processing joint {idx}...")
-                u = (r.get("unit") or "").strip()
-                a = (r.get("area") or "").strip()
-                s = (r.get("system") or "").strip()
-                sz = 0.0
-                try:
-                    sz_val = r.get("di")
-                    if sz_val is None or sz_val == "":
-                        sz_val = r.get("size_inch")
-                    sz = float(sz_val or 0)
-                except: sz = 0.0
-                
-                is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
-                sf = str(r.get("sf") or "").upper().strip()
-                is_ep = (str(r.get("phase") or "").strip().upper() == "EP")
-                
-                kpi_totals["total_di"] += sz
-                kpi_totals["total_joints"] += 1
-                if is_ep:
-                    ep_kpi["total_di"] += sz
-                    ep_kpi["total_joints"] += 1
-                if is_comp: 
-                    kpi_totals["completed_di"] += sz
-                    kpi_totals["completed_joints"] += 1
-                    if is_ep:
-                        ep_kpi["completed_di"] += sz
-                        ep_kpi["completed_joints"] += 1
-                
-                if sf == "S" or "FAB" in sf:
-                    kpi_totals["fab_total_di"] += sz
-                    kpi_totals["fab_total_joints"] += 1
-                    if is_ep:
-                        ep_kpi["fab_total_di"] += sz; ep_kpi["fab_total_joints"] += 1
-                    if is_comp: 
-                        kpi_totals["fab_completed_di"] += sz
-                        kpi_totals["fab_completed_joints"] += 1
-                        if is_ep:
-                            ep_kpi["fab_completed_di"] += sz; ep_kpi["fab_completed_joints"] += 1
-                elif sf == "F" or "ERE" in sf or "FIELD" in sf:
-                    kpi_totals["erect_total_di"] += sz
-                    kpi_totals["erect_total_joints"] += 1
-                    if is_ep:
-                        ep_kpi["erect_total_di"] += sz; ep_kpi["erect_total_joints"] += 1
-                    if is_comp: 
-                        kpi_totals["erect_completed_di"] += sz
-                        kpi_totals["erect_completed_joints"] += 1
-                        if is_ep:
-                            ep_kpi["erect_completed_di"] += sz; ep_kpi["erect_completed_joints"] += 1
 
-                if is_comp and r.get("date_completed"):
+            # Stream joint_master in chunks — aggregate immediately, never accumulate full list
+            offset = 0
+            limit = 10000
+            total_scanned = 0
+            print(f"[bop-debug] Scanning joints for aggregation...")
+            while True:
+                # IMPORTANT: Must select 'di' and 'sf' for correct KPI calculation
+                chunk_res = sb.table("joint_master").select("unit,area,system,size_inch,di,sf,date_completed,completed,welder,phase").range(offset, offset + limit - 1).execute()
+                chunk = chunk_res.data or []
+                for r in chunk:
+                    u = (r.get("unit") or "").strip()
+                    a = (r.get("area") or "").strip()
+                    s = (r.get("system") or "").strip()
+                    sz = 0.0
                     try:
-                        wk_no = get_week_no(r.get("date_completed"))
-                        if wk_no: 
-                            week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
+                        sz_val = r.get("di")
+                        if sz_val is None or sz_val == "":
+                            sz_val = r.get("size_inch")
+                        sz = float(sz_val or 0)
+                    except: sz = 0.0
+
+                    is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
+                    sf = str(r.get("sf") or "").upper().strip()
+                    is_ep = (str(r.get("phase") or "").strip().upper() == "EP")
+
+                    kpi_totals["total_di"] += sz
+                    kpi_totals["total_joints"] += 1
+                    if is_ep:
+                        ep_kpi["total_di"] += sz
+                        ep_kpi["total_joints"] += 1
+                    if is_comp:
+                        kpi_totals["completed_di"] += sz
+                        kpi_totals["completed_joints"] += 1
+                        if is_ep:
+                            ep_kpi["completed_di"] += sz
+                            ep_kpi["completed_joints"] += 1
+
+                    if sf == "S" or "FAB" in sf:
+                        kpi_totals["fab_total_di"] += sz
+                        kpi_totals["fab_total_joints"] += 1
+                        if is_ep:
+                            ep_kpi["fab_total_di"] += sz; ep_kpi["fab_total_joints"] += 1
+                        if is_comp:
+                            kpi_totals["fab_completed_di"] += sz
+                            kpi_totals["fab_completed_joints"] += 1
                             if is_ep:
-                                ep_week_comp_map[wk_no] = ep_week_comp_map.get(wk_no, 0.0) + sz
-                    except Exception as wek:
-                        pass # Silently skip one bad date
-                
-                if u:
-                    if u not in unit_map: unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    unit_map[u]["total_di"] += sz; unit_map[u]["total_joints"] += 1
-                    if is_comp: unit_map[u]["completed_di"] += sz; unit_map[u]["completed_joints"] += 1
-                    if is_ep:
-                        if u not in ep_unit_map: ep_unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_unit_map[u]["total_di"] += sz; ep_unit_map[u]["total_joints"] += 1
-                        if is_comp: ep_unit_map[u]["completed_di"] += sz; ep_unit_map[u]["completed_joints"] += 1
-                if a:
-                    if a not in area_map: area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    area_map[a]["total_di"] += sz; area_map[a]["total_joints"] += 1
-                    if is_comp: area_map[a]["completed_di"] += sz; area_map[a]["completed_joints"] += 1
-                    if is_ep:
-                        if a not in ep_area_map: ep_area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_area_map[a]["total_di"] += sz; ep_area_map[a]["total_joints"] += 1
-                        if is_comp: ep_area_map[a]["completed_di"] += sz; ep_area_map[a]["completed_joints"] += 1
-                if s:
-                    if s not in sys_map: sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                    sys_map[s]["total_di"] += sz; sys_map[s]["total_joints"] += 1
-                    if is_comp: sys_map[s]["completed_di"] += sz; sys_map[s]["completed_joints"] += 1
-                    if is_ep:
-                        if s not in ep_sys_map: ep_sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
-                        ep_sys_map[s]["total_di"] += sz; ep_sys_map[s]["total_joints"] += 1
-                        if is_comp: ep_sys_map[s]["completed_di"] += sz; ep_sys_map[s]["completed_joints"] += 1
+                                ep_kpi["fab_completed_di"] += sz; ep_kpi["fab_completed_joints"] += 1
+                    elif sf == "F" or "ERE" in sf or "FIELD" in sf:
+                        kpi_totals["erect_total_di"] += sz
+                        kpi_totals["erect_total_joints"] += 1
+                        if is_ep:
+                            ep_kpi["erect_total_di"] += sz; ep_kpi["erect_total_joints"] += 1
+                        if is_comp:
+                            kpi_totals["erect_completed_di"] += sz
+                            kpi_totals["erect_completed_joints"] += 1
+                            if is_ep:
+                                ep_kpi["erect_completed_di"] += sz; ep_kpi["erect_completed_joints"] += 1
+
+                    if is_comp and r.get("date_completed"):
+                        try:
+                            wk_no = get_week_no(r.get("date_completed"))
+                            if wk_no:
+                                week_comp_map[wk_no] = week_comp_map.get(wk_no, 0.0) + sz
+                                if is_ep:
+                                    ep_week_comp_map[wk_no] = ep_week_comp_map.get(wk_no, 0.0) + sz
+                        except Exception as wek:
+                            pass  # Silently skip one bad date
+
+                    if u:
+                        if u not in unit_map: unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                        unit_map[u]["total_di"] += sz; unit_map[u]["total_joints"] += 1
+                        if is_comp: unit_map[u]["completed_di"] += sz; unit_map[u]["completed_joints"] += 1
+                        if is_ep:
+                            if u not in ep_unit_map: ep_unit_map[u] = {"unit": u, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                            ep_unit_map[u]["total_di"] += sz; ep_unit_map[u]["total_joints"] += 1
+                            if is_comp: ep_unit_map[u]["completed_di"] += sz; ep_unit_map[u]["completed_joints"] += 1
+                    if a:
+                        if a not in area_map: area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                        area_map[a]["total_di"] += sz; area_map[a]["total_joints"] += 1
+                        if is_comp: area_map[a]["completed_di"] += sz; area_map[a]["completed_joints"] += 1
+                        if is_ep:
+                            if a not in ep_area_map: ep_area_map[a] = {"area": a, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                            ep_area_map[a]["total_di"] += sz; ep_area_map[a]["total_joints"] += 1
+                            if is_comp: ep_area_map[a]["completed_di"] += sz; ep_area_map[a]["completed_joints"] += 1
+                    if s:
+                        if s not in sys_map: sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                        sys_map[s]["total_di"] += sz; sys_map[s]["total_joints"] += 1
+                        if is_comp: sys_map[s]["completed_di"] += sz; sys_map[s]["completed_joints"] += 1
+                        if is_ep:
+                            if s not in ep_sys_map: ep_sys_map[s] = {"system": s, "total_di": 0.0, "completed_di": 0.0, "total_joints": 0, "completed_joints": 0}
+                            ep_sys_map[s]["total_di"] += sz; ep_sys_map[s]["total_joints"] += 1
+                            if is_comp: ep_sys_map[s]["completed_di"] += sz; ep_sys_map[s]["completed_joints"] += 1
+
+                total_scanned += len(chunk)
+                offset += len(chunk)
+                if not chunk: break
+                if total_scanned > 100000: break
+
+            print(f"[bop-debug] Total joints scanned: {total_scanned}")
 
             kpi_totals["support_total"] = len(support_all)
             kpi_totals["support_comp"] = sum(1 for s in support_all if str(s.get("completed")).upper() in ["TRUE", "Y", "O", "1"] or s.get("date_completed"))
@@ -521,7 +520,7 @@ def api_meta():
     global _meta_cache
     now = time.time()
     force = request.args.get("t") is not None
-    if not force and _meta_cache["data"] and (now - _meta_cache["time"]) < 300:
+    if not force and _meta_cache["data"] and (now - _meta_cache["time"]) < 3600:
         return jsonify(_meta_cache["data"])
     try:
         sb = get_sb()
@@ -717,7 +716,7 @@ def api_iso_summary():
             print(f"[iso-summary] Aggregating from joint_master (system={f_system or 'ALL'}, unit={f_unit or 'ALL'}, area={f_area or 'ALL'})")
             offset = 0
             limit  = 3000
-            jm_all = []
+            iso_map = {}
             while True:
                 try:
                     q = sb.table("joint_master").select(
@@ -730,41 +729,38 @@ def api_iso_summary():
                     if f_subarea: q = q.eq("sub_area", f_subarea)
                     chunk_res = q.range(offset, offset + limit - 1).execute()
                     chunk = chunk_res.data or []
-                    jm_all.extend(chunk)
+                    for r in chunk:
+                        iso = (r.get("iso_drawing") or "").strip()
+                        if not iso: continue
+                        if iso not in iso_map:
+                            iso_map[iso] = {
+                                "unit":           (r.get("unit")     or "").strip(),
+                                "area":           (r.get("area")     or "").strip(),
+                                "sub_area":       (r.get("sub_area") or "").strip(),
+                                "system":         (r.get("system")   or "").strip(),
+                                "line_no":        (r.get("line_no")  or "").strip(),
+                                "iso_drawing":    iso,
+                                "total_fab_di":   0.0,
+                                "total_erect_di": 0.0,
+                                "remain_fab_di":  0.0,
+                                "remain_erect_di":0.0,
+                            }
+                        sz = 0.0
+                        try: sz = float(r.get("size_inch") or 0)
+                        except: pass
+                        sf      = str(r.get("sf") or "").upper().strip()
+                        is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
+                        if sf == "S" or "FAB" in sf:
+                            iso_map[iso]["total_fab_di"] += sz
+                            if not is_comp: iso_map[iso]["remain_fab_di"] += sz
+                        elif sf == "F" or "ERE" in sf or "FIELD" in sf:
+                            iso_map[iso]["total_erect_di"] += sz
+                            if not is_comp: iso_map[iso]["remain_erect_di"] += sz
                     if len(chunk) < limit: break
                     offset += limit
                 except Exception as e:
                     print(f"[iso-summary] Pagination error at offset {offset}: {e}")
                     break
-
-            iso_map = {}
-            for r in jm_all:
-                iso = (r.get("iso_drawing") or "").strip()
-                if not iso: continue
-                if iso not in iso_map:
-                    iso_map[iso] = {
-                        "unit":           (r.get("unit")     or "").strip(),
-                        "area":           (r.get("area")     or "").strip(),
-                        "sub_area":       (r.get("sub_area") or "").strip(),
-                        "system":         (r.get("system")   or "").strip(),
-                        "line_no":        (r.get("line_no")  or "").strip(),
-                        "iso_drawing":    iso,
-                        "total_fab_di":   0.0,
-                        "total_erect_di": 0.0,
-                        "remain_fab_di":  0.0,
-                        "remain_erect_di":0.0,
-                    }
-                sz = 0.0
-                try: sz = float(r.get("size_inch") or 0)
-                except: pass
-                sf      = str(r.get("sf") or "").upper().strip()
-                is_comp = bool(r.get("date_completed")) or (str(r.get("completed") or "").upper() in ["O", "TRUE", "Y"])
-                if sf == "S" or "FAB" in sf:
-                    iso_map[iso]["total_fab_di"] += sz
-                    if not is_comp: iso_map[iso]["remain_fab_di"] += sz
-                elif sf == "F" or "ERE" in sf or "FIELD" in sf:
-                    iso_map[iso]["total_erect_di"] += sz
-                    if not is_comp: iso_map[iso]["remain_erect_di"] += sz
 
             data = list(iso_map.values())
             # Cache only unfiltered full dataset
