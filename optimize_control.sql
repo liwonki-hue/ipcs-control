@@ -67,6 +67,7 @@ DECLARE
     ep_act_data json;
     kpi_data json;
     ep_kpi_data json;
+    actual_plan_agg json;
 BEGIN
     -- Systems aggregation with Support/Test Package counts
     SELECT json_agg(t) INTO systems_data FROM (
@@ -161,6 +162,13 @@ BEGIN
         GROUP BY w.week_no
     ) t;
 
+    -- Plan aggregation from week_plan_items
+    SELECT json_object_agg(week_no, json_build_object('f', total_f, 'e', total_e)) INTO actual_plan_agg FROM (
+        SELECT week_no, SUM(plan_fab_di) as total_f, SUM(plan_erect_di) as total_e
+        FROM construction.week_plan_items
+        GROUP BY week_no
+    ) t;
+
     RETURN json_build_object(
         'unit', units_data,
         'area', areas_data,
@@ -168,7 +176,8 @@ BEGIN
         'act', act_data,
         'ep_act', ep_act_data,
         'kpi', kpi_data,
-        'ep_kpi', ep_kpi_data
+        'ep_kpi', ep_kpi_data,
+        'actual_plan_agg', actual_plan_agg
     );
 END;
 $$ LANGUAGE plpgsql;

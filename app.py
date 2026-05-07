@@ -218,17 +218,9 @@ def _build():
     global _building, _build_fail
     try:
         sb = get_sb()
-        # 1. Basic summary
-        try:
-            res = sb.rpc("get_dashboard_summary_v17", {}).execute()
-            raw = res.data
-            if isinstance(raw, list) and len(raw) > 0: raw = raw[0]
-            if not isinstance(raw, dict): raw = {}
-        except Exception as rpc_e:
-            print(f"[cache] RPC Error: {rpc_e}")
-            raw = {}
-            
-        # 2. Week schedule
+        raw = {}
+        
+        # 1. Week schedule (Fast)
         try:
             weeks_res = sb.table("week_schedule").select("*").order("week_no").execute()
             raw["week_schedule"] = weeks_res.data or []
@@ -236,34 +228,13 @@ def _build():
             print(f"[cache] Week Schedule Fetch Error: {we}")
             raw["week_schedule"] = []
 
-        # 3. Week plan items aggregation
-        try:
-            wpi_agg = {}
-            offset = 0
-            limit = 5000
-            while True:
-                wpi_res = sb.table("week_plan_items").select("week_no,plan_fab_di,plan_erect_di").range(offset, offset + limit - 1).execute()
-                chunk = wpi_res.data or []
-                for r in chunk:
-                    wk = int(r.get("week_no") or 0)
-                    f = float(r.get("plan_fab_di", 0) or 0)
-                    e = float(r.get("plan_erect_di", 0) or 0)
-                    if wk not in wpi_agg: wpi_agg[wk] = {"f":0.0, "e":0.0}
-                    wpi_agg[wk]["f"] += f
-                    wpi_agg[wk]["e"] += e
-                if len(chunk) < limit: break
-                offset += limit
-            raw["actual_plan_agg"] = wpi_agg
-        except Exception as e:
-            raw["actual_plan_agg"] = {}
-            print(f"[cache] wpi aggregation error: {e}")
-
-        # 4. Integrated Dashboard Aggregation via RPC
+        # 2. Integrated Dashboard Aggregation via RPC (Core Data)
+        # This now includes actual_plan_agg, kpi, unit, area, sys, act, etc.
         try:
             agg_res = sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
             agg_data = agg_res.data
             if agg_data:
-                for k in ["unit","area","sys","act","ep_act","kpi","ep_kpi"]:
+                for k in ["unit","area","sys","act","ep_act","kpi","ep_kpi", "actual_plan_agg"]:
                     if k in agg_data:
                         # KPI and EP_KPI are objects but _parse_rpc expects list for some parts
                         if k in ["kpi", "ep_kpi"] and isinstance(agg_data[k], dict):
