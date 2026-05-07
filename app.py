@@ -282,15 +282,6 @@ def _build():
     finally:
         _building = False
 
-        data = _parse_rpc(raw)
-        with _lock: _cache["data"] = data
-        _build_fail = False
-    except Exception as e:
-        _build_fail = True
-        print(f"[cache] ERROR: {e}")
-    finally:
-        _building = False
-
 def get_cache(force=False):
     global _building, _build_fail
     with _lock: has = "data" in _cache
