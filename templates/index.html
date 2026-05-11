@@ -8,8 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="/static/css/index.css">
+<link rel="stylesheet" href="/static/css/index.css?v=3.0">
 </head>
 <body>
 
@@ -22,21 +21,20 @@
   <div class="nav-section">Monitoring</div>
   <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon">&#128200;</span> Overview</button>
   <button class="nav-btn" data-page="early_power" onclick="navigate('early_power')"><span class="nav-icon">&#9889;</span> Early Power</button>
-  <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
+  <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
   <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
   <div class="nav-section">Data Input</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
+  <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
   <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Master</button>
-  <button class="nav-btn" data-page="week_plan" onclick="navigate('week_plan')"><span class="nav-icon">&#128197;</span> Week Plan</button>
   <div class="nav-section">Report</div>
   <button class="nav-btn" data-page="simulation" onclick="navigate('simulation')"><span class="nav-icon">&#128640;</span> Simulation Report</button>
   <div class="nav-footer">
     <button class="nav-btn refresh-btn" onclick="refreshData()"><span class="nav-icon">&#128260;</span> Refresh</button>
-    <a href="/static/USER_MANUAL_EN.html" target="_blank" class="nav-btn" style="text-decoration:none;display:flex;align-items:center;"><span class="nav-icon">&#128214;</span> English Manual</a>
-    <div class="nav-version">ICK-DPGU-PIPING v2.0</div>
+<div class="nav-version">ICK-DPGU-PIPING v2.0</div>
   </div>
 </nav>
 
@@ -55,19 +53,19 @@
 
   <div class="kpi-row" id="kpiRow">
     <div class="kpi-card accent"><div class="kpi-label">Overall Progress</div><div class="kpi-value" id="kpi-overall">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="kpi-bar" style="width:0%"></div></div><div class="kpi-sub" id="kpi-overall-sub">&mdash;</div></div>
-    <div class="kpi-card white"><div class="kpi-label">Total DI</div><div class="kpi-value kpi-val-white" id="kpi-total-di">&mdash;</div><div class="kpi-sub" id="kpi-total-di-sub">&mdash;</div></div>
-    <div class="kpi-card cyan"><div class="kpi-label">Fabrication (S) DI</div><div class="kpi-value cyan" id="kpi-fab">&mdash;</div><div class="kpi-sub kpi-pct-sub cyan-pct" id="kpi-fab-sub">&mdash;</div></div>
-    <div class="kpi-card green"><div class="kpi-label">Erection (F) DI</div><div class="kpi-value green" id="kpi-erect">&mdash;</div><div class="kpi-sub kpi-pct-sub green-pct" id="kpi-erect-sub">&mdash;</div></div>
+    <div class="kpi-card"><div class="kpi-label">Total DI</div><div class="kpi-value" id="kpi-total-di">&mdash;</div><div class="kpi-sub" id="kpi-total-di-sub">&mdash;</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Completed DI</div><div class="kpi-value cyan" id="kpi-completed">&mdash;</div><div class="kpi-sub" id="kpi-completed-sub">&mdash;</div></div>
     <div class="kpi-card yellow"><div class="kpi-label">Remaining DI</div><div class="kpi-value yellow" id="kpi-remain">&mdash;</div><div class="kpi-sub" id="kpi-remain-sub">&mdash;</div></div>
     <div class="kpi-card" id="kpi-week-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="kpi-week">&mdash;</div><div class="kpi-sub" id="kpi-week-sub">&mdash;</div></div>
+    <div class="kpi-card" style="border-top-color:var(--orange)"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="kpi-welder-perf" style="color:var(--orange)">&mdash;</div><div class="kpi-sub" id="kpi-welder-sub">AGG DI / Day</div></div>
   </div>
 
   <div class="page-body">
-    <div class="page" id="page-overview">
+    <div class="page hidden" id="page-overview">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div></div>
       <div class="grid-3">
         <div class="col">
-          <div class="panel"><div class="panel-title">Overall Piping Readiness</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f5c542" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING READINESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
+          <div class="panel"><div class="panel-title">Overall Piping Readiness</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING READINESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
           <div class="panel"><div class="panel-title">By Discipline</div><div id="disciplineList"></div></div>
         </div>
         <div class="col col-wide">
@@ -80,18 +78,18 @@
 
     <div class="page hidden" id="page-early_power">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview</div></div>
-      <div class="panel" style="margin-bottom:14px; background:linear-gradient(90deg, #162032, #1e2d45); border-left:4px solid #f5c542">
+      <div class="panel" style="margin-bottom:14px; background:linear-gradient(90deg, #f0f9ff, #ffffff); border-left:4px solid #f59e0b">
         <div style="padding:10px; display:flex; align-items:center; gap:20px;">
-          <div style="font-size:36px; font-weight:700; color:#f5c542" id="epReadinessPct">0%</div>
+          <div style="font-size:36px; font-weight:700; color:#f59e0b" id="epReadinessPct">0%</div>
           <div>
-            <div style="font-size:16px; font-weight:600; margin-bottom:4px">Event Readiness</div>
-            <div style="font-size:13px; color:#a1b2c6" id="epReadinessText">Analyzing bottlenecks...</div>
+            <div style="font-size:16px; font-weight:600; margin-bottom:4px; color:var(--text)">Event Readiness</div>
+            <div style="font-size:13px; color:var(--text-dim)" id="epReadinessText">Analyzing bottlenecks...</div>
           </div>
         </div>
       </div>
       <div class="grid-3">
         <div class="col">
-          <div class="panel"><div class="panel-title">EP DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#1e2d45" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats"></div></div>
+          <div class="panel"><div class="panel-title">EP DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats"></div></div>
           <div class="panel"><div class="panel-title">EP By Discipline</div><div id="epDisciplineList"></div></div>
         </div>
         <div class="col col-wide">
@@ -112,11 +110,30 @@
     </div>
 
     <div class="page hidden" id="page-weekly">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly</div></div>
-      <div class="panel" style="margin-bottom:14px"><div class="panel-title">Current Week Performance (Overall)</div><div class="grid-4" id="weeklyKpi"></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Productivity</div></div>
       <div class="grid-3" style="grid-template-columns: 2fr 1.2fr; gap:14px">
-        <div class="panel"><div class="panel-title">Overall Weekly Trend</div><div style="position:relative;height:300px"><canvas id="weeklyTrend"></canvas></div></div>
-        <div class="panel"><div class="panel-title">Overall Productivity Log</div><div class="table-wrap"><table class="data-table" id="weeklyTable"><thead><tr><th>Week</th><th>Plan</th><th>Actual</th><th>Dev</th></tr></thead><tbody></tbody></table></div></div>
+        <div class="panel"><div class="panel-title">Overall Weekly Trend</div><div style="position:relative;height:250px"><canvas id="weeklyTrend"></canvas></div></div>
+        <div class="panel"><div class="panel-title">Overall Productivity Log</div><div class="table-wrap"><table class="data-table" id="weeklyTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:18%"><col style="width:30%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th>Week</th><th>Date</th><th>Fab</th><th>Erect</th><th>Completed</th></tr></thead><tbody></tbody></table></div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;align-items:start" id="weeklyBreakdownGrid">
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div class="panel" id="weeklySystemPanel">
+            <div class="panel-title" id="weeklySystemTitle">Breakdown &mdash; By System</div>
+            <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>System</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          </div>
+          <div class="panel" id="weeklyMaterialPanel">
+            <div class="panel-title" id="weeklyMaterialTitle">Breakdown &mdash; By Material</div>
+            <div class="table-wrap"><table class="data-table" id="weeklyMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Material</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          </div>
+        </div>
+        <div class="panel" id="weeklySubareaPanel">
+          <div class="panel-title" id="weeklySubareaTitle">Breakdown &mdash; By Sub Area (1)</div>
+          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Sub Area</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel" id="weeklySubareaPanel2">
+          <div class="panel-title" id="weeklySubareaTitle2">Breakdown &mdash; By Sub Area (2)</div>
+          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable2" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Sub Area</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
       </div>
     </div>
 
@@ -133,158 +150,72 @@
     <div class="page hidden" id="page-joint_master">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Joint Master Data</div></div>
       <div class="panel">
-        <div class="jm-top-row">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <select id="jm-unit" class="filter-sel"><option value="">Unit</option></select>
-            <select id="jm-system" class="filter-sel"><option value="">System</option></select>
-            <select id="jm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
-            <select id="jm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
-            <select id="jm-phase" class="filter-sel"><option value="">Phase</option><option value="EP">EP</option><option value="Normal">Normal</option></select>
-            <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()">
-            <button class="btn-primary" onclick="loadJointMaster()">&#128269; Search</button>
-            <button class="btn-primary" style="background:#22d3a1" onclick="openAddJointModal()">+ Add Joint</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="btn-de btn-de-export" onclick="exportJMExcel()">&#11015; Export Excel</button>
-            <button class="btn-de" onclick="downloadJMTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)" title="Download blank template for bulk import">&#128462; Template</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0" title="Select Excel file to bulk import">
+        <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <select id="jm-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
+          <select id="jm-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <select id="jm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
+          <select id="jm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
+          <select id="jm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
+          <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">RT</option></select>
+          <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()" style="width:140px;">
+          <button class="btn-primary" onclick="loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openAddJointModal()">+ Add Joint</button>
+
+          <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
+            <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;" title="Select Excel file to bulk import">
               &#128196; Import
               <input type="file" id="jm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importJMExcel()">
             </label>
-            <span id="jm-import-status" style="font-size:11px;color:var(--text-dim)"></span>
-            <button class="btn-de btn-de-print" onclick="printPage('joint_master')">&#128424; Print</button>
+            <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
         </div>
-        <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:12px;background:#f0f7ff;border:1px solid #c8e0f4;border-radius:6px;align-items:center;gap:15px">
-          <div style="font-size:12px;font-weight:700;color:#2e75b6">BULK UPDATE: <span id="jm-iso-info" style="color:#111827"></span></div>
+        <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
+          <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="jm-iso-info" style="color:#ffffff"></span></div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" id="jm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:6px;border:1px solid #c8e0f4;border-radius:4px;font-size:12px">
-            <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:6px 14px" onclick="applyIsoBulkDate()">Apply to All</button>
-            <button class="btn-clear-row" style="padding:6px 14px" onclick="clearIsoBulkDate()">Clear All</button>
+            <input type="text" id="jm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff">
+            <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applyIsoBulkDate()">Apply to All</button>
+            <button class="btn-clear-row" style="padding:8px 16px" onclick="clearIsoBulkDate()">Clear All</button>
           </div>
         </div>
-        <div class="table-wrap"><table class="data-table" id="jmTable"><thead><tr><th>ID</th><th>Phase</th><th>Unit</th><th>Sys</th><th>Sub Area</th><th>ISO No</th><th>Rev</th><th>Spool</th><th>Mat</th><th>Size</th><th>S/F</th><th>Jnt</th><th>Welder</th><th>Actual Date</th><th>Action</th></tr></thead><tbody id="jmBody"></tbody></table></div>
-        <div class="de-pagination"><div id="jm-count" style="color:#7a95b8;font-size:11px">0 rows loaded</div><div style="display:flex;gap:6px;align-items:center"><button class="nav-btn" onclick="jmPage(-1)">Prev</button><span id="jm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span><button class="nav-btn" onclick="jmPage(1)">Next</button></div></div>
-      </div>
-    </div>
-
-    <div class="page hidden" id="page-week_plan">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Planning (ISO Drawing Based)</div></div>
-      <div class="panel" style="margin-bottom:14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #e2e8f0;margin-bottom:15px">
-          <div style="display:flex;flex-direction:column;gap:4px">
-            <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">Select Planning Week</div>
-            <div style="display:flex;align-items:center;gap:12px">
-              <select id="wp-sel-week" onchange="onWeekSelected()" style="min-width:320px;font-size:14px;height:38px;background:#fff;border:1px solid #cbd5e1;border-radius:4px;padding:0 12px"></select>
-              <div id="wp-period" style="font-size:13px;color:#1e293b;font-weight:600"></div>
-            </div>
-          </div>
-          <div style="display:flex;gap:60px">
-            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">This Week Plan DI</div><div id="wp-total-di" style="font-size:24px;font-weight:800;color:var(--accent);font-family:'DM Mono',monospace;line-height:38px">0</div></div>
-            <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end"><div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.05em">PLAN ISO DRAWINGS</div><div id="wp-item-count" style="font-size:24px;font-weight:800;color:var(--indigo);font-family:'DM Mono',monospace;line-height:38px">0</div></div>
-          </div>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:14px">
-        <div class="panel-title" style="display:flex;align-items:center;gap:10px">
-          ISO Drawing Search
-          <span id="wp-iso-loading" style="display:none;font-size:11px;color:var(--text-dim);margin-left:8px">&#9203; Loading...</span>
-        </div>
-        <!-- Filter row: identical structure to Joint Master -->
-        <div style="display:flex;gap:8px;flex-wrap:nowrap;margin-bottom:10px;align-items:center;overflow-x:auto;padding-bottom:2px">
-          <input id="wp-iso-search" class="filter-sel" type="text" placeholder="&#128269; ISO / Line No" style="min-width:200px;flex-shrink:0" onkeydown="if(event.key==='Enter')searchIsoDrawings()">
-          <select id="wp-filter-unit" class="filter-sel" style="min-width:100px;flex-shrink:0"><option value="">All Units</option></select>
-          <select id="wp-filter-subarea" class="filter-sel" style="min-width:100px;flex-shrink:0"><option value="">All Sub Areas</option></select>
-          <select id="wp-filter-system" class="filter-sel" style="min-width:110px;flex-shrink:0"><option value="">All Systems</option></select>
-          <!-- Search button calls searchIsoDrawings() = server-side filter (same as Joint Master) -->
-          <button class="btn-primary" onclick="searchIsoDrawings()" style="padding:6px 14px;white-space:nowrap;flex-shrink:0;font-size:12px;cursor:pointer">&#128269; Search</button>
-          <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim);cursor:pointer;white-space:nowrap;flex-shrink:0;padding:6px 10px;background:var(--panel);border:1px solid var(--border);border-radius:4px">
-            <input type="checkbox" id="wp-show-all" style="accent-color:var(--accent)"> Include Completed
-          </label>
-        </div>
-        <div class="table-wrap" style="max-height:300px;overflow:auto">
-          <table class="data-table" id="wpIsoSearchTable" style="min-width:900px">
-            <thead><tr><th style="min-width:55px">Unit</th><th style="min-width:70px">Area</th><th style="min-width:80px">Sub Area</th><th style="min-width:70px">System</th><th style="min-width:140px">Line No</th><th style="min-width:200px">ISO Drawing</th><th style="color:var(--green);min-width:100px">Remain Fab DI</th><th style="color:var(--indigo);min-width:110px">Remain Erect DI</th><th style="min-width:80px">Total Fab</th><th style="min-width:85px">Total Erect</th><th style="min-width:70px">Action</th></tr></thead>
-            <tbody id="wpIsoSearchBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel" style="margin-bottom:14px">
-        <div class="panel-title">This Week Plan</div>
-        <div class="table-wrap" style="max-height:340px">
-          <table class="data-table editable-table" id="wpPlanItemsTable">
-            <thead>
-              <tr><th colspan="8" style="background:#dbeafe;border-bottom:none"></th><th colspan="2" class="th-group-plan">&#8212; PLAN &#8212;</th><th colspan="1" style="background:#dbeafe;border-bottom:none"></th></tr>
-              <tr><th>Unit</th><th>Area</th><th>Sub Area</th><th>System</th><th>Line No</th><th>ISO Drawing</th><th style="color:var(--green)">Remain Fab</th><th style="color:var(--indigo)">Remain Erect</th><th class="col-plan">Plan Fab DI</th><th class="col-plan">Plan Erect DI</th><th>Action</th></tr>
-            </thead>
-            <tbody id="wpPlanItemsBody"></tbody>
-            <tfoot><tr style="background:#eff6ff;font-weight:700"><td colspan="8" style="text-align:right;color:var(--text-dim);padding:8px 10px">TOTAL</td><td id="wp-foot-fab" style="color:var(--accent);padding:8px 10px">&#8212;</td><td id="wp-foot-erect" style="color:var(--green);padding:8px 10px">&#8212;</td><td></td></tr></tfoot>
-          </table>
-        </div>
-      </div>
-
-      <div class="panel">
-        <div class="panel-title" style="display:flex;align-items:center;gap:10px">Weekly Schedule Summary<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportWeekScheduleExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" onclick="printPage('week_plan')">&#128424; Print</button></div></div>
-        <div class="table-wrap" style="max-height:320px;overflow:auto;position:relative">
-          <table class="data-table" id="wpTable" style="min-width:1100px;border-collapse:separate;border-spacing:0">
+        <div class="table-wrap">
+          <table class="data-table" id="jmTable" style="width:100% !important; min-width:1500px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th colspan="4" style="position:sticky;top:0;z-index:4;background:#f8fafc;border-bottom:none;box-shadow:inset 0 -1px 0 #e2e8f0"></th>
-                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#334155;background:#e2e8f0;border-bottom:2px solid rgba(148,163,184,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">IDEAL&nbsp;PLAN</th>
-                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#065f46;background:#d1fae5;border-bottom:2px solid rgba(16,185,129,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">ACTUAL&nbsp;PLAN</th>
-                <th colspan="3" style="position:sticky;top:0;z-index:4;text-align:center;color:#1e40af;background:#dbeafe;border-bottom:2px solid rgba(59,130,246,0.7);letter-spacing:0.08em;font-size:10px;font-weight:700;padding:6px 4px;white-space:nowrap">PLAN&nbsp;VS&nbsp;COMPLETED</th>
-              </tr>
-              <tr>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">ID</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">Wk</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">Start Date</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">End Date</th>
-                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">FAB DI</th>
-                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">ERECT DI</th>
-                <th class="col-plan" style="position:sticky;top:29px;z-index:3;color:#475569;background:#f1f5f9;white-space:nowrap">TOTAL DI</th>
-                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">FAB DI</th>
-                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">ERECT DI</th>
-                <th class="col-actual" style="position:sticky;top:29px;z-index:3;color:#047857;background:#ecfdf5;white-space:nowrap">TOTAL DI</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">COMPLETED DI</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">REMAINING DI</th>
-                <th style="position:sticky;top:29px;z-index:3;color:#334155;background:#f8fafc;white-space:nowrap">PROGRESS %</th>
+                <th style="width:65px">ID</th>
+                <th style="width:60px">Phase</th>
+                <th style="width:65px">Sys</th>
+                <th style="width:100px">Sub Area</th>
+                <th style="width:220px">ISO No</th>
+                <th style="width:50px">Rev</th>
+                <th style="width:150px">Spool</th>
+                <th style="width:90px">Mat</th>
+                <th style="width:60px">Size</th>
+                <th style="width:50px">S/F</th>
+                <th style="width:50px">Jnt</th>
+                <th style="width:140px">Welder</th>
+                <th style="width:95px">Work Date</th>
+                <th style="width:85px">Inspection</th>
+                <th style="width:160px">Action</th>
               </tr>
             </thead>
-            <tbody id="wpBody"></tbody>
+            <tbody id="jmBody"></tbody>
           </table>
+        </div>
+        <div class="de-pagination">
+          <div id="jm-count">0 rows loaded</div>
+          <div style="display:flex;gap:12px;align-items:center">
+            <button class="btn-nav" id="jm-prev-btn" onclick="jmPage(-1)">Prev</button>
+            <span id="jm-page-info">Page 1</span>
+            <button class="btn-nav" id="jm-next-btn" onclick="jmPage(1)">Next</button>
+          </div>
         </div>
       </div>
     </div>
-    </div>
+
     
     <div class="page hidden" id="page-welder">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div></div>
-
-      <!-- Filter bar -->
-      <div class="panel" style="margin-bottom:10px;padding:12px 16px">
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-weight:600;font-size:12px;color:var(--text-dim)">FILTER</span>
-          <div style="display:flex;align-items:center;gap:4px">
-            <span style="font-size:10px;color:#7a95b8">From:</span>
-            <input type="date" id="wd-from" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="YYYY-MM-DD">
-          </div>
-          <span style="color:var(--text-dim)">~</span>
-          <div style="display:flex;align-items:center;gap:4px">
-            <span style="font-size:10px;color:#7a95b8">To:</span>
-            <input type="date" id="wd-to" class="cell-input" style="width:130px;padding:5px 8px;font-size:12px" title="YYYY-MM-DD">
-          </div>
-          <select id="wd-system" class="cell-input" style="width:150px;padding:5px 8px;font-size:12px">
-            <option value="">All Systems</option>
-          </select>
-          <button class="btn-de" onclick="(() => { const m = metaData.systems||[]; const sel=document.getElementById('wd-system'); const cur=sel.value; sel.innerHTML='<option value=\'\'>All Systems</option>'+m.map(s=>`<option value='${s}'>${s}</option>`).join(''); sel.value=cur; loadWelder(); })()" style="padding:5px 14px;font-size:12px">&#128269; Apply</button>
-          <button class="btn-de" onclick="document.getElementById('wd-from').value='';document.getElementById('wd-to').value='';document.getElementById('wd-system').value='';loadWelder()" style="padding:5px 12px;font-size:12px;background:rgba(255,82,82,0.1);color:#ff5252">&#10005; Clear</button>
-          <div style="margin-left:auto">
-            <button class="btn-de btn-de-export" onclick="exportWelderExcel()" style="padding:5px 14px;font-size:12px">&#11015; Export Excel</button>
-          </div>
-        </div>
-      </div>
 
       <!-- KPI Cards -->
       <div class="panel" style="margin-bottom:10px">
@@ -292,31 +223,45 @@
           <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Joints Completed</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
-          <div class="kpi-card"><div class="kpi-label">Avg DI per Welder</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">AGG DI / Day</div></div>
         </div>
       </div>
 
-      <!-- Main grid: Ranking + Daily Trend + System Breakdown -->
+      <!-- Weekly + Monthly Charts -->
       <div class="grid-2" style="margin-bottom:10px">
         <div class="panel">
-          <div class="panel-title">Welder Ranking (Click for detail)</div>
-          <div class="table-wrap" style="max-height:420px">
-            <table class="data-table" id="welderRankTable">
-              <thead><tr><th>Rank</th><th>Welder ID</th><th>Joints</th><th>Total DI (bar)</th><th>Last Active</th><th></th></tr></thead>
-              <tbody id="welderRankBody"></tbody>
+          <div class="panel-title">Weekly Welder Performance</div>
+          <div style="position:relative;height:210px"><canvas id="welderTrendChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Monthly Welder Performance</div>
+          <div style="position:relative;height:210px"><canvas id="welderSysChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Welder Performance: dual-column table -->
+      <div class="panel" style="margin-bottom:10px">
+        <div class="panel-title">Welder Performance</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div class="table-wrap">
+            <table class="data-table" style="font-size:11px;width:100%">
+              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
+              <tbody id="welderRankBodyA"></tbody>
+            </table>
+          </div>
+          <div class="table-wrap">
+            <table class="data-table" style="font-size:11px;width:100%">
+              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
+              <tbody id="welderRankBodyB"></tbody>
             </table>
           </div>
         </div>
-        <div style="display:flex;flex-direction:column;gap:10px">
-          <div class="panel" style="flex:1">
-            <div class="panel-title">Daily Completed DI (All Welders)</div>
-            <div style="position:relative;height:190px"><canvas id="welderTrendChart"></canvas></div>
-          </div>
-          <div class="panel" style="flex:1">
-            <div class="panel-title">Top System Breakdown (Completed DI)</div>
-            <div style="position:relative;height:190px"><canvas id="welderSysChart"></canvas></div>
-          </div>
-        </div>
+      </div>
+
+      <!-- hidden containers kept for JS compatibility -->
+      <div style="display:none">
+        <div id="weeklyWelderTable"></div><div id="weeklyWelderTable2"></div>
+        <div id="monthlyWelderTable"></div><div id="monthlyWelderTable2"></div>
       </div>
 
       <!-- Welder Drill-down Panel (hidden until row clicked) -->
@@ -330,7 +275,8 @@
           <div style="display:flex;gap:24px;margin-bottom:12px;flex-wrap:wrap">
             <div><span style="font-size:11px;color:var(--text-dim)">JOINTS</span><br><span id="drill-joints" style="font-size:18px;font-weight:700;color:var(--green)"></span></div>
             <div><span style="font-size:11px;color:var(--text-dim)">TOTAL DI</span><br><span id="drill-total-di" style="font-size:18px;font-weight:700;color:var(--accent)"></span></div>
-            <div><span style="font-size:11px;color:var(--text-dim)">LAST ACTIVE</span><br><span id="drill-last-active" style="font-size:18px;font-weight:700;color:var(--text)"></span></div>
+            <div><span style="font-size:11px;color:var(--text-dim)">WORKING DAYS</span><br><span id="drill-working-days" style="font-size:18px;font-weight:700;color:var(--indigo)"></span></div>
+            <div><span style="font-size:11px;color:var(--text-dim)">AVG DI / DAY</span><br><span id="drill-avg-di-day" style="font-size:18px;font-weight:700;color:var(--green)"></span></div>
           </div>
           <div class="grid-2">
             <div>
@@ -348,60 +294,132 @@
 
     <!-- ═══════════ SUPPORT MASTER ═══════════ -->
     <div class="page hidden" id="page-support_master">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master Data</div></div>
       <div class="panel">
-        <div class="jm-top-row">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <select id="sm-system" class="filter-sel"><option value="">System</option></select>
-            <select id="sm-subarea" class="filter-sel"><option value="">Sub Area</option></select>
-            <select id="sm-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
-            <input id="sm-iso" class="filter-sel" type="text" placeholder="ISO Drawing">
-            <button class="btn-primary" onclick="loadSupportMaster()">&#128269; Search</button>
-            <button class="btn-primary" style="background:#22d3a1" onclick="openSMModal()">+ Add</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="btn-de btn-de-export" onclick="exportSMExcel()">&#11015; Export</button>
-            <button class="btn-de" onclick="downloadSMTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)">&#128462; Template</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0">
+        <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <select id="sm-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
+          <select id="sm-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <select id="sm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
+          <select id="sm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
+          <select id="sm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
+          <input id="sm-iso" class="filter-sel" type="text" placeholder="Search Drawing" oninput="loadSupportMaster()" style="width:140px;">
+          <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openSMModal()">+ Add Support</button>
+
+          <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
+            <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;" title="Select Excel file to bulk import">
               &#128196; Import
               <input type="file" id="sm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importSMExcel()">
             </label>
-            <span id="sm-import-status" style="font-size:11px;color:var(--text-dim)"></span>
+            <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
+          </div>
+        </div>
+        <div id="sm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
+          <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="sm-iso-info" style="color:#ffffff"></span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="text" id="sm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff">
+            <button id="sm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applySmBulkDate()">Apply to All</button>
+            <button class="btn-clear-row" style="padding:8px 16px" onclick="clearSmBulkDate()">Clear All</button>
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="smTable">
-            <thead><tr><th>ID</th><th>System</th><th>Sub Area</th><th>ISO Drawing</th><th>Support No</th><th>Completed Date</th><th>Remark</th><th>Action</th></tr></thead>
+          <table class="data-table" id="smTable" style="width:100% !important; min-width:1530px !important; table-layout:fixed !important;">
+            <thead>
+              <tr>
+                <th style="width:50px">NO.</th>
+                <th style="width:60px">PHASE</th>
+                <th style="width:60px">UNIT</th>
+                <th style="width:80px">SYSTEM</th>
+                <th style="width:80px">AREA</th>
+                <th style="width:100px">SUB AREA</th>
+                <th style="width:280px">SUPPORT DRAWING</th>
+                <th style="width:40px">REV</th>
+                <th style="width:180px">ISO DRAWING</th>
+                <th style="width:220px">LINE NO</th>
+                <th style="width:160px">WELDER</th>
+                <th style="width:100px">WORK DATE</th>
+                <th style="width:120px">ACTION</th>
+              </tr>
+            </thead>
             <tbody id="smBody"></tbody>
           </table>
         </div>
         <div class="de-pagination">
-          <div id="sm-count" style="color:#7a95b8;font-size:11px">0 rows</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button class="nav-btn" onclick="smPage(-1)">Prev</button>
-            <span id="sm-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span>
-            <button class="nav-btn" onclick="smPage(1)">Next</button>
+          <div id="sm-count">0 rows loaded</div>
+          <div style="display:flex;gap:12px;align-items:center">
+            <button class="btn-nav" id="sm-prev-btn" onclick="smPage(-1)">Prev</button>
+            <span id="sm-page-info">Page 1</span>
+            <button class="btn-nav" id="sm-next-btn" onclick="smPage(1)">Next</button>
           </div>
         </div>
       </div>
     </div>
 
+
+    <!-- ═══════════ NDE & PWHT ═══════════ -->
+    <div class="page hidden" id="page-nde_pwht">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">NDE &amp; PWHT</div></div>
+      <div class="panel">
+        <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <select id="nde-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
+          <select id="nde-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <input id="nde-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadNdePwht()" style="width:140px;">
+          <button class="btn-primary" onclick="loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
+          
+          <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
+            <button class="btn-de btn-de-export" onclick="exportNDEExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('nde_pwht')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1100px !important; table-layout:fixed !important;">
+            <thead>
+              <tr>
+                <th style="width:65px">ID</th>
+                <th style="width:60px">Phase</th>
+                <th style="width:65px">Unit</th>
+                <th style="width:65px">Sys</th>
+                <th style="width:100px">Sub Area</th>
+                <th style="width:200px">ISO No</th>
+                <th style="width:50px">Rev</th>
+                <th style="width:90px">Mat</th>
+                <th style="width:60px">Size</th>
+                <th style="width:50px">S/F</th>
+                <th style="width:50px">Jnt</th>
+                <th style="width:140px">Welder</th>
+                <th style="width:95px">Work Date</th>
+                <th style="width:85px">Inspection</th>
+              </tr>
+            </thead>
+            <tbody id="ndeBody"></tbody>
+          </table>
+        </div>
+        <div class="de-pagination">
+          <div id="nde-count">0 rows loaded</div>
+          <button class="btn-nav" id="nde-prev-btn" onclick="ndePage(-1)">Prev</button>
+          <span id="nde-page-info">Page 1</span>
+          <button class="btn-nav" id="nde-next-btn" onclick="ndePage(1)">Next</button>
+        </div>
+      </div>
+    </div>
+
+
     <!-- ═══════════ TEST PACKAGE MASTER ═══════════ -->
     <div class="page hidden" id="page-testpkg_master">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Master</div></div>
       <div class="panel">
-        <div class="jm-top-row">
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <select id="tp-system" class="filter-sel"><option value="">System</option></select>
-            <select id="tp-subarea" class="filter-sel"><option value="">Sub Area</option></select>
-            <select id="tp-status" class="filter-sel"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
-            <button class="btn-primary" onclick="loadTestPkgMaster()">&#128269; Search</button>
-            <button class="btn-primary" style="background:#22d3a1" onclick="openTPModal()">+ Add</button>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-            <button class="btn-de btn-de-export" onclick="exportTPExcel()">&#11015; Export</button>
-            <button class="btn-de" onclick="downloadTPTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4)">&#128462; Template</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0">
+        <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <select id="tp-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <select id="tp-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
+          <select id="tp-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
+          <button class="btn-primary" onclick="loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openTPModal()">+ Add</button>
+
+          <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
+            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export</button>
+            <button class="btn-de" onclick="downloadTPTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4); padding:5px 10px; font-size:11px;">&#128462; Template</button>
+            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;">
               &#128196; Import
               <input type="file" id="tp-import-file" accept=".xlsx,.xls" style="display:none" onchange="importTPExcel()">
             </label>
@@ -415,19 +433,17 @@
           </table>
         </div>
         <div class="de-pagination">
-          <div id="tp-count" style="color:#7a95b8;font-size:11px">0 rows</div>
-          <div style="display:flex;gap:6px;align-items:center">
-            <button class="nav-btn" onclick="tpPage(-1)">Prev</button>
-            <span id="tp-page-info" style="color:#4a6080;font-size:12px;font-weight:600">Page 1</span>
-            <button class="nav-btn" onclick="tpPage(1)">Next</button>
-          </div>
+          <div id="tp-count">0 rows loaded</div>
+          <button class="btn-nav" id="tp-prev-btn" onclick="tpPage(-1)">Prev</button>
+          <span id="tp-page-info">Page 1</span>
+          <button class="btn-nav" id="tp-next-btn" onclick="tpPage(1)">Next</button>
         </div>
       </div>
     </div>
 
-    <div class="page hidden" id="page-simulation" style="display:flex;flex-direction:column;height:calc(100vh - 130px);min-height:500px;">
+    <div class="page hidden" id="page-simulation" style="height:calc(100vh - 130px);min-height:500px;">
       <div class="page-header" style="flex-shrink:0"><div class="page-bar"></div><div class="page-title">&#128640; Simulation Board &mdash; Early Power Schedule Analysis</div></div>
-      <div style="flex:1;min-height:0;border-radius:8px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.15);border:1px solid rgba(0,200,255,0.15);background:#0d1a2b">
+      <div style="flex:1;min-height:0;border-radius:8px;overflow:hidden;box-shadow:0 1px 10px rgba(0,0,0,0.05);border:1px solid var(--border);background:#ffffff">
         <iframe
           id="simulationFrame"
           src="http://localhost:8501"
@@ -452,7 +468,7 @@
   .sidebar,.top-header,.kpi-row,.de-toolbar,.jm-top-row,.de-pagination,.page:not(.page-print-active){display:none!important;}
   .main-area{margin-left:0!important;} .page-body{padding:0!important;}
   .table-wrap{max-height:none!important;overflow:visible!important;}
-  .data-table th{background:#1a2b4a!important;color:#fff!important;font-size:9px!important;padding:4px 6px!important;}
+  .data-table th{background:#f8fafc!important;color:#0f172a!important;font-size:9px!important;padding:4px 6px!important;border:1px solid #ccc!important;}
   .data-table td{color:#000!important;background:#fff!important;font-size:9px!important;padding:3px 6px!important;border-bottom:1px solid #ccc!important;}
   .btn-save-row,.btn-clear-row{display:none!important;}
   .cell-input{border:none!important;color:#000!important;background:transparent!important;width:auto!important;}
@@ -462,21 +478,27 @@
 
 <!-- Modal: Add Support Item -->
 <div id="addSMModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;width:440px;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
-    <h3 style="margin-top:0;margin-bottom:14px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Support Item</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+  <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+    <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Support Item</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><input type="text" id="sm-new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Unit</label><br><input type="text" id="sm-new-unit" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="sm-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Area</label><br><input type="text" id="sm-new-area" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Sub Area</label><br><input type="text" id="sm-new-subarea" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Support Drawing</label><br><input type="text" id="sm-new-support_drawing" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Revision</label><br><input type="text" id="sm-new-revision" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">ISO Drawing</label><br><input type="text" id="sm-new-iso" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Support No</label><br><input type="text" id="sm-new-support_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Remark</label><br><input type="text" id="sm-new-remark" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Line No</label><br><input type="text" id="sm-new-line_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder</label><br><input type="text" id="sm-new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
     </div>
-    <div style="margin-top:18px;text-align:right;">
+    <div style="margin-top:20px;text-align:right;">
       <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeSMModal()">Cancel</button>
-      <button class="btn-primary" style="background:#2563eb;" onclick="submitSMItem()">Save</button>
+      <button class="btn-primary" style="background:#2563eb;" onclick="submitSMItem()">Save Support</button>
     </div>
   </div>
 </div>
+
 
 <!-- Modal: Add Test Package -->
 <div id="addTPModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
@@ -511,7 +533,7 @@
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">S/F</label><br><select id="new-sf" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="S">S - Shop</option><option value="F">F - Field</option></select></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Joint No</label><br><input type="text" id="new-joint_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder ID</label><br><input type="text" id="new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. W001, W002" title="Use comma for multiple welders"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><select id="new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="">Select Phase</option><option value="EP">EP</option><option value="Normal">Normal</option></select></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><select id="new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="">Select Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select></div>
     </div>
     <div style="margin-top:20px;text-align:right;">
       <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeAddJointModal()">Cancel</button>
@@ -525,6 +547,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=19.7"></script>
+<script src="/static/js/dashboard.js?v=3.0"></script>
 </body>
 </html>

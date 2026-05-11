@@ -10,8 +10,8 @@ ALTER TABLE IF EXISTS public.dwg_support SET SCHEMA construction;
 ALTER TABLE IF EXISTS public.dwg_valve SET SCHEMA construction;
 ALTER TABLE IF EXISTS public.joint_master SET SCHEMA construction;
 ALTER TABLE IF EXISTS public.plan_master SET SCHEMA construction;
-ALTER TABLE IF EXISTS public.week_plan_items SET SCHEMA construction;
-ALTER TABLE IF EXISTS public.week_schedule SET SCHEMA construction;
+ALTER TABLE IF EXISTS public.support_master SET SCHEMA construction;
+ALTER TABLE IF EXISTS public.test_package_master SET SCHEMA construction;
 
 -- Note: You may also need to update or move views and RPC functions to the construction schema.
 -- Example for a view:

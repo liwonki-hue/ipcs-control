@@ -144,17 +144,27 @@ BEGIN
 
     -- Weekly actuals
     SELECT json_agg(t) INTO act_data FROM (
-        SELECT w.week_no, SUM(j.size_inch) as completed_di
+        SELECT 
+            w.week_no, 
+            w.week_start_date,
+            w.week_end_date,
+            SUM(j.size_inch) as completed_di,
+            SUM(CASE WHEN j.sf = 'S' OR j.sf ILIKE '%FAB%' THEN j.size_inch ELSE 0 END) as fab_di,
+            SUM(CASE WHEN j.sf = 'F' OR j.sf ILIKE '%ERE%' OR j.sf ILIKE '%FIELD%' THEN j.size_inch ELSE 0 END) as erect_di
         FROM construction.joint_master j
         JOIN construction.week_schedule w ON j.date_completed::date >= w.week_start_date::date 
                                          AND j.date_completed::date <= w.week_end_date::date
         WHERE j.date_completed IS NOT NULL
-        GROUP BY w.week_no
+        GROUP BY w.week_no, w.week_start_date, w.week_end_date
     ) t;
 
     -- EP Weekly actuals
     SELECT json_agg(t) INTO ep_act_data FROM (
-        SELECT w.week_no, SUM(j.size_inch) as completed_di
+        SELECT 
+            w.week_no, 
+            SUM(j.size_inch) as completed_di,
+            SUM(CASE WHEN j.sf = 'S' OR j.sf ILIKE '%FAB%' THEN j.size_inch ELSE 0 END) as fab_di,
+            SUM(CASE WHEN j.sf = 'F' OR j.sf ILIKE '%ERE%' OR j.sf ILIKE '%FIELD%' THEN j.size_inch ELSE 0 END) as erect_di
         FROM construction.joint_master j
         JOIN construction.week_schedule w ON j.date_completed::date >= w.week_start_date::date 
                                          AND j.date_completed::date <= w.week_end_date::date
@@ -182,31 +192,251 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- 4. 용접사 실적 요약 (Welder Summary) 최적화
-CREATE OR REPLACE FUNCTION construction.get_welder_summary_v2(
+-- 4. 용접사 실적 요약 (Welder Summary) v4
+-- 공동 용접(IWP-001/ IWP-002) 처리: 참여 용접사 수만큼 DI/Joint를 균등 분할
+CREATE OR REPLACE FUNCTION construction.get_welder_stats_v4(
     f_date_from text DEFAULT NULL,
     f_date_to text DEFAULT NULL,
     f_system text DEFAULT NULL,
     f_welder text DEFAULT NULL
 )
-RETURNS TABLE (
-    welder text,
-    total_di numeric,
-    joint_count bigint
-) AS $$
+RETURNS json AS $$
+DECLARE
+    stats_data      json;
+    ranking_data    json;
+    weekly_data     json;
+    monthly_data    json;
+    last_week_data  json;
+    last_month_data json;
 BEGIN
-    RETURN QUERY
-    SELECT 
-        j.welder,
-        SUM(COALESCE(j.size_inch, 0)) as total_di,
-        COUNT(*) as joint_count
-    FROM construction.joint_master j
-    WHERE j.date_completed IS NOT NULL
-      AND (f_date_from IS NULL OR f_date_from = '' OR j.date_completed >= f_date_from::date)
-      AND (f_date_to IS NULL OR f_date_to = '' OR j.date_completed <= f_date_to::date)
-      AND (f_system IS NULL OR f_system = '' OR j.system = f_system)
-      AND (f_welder IS NULL OR f_welder = '' OR j.welder = f_welder)
-      AND j.welder IS NOT NULL AND j.welder <> ''
-    GROUP BY j.welder;
+    /*
+     * 핵심 로직: CROSS JOIN LATERAL + unnest 로 공동 용접 분리
+     *   welder = 'IWP-001/ IWP-002'  →  IWP-001 / IWP-002 각각
+     *   ind_di    = size_inch / 참여 인원수  (DI 50% 균등 분할)
+     *   ind_joint = 1.0       / 참여 인원수  (Joint 50% 균등 분할)
+     *
+     * 반환 구조:
+     *   stats      : active_welders, total_joints, total_di, avg_di
+     *   ranking    : welder, joints, total_di, working_days, avg_di_per_day
+     *   weekly     : week_no, week_label, total_di, joints, active_welders, avg_di_per_welder
+     *   monthly    : month, total_di, joints, active_welders, avg_di_per_welder
+     *   last_week  : welder, joints, total_di, working_days, avg_di_per_day, week_label
+     *   last_month : welder, joints, total_di, working_days, avg_di_per_day, month
+     */
+
+    -- ── 공통 LATERAL 서브쿼리 정의 (매크로처럼 반복 사용) ─────────────────────
+
+    -- 1. 전체 통계
+    SELECT json_build_object(
+        'active_welders', COUNT(DISTINCT ws.ind_welder),
+        'total_joints',   COUNT(DISTINCT jm.id),
+        'total_di',       ROUND(SUM(ws.ind_di)::numeric, 2),
+        'avg_di',         CASE WHEN COUNT(DISTINCT ws.ind_welder) > 0
+                               THEN ROUND((SUM(ws.ind_di) / COUNT(DISTINCT ws.ind_welder))::numeric, 2)
+                               ELSE 0 END
+    ) INTO stats_data
+    FROM construction.joint_master jm
+    CROSS JOIN LATERAL (
+        SELECT TRIM(w_raw) AS ind_welder,
+               COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+               1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+        FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+    ) ws
+    WHERE jm.date_completed IS NOT NULL
+      AND (f_date_from IS NULL OR f_date_from = '' OR jm.date_completed >= f_date_from::date)
+      AND (f_date_to   IS NULL OR f_date_to   = '' OR jm.date_completed <= f_date_to::date)
+      AND (f_system    IS NULL OR f_system    = '' OR jm.system = f_system)
+      AND (f_welder    IS NULL OR f_welder    = '' OR ws.ind_welder = f_welder)
+      AND jm.welder IS NOT NULL AND jm.welder <> '';
+
+    -- 2. 용접사 랭킹 Top 50
+    --    working_days = 실제 작업 일수(일별 unique date)
+    --    avg_di_per_day = 해당 용접사 분할 DI / working_days
+    SELECT json_agg(t) INTO ranking_data FROM (
+        SELECT
+            ws.ind_welder                                                                 AS welder,
+            ROUND(SUM(ws.ind_joint)::numeric, 1)                                          AS joints,
+            ROUND(SUM(ws.ind_di)::numeric, 2)                                             AS total_di,
+            COUNT(DISTINCT jm.date_completed)                                              AS working_days,
+            CASE WHEN COUNT(DISTINCT jm.date_completed) > 0
+                 THEN ROUND((SUM(ws.ind_di) / COUNT(DISTINCT jm.date_completed))::numeric, 2)
+                 ELSE 0 END                                                               AS avg_di_per_day
+        FROM construction.joint_master jm
+        CROSS JOIN LATERAL (
+            SELECT TRIM(w_raw) AS ind_welder,
+                   COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+                   1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+            FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+        ) ws
+        WHERE jm.date_completed IS NOT NULL
+          AND (f_date_from IS NULL OR f_date_from = '' OR jm.date_completed >= f_date_from::date)
+          AND (f_date_to   IS NULL OR f_date_to   = '' OR jm.date_completed <= f_date_to::date)
+          AND (f_system    IS NULL OR f_system    = '' OR jm.system = f_system)
+          AND (f_welder    IS NULL OR f_welder    = '' OR ws.ind_welder = f_welder)
+          AND jm.welder IS NOT NULL AND jm.welder <> ''
+        GROUP BY ws.ind_welder
+        ORDER BY total_di DESC
+        LIMIT 50
+    ) t;
+
+    -- 3. 주간 생산성
+    --    avg_di_per_welder = 해당 주 각 용접사의 (DI / working_days) 평균
+    --    ① 내부: 주 × 용접사별 집계 → welder_avg_di_day 계산
+    --    ② 외부: 주별로 AVG(welder_avg_di_day)
+    SELECT json_agg(t ORDER BY t.week_no) INTO weekly_data FROM (
+        SELECT
+            ww.week_no                                                                     AS week_no,
+            'W' || ww.week_no                                                              AS week_label,
+            ROUND(SUM(ww.welder_di)::numeric, 2)                                           AS total_di,
+            ROUND(SUM(ww.welder_joints)::numeric, 1)                                       AS joints,
+            COUNT(*)                                                                        AS active_welders,
+            ROUND(AVG(ww.welder_avg_di_day)::numeric, 2)                                   AS avg_di_per_welder
+        FROM (
+            SELECT
+                sch.week_no,
+                ws.ind_welder,
+                SUM(ws.ind_di)                                                             AS welder_di,
+                SUM(ws.ind_joint)                                                          AS welder_joints,
+                CASE WHEN COUNT(DISTINCT jm.date_completed) > 0
+                     THEN SUM(ws.ind_di) / COUNT(DISTINCT jm.date_completed)
+                     ELSE 0 END                                                            AS welder_avg_di_day
+            FROM construction.joint_master jm
+            JOIN construction.week_schedule sch
+                ON jm.date_completed::date >= sch.week_start_date::date
+                AND jm.date_completed::date <= sch.week_end_date::date
+            CROSS JOIN LATERAL (
+                SELECT TRIM(w_raw) AS ind_welder,
+                       COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+                       1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+                FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+            ) ws
+            WHERE jm.date_completed IS NOT NULL
+              AND (f_date_from IS NULL OR f_date_from = '' OR jm.date_completed >= f_date_from::date)
+              AND (f_date_to   IS NULL OR f_date_to   = '' OR jm.date_completed <= f_date_to::date)
+              AND (f_system    IS NULL OR f_system    = '' OR jm.system = f_system)
+              AND (f_welder    IS NULL OR f_welder    = '' OR ws.ind_welder = f_welder)
+              AND jm.welder IS NOT NULL AND jm.welder <> ''
+            GROUP BY sch.week_no, ws.ind_welder
+        ) ww
+        GROUP BY ww.week_no
+    ) t;
+
+    -- 4. 월간 생산성
+    --    avg_di_per_welder = 해당 월 각 용접사의 (DI / working_days) 평균
+    SELECT json_agg(t ORDER BY t.month) INTO monthly_data FROM (
+        SELECT
+            wm.month                                                                       AS month,
+            ROUND(SUM(wm.welder_di)::numeric, 2)                                           AS total_di,
+            ROUND(SUM(wm.welder_joints)::numeric, 1)                                       AS joints,
+            COUNT(*)                                                                        AS active_welders,
+            ROUND(AVG(wm.welder_avg_di_day)::numeric, 2)                                   AS avg_di_per_welder
+        FROM (
+            SELECT
+                TO_CHAR(jm.date_completed, 'YYYY-MM')                                     AS month,
+                ws.ind_welder,
+                SUM(ws.ind_di)                                                             AS welder_di,
+                SUM(ws.ind_joint)                                                          AS welder_joints,
+                CASE WHEN COUNT(DISTINCT jm.date_completed) > 0
+                     THEN SUM(ws.ind_di) / COUNT(DISTINCT jm.date_completed)
+                     ELSE 0 END                                                            AS welder_avg_di_day
+            FROM construction.joint_master jm
+            CROSS JOIN LATERAL (
+                SELECT TRIM(w_raw) AS ind_welder,
+                       COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+                       1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+                FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+            ) ws
+            WHERE jm.date_completed IS NOT NULL
+              AND (f_date_from IS NULL OR f_date_from = '' OR jm.date_completed >= f_date_from::date)
+              AND (f_date_to   IS NULL OR f_date_to   = '' OR jm.date_completed <= f_date_to::date)
+              AND (f_system    IS NULL OR f_system    = '' OR jm.system = f_system)
+              AND (f_welder    IS NULL OR f_welder    = '' OR ws.ind_welder = f_welder)
+              AND jm.welder IS NOT NULL AND jm.welder <> ''
+            GROUP BY TO_CHAR(jm.date_completed, 'YYYY-MM'), ws.ind_welder
+        ) wm
+        GROUP BY wm.month
+    ) t;
+
+    -- 5. 마지막 활성 주의 용접사 목록 (last active week welders)
+    --    week_schedule 기준 가장 최근 week_no 에 작업한 용접사
+    SELECT json_agg(t) INTO last_week_data FROM (
+        SELECT
+            ws.ind_welder                                                                 AS welder,
+            ROUND(SUM(ws.ind_joint)::numeric, 1)                                          AS joints,
+            ROUND(SUM(ws.ind_di)::numeric, 2)                                             AS total_di,
+            COUNT(DISTINCT jm.date_completed)                                              AS working_days,
+            CASE WHEN COUNT(DISTINCT jm.date_completed) > 0
+                 THEN ROUND((SUM(ws.ind_di) / COUNT(DISTINCT jm.date_completed))::numeric, 2)
+                 ELSE 0 END                                                               AS avg_di_per_day,
+            'W' || sch.week_no                                                             AS week_label
+        FROM construction.joint_master jm
+        JOIN construction.week_schedule sch
+            ON jm.date_completed::date >= sch.week_start_date::date
+            AND jm.date_completed::date <= sch.week_end_date::date
+        CROSS JOIN LATERAL (
+            SELECT TRIM(w_raw) AS ind_welder,
+                   COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+                   1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+            FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+        ) ws
+        WHERE jm.date_completed IS NOT NULL
+          AND jm.welder IS NOT NULL AND jm.welder <> ''
+          AND (f_system IS NULL OR f_system = '' OR jm.system = f_system)
+          AND (f_welder IS NULL OR f_welder = '' OR ws.ind_welder = f_welder)
+          AND sch.week_no = (
+              SELECT MAX(s2.week_no)
+              FROM construction.joint_master jm2
+              JOIN construction.week_schedule s2
+                  ON jm2.date_completed::date >= s2.week_start_date::date
+                  AND jm2.date_completed::date <= s2.week_end_date::date
+              WHERE jm2.date_completed IS NOT NULL
+                AND jm2.welder IS NOT NULL AND jm2.welder <> ''
+                AND (f_system IS NULL OR f_system = '' OR jm2.system = f_system)
+          )
+        GROUP BY ws.ind_welder, sch.week_no
+        ORDER BY total_di DESC
+    ) t;
+
+    -- 6. 마지막 활성 달의 용접사 목록 (last active month welders)
+    SELECT json_agg(t) INTO last_month_data FROM (
+        SELECT
+            ws.ind_welder                                                                 AS welder,
+            ROUND(SUM(ws.ind_joint)::numeric, 1)                                          AS joints,
+            ROUND(SUM(ws.ind_di)::numeric, 2)                                             AS total_di,
+            COUNT(DISTINCT jm.date_completed)                                              AS working_days,
+            CASE WHEN COUNT(DISTINCT jm.date_completed) > 0
+                 THEN ROUND((SUM(ws.ind_di) / COUNT(DISTINCT jm.date_completed))::numeric, 2)
+                 ELSE 0 END                                                               AS avg_di_per_day,
+            TO_CHAR(jm.date_completed, 'YYYY-MM')                                         AS month
+        FROM construction.joint_master jm
+        CROSS JOIN LATERAL (
+            SELECT TRIM(w_raw) AS ind_welder,
+                   COALESCE(jm.size_inch, 0) / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_di,
+                   1.0 / GREATEST(array_length(string_to_array(jm.welder, '/'), 1), 1)::numeric AS ind_joint
+            FROM unnest(string_to_array(jm.welder, '/')) AS w_raw
+        ) ws
+        WHERE jm.date_completed IS NOT NULL
+          AND jm.welder IS NOT NULL AND jm.welder <> ''
+          AND (f_system IS NULL OR f_system = '' OR jm.system = f_system)
+          AND (f_welder IS NULL OR f_welder = '' OR ws.ind_welder = f_welder)
+          AND TO_CHAR(jm.date_completed, 'YYYY-MM') = (
+              SELECT TO_CHAR(MAX(jm3.date_completed), 'YYYY-MM')
+              FROM construction.joint_master jm3
+              WHERE jm3.date_completed IS NOT NULL
+                AND jm3.welder IS NOT NULL AND jm3.welder <> ''
+                AND (f_system IS NULL OR f_system = '' OR jm3.system = f_system)
+          )
+        GROUP BY ws.ind_welder, TO_CHAR(jm.date_completed, 'YYYY-MM')
+        ORDER BY total_di DESC
+    ) t;
+
+    RETURN json_build_object(
+        'stats',      stats_data,
+        'ranking',    COALESCE(ranking_data,    '[]'::json),
+        'weekly',     COALESCE(weekly_data,     '[]'::json),
+        'monthly',    COALESCE(monthly_data,    '[]'::json),
+        'last_week',  COALESCE(last_week_data,  '[]'::json),
+        'last_month', COALESCE(last_month_data, '[]'::json)
+    );
 END;
 $$ LANGUAGE plpgsql;
