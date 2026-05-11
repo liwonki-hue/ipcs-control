@@ -59,6 +59,15 @@
     <div class="kpi-card" id="kpi-week-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="kpi-week">&mdash;</div><div class="kpi-sub" id="kpi-week-sub">&mdash;</div></div>
     <div class="kpi-card" style="border-top-color:var(--orange)"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="kpi-welder-perf" style="color:var(--orange)">&mdash;</div><div class="kpi-sub" id="kpi-welder-sub">AVG DI / Day</div></div>
   </div>
+  <!-- EP-specific KPI row (shown only on Early Power page) -->
+  <div class="kpi-row" id="epKpiRow" style="display:none">
+    <div class="kpi-card" style="border-top-color:#7c3aed"><div class="kpi-label">EP Readiness</div><div class="kpi-value" id="ep-kpi-readiness" style="color:#7c3aed">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="ep-kpi-readiness-bar" style="width:0%;background:#7c3aed"></div></div><div class="kpi-sub">PIPING 70% &middot; SUP 20% &middot; TEST 10%</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">PIPING (D/I)</div><div class="kpi-value" id="ep-kpi-piping">&mdash;</div><div class="kpi-sub" id="ep-kpi-piping-sub">&mdash;</div></div>
+    <div class="kpi-card cyan"><div class="kpi-label">Support</div><div class="kpi-value cyan" id="ep-kpi-support">&mdash;</div><div class="kpi-sub" id="ep-kpi-support-sub">&mdash;</div></div>
+    <div class="kpi-card yellow"><div class="kpi-label">Test Package</div><div class="kpi-value yellow" id="ep-kpi-testpkg">&mdash;</div><div class="kpi-sub" id="ep-kpi-testpkg-sub">&mdash;</div></div>
+    <div class="kpi-card" id="ep-kpi-week-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="ep-kpi-week">&mdash;</div><div class="kpi-sub" id="ep-kpi-week-sub">&mdash;</div></div>
+    <div class="kpi-card" style="border-top-color:var(--orange)"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="ep-kpi-welder" style="color:var(--orange)">&mdash;</div><div class="kpi-sub" id="ep-kpi-welder-sub">AVG DI / Day</div></div>
+  </div>
 
   <div class="page-body">
     <div class="page hidden" id="page-overview">
@@ -77,27 +86,69 @@
     </div>
 
     <div class="page hidden" id="page-early_power">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview</div></div>
-      <div class="panel" style="margin-bottom:14px; background:linear-gradient(90deg, #f0f9ff, #ffffff); border-left:4px solid #f59e0b">
-        <div style="padding:10px; display:flex; align-items:center; gap:20px;">
-          <div style="font-size:36px; font-weight:700; color:#f59e0b" id="epReadinessPct">0%</div>
-          <div>
-            <div style="font-size:16px; font-weight:600; margin-bottom:4px; color:var(--text)">Event Readiness</div>
-            <div style="font-size:13px; color:var(--text-dim)" id="epReadinessText">Analyzing bottlenecks...</div>
-          </div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview<span style="font-size:12px;color:var(--text-dim);font-weight:400;margin-left:14px">Target Date: 2026-12-30</span></div></div>
+      <!-- Top row: Gauge + S-Curve -->
+      <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:12px">
+        <div>
+          <div class="panel"><div class="panel-title" style="margin-bottom:4px">EP DI Progress</div><div class="gauge-wrap" style="padding:2px 0"><svg viewBox="0 0 200 110" class="gauge-svg" style="max-height:86px"><path d="M16,104 A84,84,0,0,1,184,104" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,104 A84,84,0,0,1,184,104" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="86" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="103" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats" style="margin-top:2px"></div></div>
+        </div>
+        <div>
+          <div class="panel"><div class="panel-title">EP S-Curve &mdash; Target vs Actual (until 2026-12-30)</div><div style="position:relative;height:220px"><canvas id="epScurveChart"></canvas></div></div>
         </div>
       </div>
-      <div class="grid-3">
-        <div class="col">
-          <div class="panel"><div class="panel-title">EP DI Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats"></div></div>
-          <div class="panel"><div class="panel-title">EP By Discipline</div><div id="epDisciplineList"></div></div>
+      <!-- Bottom: 3-column table grid (like Weekly Productivity) -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start">
+        <!-- Col 1: EP System table -->
+        <div class="panel">
+          <div class="panel-title">Progress by EP System</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:30%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SYSTEM</th>
+                <th>TOTAL DI</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epSysTableBody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="col col-wide">
-          <div class="panel"><div class="panel-title">EP S-Curve &mdash; Target vs Actual</div><div style="position:relative;height:220px"><canvas id="epScurveChart"></canvas></div></div>
-          <div class="panel"><div class="panel-title">Progress by EP Unit</div><div id="epUnitOverview"></div></div>
-          <div class="panel"><div class="panel-title">Progress by EP System</div><div id="epSysOverview" class="scroll-list" style="max-height:220px"></div></div>
+        <!-- Col 2: EP Sub Area (1) -->
+        <div class="panel">
+          <div class="panel-title">Progress by EP Sub Area (1)</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SUB AREA</th>
+                <th>TOTAL DI</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epAreaTableBody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="col"><div class="panel"><div class="panel-title">Progress by EP Area</div><div id="epAreaOverview"></div></div></div>
+        <!-- Col 3: EP Sub Area (2) + TOTAL -->
+        <div class="panel">
+          <div class="panel-title">Progress by EP Sub Area (2)</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SUB AREA</th>
+                <th>TOTAL DI</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epAreaTableBody2"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 

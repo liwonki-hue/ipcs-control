@@ -88,10 +88,11 @@ function _updateWelderKpiBar(wd) {
     const ranking = wd?.ranking || [];
     if (!ranking.length) return;
     const avg = ranking.reduce((s, r) => s + (r.avg_di_per_day || 0), 0) / ranking.length;
-    const el  = document.getElementById("kpi-welder-perf");
-    const sub = document.getElementById("kpi-welder-sub");
-    if (el)  el.textContent  = fmtNum(avg, 2);
-    if (sub) sub.textContent = `${wd.stats?.active_welders || 0} welders · AVG DI/Day`;
+    const avgTxt = fmtNum(avg, 2);
+    const subTxt = `${wd.stats?.active_welders || 0} welders · AVG DI/Day`;
+    // Update both project KPI bar and EP KPI row
+    ["kpi-welder-perf",  "ep-kpi-welder"]     .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = avgTxt; });
+    ["kpi-welder-sub",   "ep-kpi-welder-sub"]  .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = subTxt; });
 }
 
 function showLoader(show, msg) {
@@ -144,10 +145,14 @@ function navigate(page) {
         
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
-        // Hide KPI row for Data Input and Reports to maximize workspace
+        // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
         const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "simulation"];
+        const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
-            kpiRow.style.display = dataInputPages.includes(page) ? "none" : "grid";
+            kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
+        }
+        if (epKpiRow) {
+            epKpiRow.style.display = page === "early_power" ? "grid" : "none";
         }
 
         // Simulation page specific (already handled but reinforced)
@@ -324,9 +329,10 @@ async function renderOverview(kpi, wkData, units) {
         disc.innerHTML = [["Fabrication (S)",d.fab_pct,"var(--accent)"],["Erection (F)",d.erect_pct,"var(--green)"]]
             .map(([n,p,c]) => `<div class="disc-row"><div class="disc-head"><span class="disc-name">${n}</span><span class="disc-pct" style="color:${c}">${p}%</span></div><div class="disc-track"><div class="disc-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`).join("");
 
-        const wkView = wkData.slice(0, 60);
         const indMap = {};
         const actWks = wkData.filter(w => w.completed_di > 0);
+        const lastActIdx = wkData.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
+        const wkView = lastActIdx >= 0 ? wkData.slice(0, lastActIdx + 1) : wkData.slice(0, 10);
         actWks.forEach(w => { indMap[w.week_no] = w.completed_di; });
 
         destroyChart("scurveChart");
@@ -368,36 +374,56 @@ async function renderOverview(kpi, wkData, units) {
 // ================================================================================
 async function loadEarlyPower() {
     const data = await getDashData();
-    renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly);
+    renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly, data.kpi);
 }
 
-async function renderEarlyPower(d, units, systems, areas, weekly) {
+async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
     if(!d) return;
     try {
         const d_total_di = d.total_di || 0;
         const d_completed_di = d.completed_di || 0;
         const pct = d_total_di > 0 ? Math.round((d_completed_di / d_total_di) * 100) : 0;
-        
-        let bottleneck = "";
-        if(systems && systems.length > 0) {
-            let maxRem = -1;
-            let btnSys = "";
-            for(const s of systems) {
-                const rem = (s.total_di || 0) - (s.completed_di || 0);
-                if(rem > maxRem && rem > 0) {
-                    maxRem = rem;
-                    btnSys = s.system;
-                }
-            }
-            if(btnSys) bottleneck = `delayed by System ${btnSys} (${fmtNum(maxRem, 0)} DI remaining)`;
-            else bottleneck = "All EP systems completed!";
-        }
-        
-        const rdPct = document.getElementById("epReadinessPct");
-        const rdTxt = document.getElementById("epReadinessText");
-        if(rdPct) rdPct.textContent = `${pct}%`;
-        if(rdTxt) rdTxt.textContent = `Early Power is ${pct}% ready, ${bottleneck}`;
 
+        // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
+        const support_pct  = kpi ? Math.round(kpi.support_pct  || 0) : 0;
+        const testpkg_pct  = kpi ? Math.round(kpi.testpkg_pct  || 0) : 0;
+        const support_comp = kpi ? (kpi.completed_supports || 0) : 0;
+        const support_tot  = kpi ? (kpi.total_supports    || 0) : 0;
+        const test_comp    = kpi ? (kpi.completed_testpkg  || 0) : 0;
+        const test_tot     = kpi ? (kpi.total_testpkg      || 0) : 0;
+        const readiness_pct = Math.round(pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1);
+
+        const _setKpi = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+        const _setCol = (id, col) => { const el=document.getElementById(id); if(el) el.style.color=col; };
+
+        _setKpi("ep-kpi-readiness", `${readiness_pct}%`);
+        _setCol("ep-kpi-readiness", pctColor(readiness_pct));
+        const rBar = document.getElementById("ep-kpi-readiness-bar");
+        if(rBar) { rBar.style.width = `${Math.min(readiness_pct,100)}%`; rBar.style.background = pctColor(readiness_pct); }
+
+        _setKpi("ep-kpi-piping", `${pct}%`);
+        _setCol("ep-kpi-piping", pctColor(pct));
+        _setKpi("ep-kpi-piping-sub", `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)} DI · ${(d.completed_joints||0).toLocaleString()} joints`);
+
+        _setKpi("ep-kpi-support", `${support_pct}%`);
+        _setCol("ep-kpi-support", pctColor(support_pct));
+        _setKpi("ep-kpi-support-sub", support_tot > 0 ? `${fmtNum(support_comp,0)} / ${fmtNum(support_tot,0)}` : "—");
+
+        _setKpi("ep-kpi-testpkg", `${testpkg_pct}%`);
+        _setCol("ep-kpi-testpkg", pctColor(testpkg_pct));
+        _setKpi("ep-kpi-testpkg-sub", test_tot > 0 ? `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}` : "—");
+
+        // EP Week Actual = last week with EP completed DI (from ep_weekly)
+        const actEpWks = (weekly || []).filter(w => w.completed_di > 0);
+        const lastEpWk = actEpWks.length ? actEpWks[actEpWks.length - 1] : null;
+        if(lastEpWk) {
+            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 0));
+            _setKpi("ep-kpi-week-sub", `W${lastEpWk.week_no} · EP Piping D/I`);
+        }
+        // Avg Welder Performance is kept in sync by _updateWelderKpiBar (runs on startup + loadWelder)
+        if(_welderData) _updateWelderKpiBar(_welderData);
+
+        // ── Gauge ─────────────────────────────────────────────────────
         const r = 84, circ = Math.PI * r;
         const offset = circ * (1 - Math.min(pct/100,1));
         const gc = pct>=80?"#22d3a1":pct>=50?"#f5c542":"#ff8c42";
@@ -408,60 +434,84 @@ async function renderEarlyPower(d, units, systems, areas, weekly) {
 
         const stats = document.getElementById("epStats");
         if(stats) {
-            stats.innerHTML = [["EP Plan DI",fmtNum(d_total_di,0)],["EP Completed DI",fmtNum(d_completed_di,0)],["EP Remaining DI",fmtNum(Math.max(0, d_total_di - d_completed_di),0)],["EP Completed Joints",`${(d.completed_joints||0).toLocaleString()} / ${(d.total_joints||0).toLocaleString()}`]]
-                .map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+            stats.innerHTML = [
+                ["EP PIPING",       `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)}`],
+                ["EP Support",      `${fmtNum(support_comp,0)} / ${fmtNum(support_tot,0)}`],
+                ["EP Test Package", `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}`]
+            ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
         }
 
-        const disc = document.getElementById("epDisciplineList");
-        if(disc) {
-            const fab_pct = d.fab_total_di > 0 ? Math.round((d.fab_completed_di / d.fab_total_di) * 100) : 0;
-            const erect_pct = d.erect_total_di > 0 ? Math.round((d.erect_completed_di / d.erect_total_di) * 100) : 0;
-            disc.innerHTML = [["Fabrication (S)",fab_pct,"var(--accent)"],["Erection (F)",erect_pct,"var(--green)"]]
-                .map(([n,p,c]) => `<div class="disc-row"><div class="disc-head"><span class="disc-name">${n}</span><span class="disc-pct" style="color:${c}">${p}%</span></div><div class="disc-track"><div class="disc-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`).join("");
-        }
-
-        const uDiv = document.getElementById("epUnitOverview");
-        if(uDiv && units) {
-            uDiv.innerHTML = units.map(u => {
-                const u_pct = u.total_di > 0 ? Math.round((u.completed_di / u.total_di) * 100) : 0;
-                const c = pctColor(u_pct);
-                return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #162032"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px"><div><div style="font-size:13px;font-weight:600">Unit ${u.unit}</div><div style="font-size:10px;color:#7a95b8">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:20px;font-weight:700;color:${c};font-family:'DM Mono',monospace">${u_pct}%</div></div><div style="height:4px;background:#1e2d45;border-radius:2px"><div style="height:100%;width:${Math.min(u_pct,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:#7a95b8;margin-top:3px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
+        // ── Progress tables ────────────────────────────────────────────
+        // allForTotal: optional, provides the full row set for the aggregate row
+        function _epTableRows(rows, nameKey, showTotal, allForTotal) {
+            const totRows = allForTotal || rows;
+            let sumT=0, sumC=0;
+            totRows.forEach(r => { sumT += r.total_di||0; sumC += r.completed_di||0; });
+            const td = "padding:3px 5px;font-size:11px";
+            const rowHtml = rows.map(row => {
+                const tot=row.total_di||0, comp=row.completed_di||0, rem=tot-comp;
+                const p=tot>0?Math.round(comp/tot*100):0, c=pctColor(p);
+                return `<tr>
+                    <td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${row[nameKey]||""}</td>
+                    <td style="${td}">${fmtNum(tot,0)}</td>
+                    <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
+                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
+                    <td style="${td};font-weight:700;color:${c}">${p}%</td>
+                </tr>`;
             }).join("");
+            if(!showTotal) return rowHtml;
+            const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
+            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);font-weight:800;border-top:2px solid var(--border)">
+                <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
+                <td style="${td}">${fmtNum(sumT,0)}</td>
+                <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
+                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
+                <td style="${td};color:${totC};font-weight:800">${totP}%</td>
+            </tr>`;
         }
 
-        const sDiv = document.getElementById("epSysOverview");
-        if(sDiv && systems) {
-            sDiv.innerHTML = systems.map(s => {
-                const s_pct = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
-                const c = pctColor(s_pct);
-                return `<div class="prog-row"><div class="prog-head"><span class="prog-name">${s.system}</span><div class="prog-stats"><span>${fmtNum(s.completed_di,0)} / ${fmtNum(s.total_di,0)} DI</span><span class="prog-pct" style="color:${c}">${s_pct}%</span></div></div><div class="prog-track"><div class="prog-fill" style="width:${Math.min(s_pct,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`;
-            }).join("");
-        }
+        const sysTb = document.getElementById("epSysTableBody");
+        if(sysTb && systems) sysTb.innerHTML = _epTableRows(systems, "system", true);
 
-        const aDiv = document.getElementById("epAreaOverview");
-        if(aDiv && areas) {
-            aDiv.innerHTML = areas.map(a => {
-                const a_pct = a.total_di > 0 ? Math.round((a.completed_di / a.total_di) * 100) : 0;
-                const c = pctColor(a_pct);
-                return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #162032"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px"><div><div style="font-size:13px;font-weight:600">${a.area}</div><div style="font-size:10px;color:#7a95b8">Plan: ${fmtNum(a.total_di,0)} DI</div></div><div style="font-size:20px;font-weight:700;color:${c};font-family:'DM Mono',monospace">${a_pct}%</div></div><div style="height:4px;background:#1e2d45;border-radius:2px"><div style="height:100%;width:${Math.min(a_pct,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:#7a95b8;margin-top:3px;font-family:'DM Mono',monospace">${fmtNum(a.completed_di,0)} / ${fmtNum(a.total_di,0)} DI</div></div>`;
-            }).join("");
+        // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
+        if(areas && areas.length) {
+            const mid = Math.ceil(areas.length / 2);
+            const areaTb  = document.getElementById("epAreaTableBody");
+            const areaTb2 = document.getElementById("epAreaTableBody2");
+            if(areaTb)  areaTb.innerHTML  = _epTableRows(areas.slice(0, mid), "sub_area", false);
+            if(areaTb2) areaTb2.innerHTML = _epTableRows(areas.slice(mid),    "sub_area", true, areas);
         }
 
         if(weekly && weekly.length > 0) {
-            const wkView = weekly.slice(0, 60);
+            // EP Target = week 40 (2026-12-30). Show all weeks 1-40 on x-axis.
+            const EP_TARGET_WK = 40;
+            const wkView = weekly.slice(0, EP_TARGET_WK); // weeks 1..40
+            const lastEpActIdx = wkView.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
+            // Cumulative actual: show up to last active week, null after
+            const cumulData = wkView.map((w, i) => i <= lastEpActIdx ? w.cumul_actual : null);
             destroyChart("epScurveChart");
             const ctx = document.getElementById("epScurveChart")?.getContext("2d");
             if(ctx) {
                 charts["epScurveChart"] = new Chart(ctx, {
                     type: "bar",
-                    data: { labels: wkView.map(w=>w.week_label), datasets: [
-                        { label:"Target DI", type:"line", data:wkView.map(w=>d_total_di), borderColor:"rgba(255,82,82,0.6)", borderDash:[5,5], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1 },
-                        { label:"Cumulative Actual", type:"line", data:wkView.map(w=>w.cumul_actual), borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:0, tension:0.1, order:2 },
-                        { label:"Actual Work DI", type:"bar", data:wkView.map(w=>w.completed_di>0?w.completed_di:null), backgroundColor:"rgba(37,99,235,0.6)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.7, order:3, datalabels:{display:true,align:'top',anchor:'end',offset:2,color:'#2563eb',font:{size:9,weight:'600'},formatter:(v)=>v>0?fmtNum(v,0):''} }
+                    data: { labels: wkView.map(w=>`W${w.week_no}`), datasets: [
+                        { label:"EP Target DI",    type:"line", yAxisID:"yL", data:wkView.map(()=>d_total_di), borderColor:"rgba(255,82,82,0.55)", borderDash:[4,4], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1, datalabels:{display:false} },
+                        { label:"Cumulative Actual",type:"line", yAxisID:"yL", data:cumulData, borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:3, pointBackgroundColor:"#22d3a1", pointHoverRadius:5, tension:0.1, order:2, spanGaps:false, datalabels:{display:false} },
+                        { label:"Weekly DI",       type:"bar",  yAxisID:"yR", data:wkView.map(w=>w.completed_di>0?w.completed_di:null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"rgba(37,99,235,0.8)", borderWidth:1, borderRadius:2, barPercentage:0.8, categoryPercentage:0.9, order:3,
+                          datalabels:{display:true, align:"end", anchor:"end", offset:2, clamp:false, color:"#5b8def", font:{size:8,weight:"600"}, formatter:(v)=>v?fmtNum(v,0):""} }
                     ]},
-                    options: { ...chartOpts("Cumulative DI (Lines) / Weekly DI (Bars)"),
-                        scales: { ...chartOpts("").scales, x:{...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){const label=this.getLabelForValue(val);const wkNum=parseInt(label.replace("W",""));if(wkNum===1||wkNum%5===0)return label;return "";}}}, y:{...chartOpts("").scales.y,beginAtZero:true} },
-                        plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
+                    options: { ...chartOpts(""),
+                        scales: {
+                            x:{...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks, maxRotation:0, autoSkip:false,
+                                callback:function(_val,idx){ const wn=idx+1; return (wn===1||wn%5===0)?`W${wn}`:""; }}},
+                            yL:{type:"linear", position:"left",  beginAtZero:true, grid:{color:"rgba(255,255,255,0.05)"}, ticks:{color:"#4a6080",font:{size:9}}, title:{display:true,text:"Cumulative DI",color:"#4a6080",font:{size:9}}},
+                            yR:{type:"linear", position:"right", beginAtZero:true, grid:{display:false}, ticks:{color:"#5b8def",font:{size:9}}, title:{display:true,text:"Weekly DI",color:"#5b8def",font:{size:9}}}
+                        },
+                        layout:{padding:{top:18}},
+                        plugins:{...chartOpts("").plugins,
+                            legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:10,padding:8,font:{size:10}}},
+                            tooltip:{...chartOpts("").plugins?.tooltip, callbacks:{label:(ctx)=>`${ctx.dataset.label}: ${fmtNum(ctx.parsed.y,0)}`}}},
+                        animation:{duration:400} }
                 });
             }
         }

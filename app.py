@@ -334,6 +334,32 @@ def _build():
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
+        # ── EP system/area breakdown (direct query) ──
+        try:
+            ep_r = sb.schema("construction").table("joint_master") \
+                     .select("system, sub_area, di, completed").eq("phase", "EP").execute()
+            ep_rows = ep_r.data or []
+            del ep_r
+            ep_sys_map, ep_area_map = {}, {}
+            for row in ep_rows:
+                sys_k = row.get("system") or "Unknown"
+                sub_k = row.get("sub_area") or "Unknown"
+                di    = float(row.get("di") or 0)
+                comp  = bool(row.get("completed"))
+                if sys_k not in ep_sys_map:
+                    ep_sys_map[sys_k] = {"system": sys_k, "total_di": 0.0, "completed_di": 0.0}
+                ep_sys_map[sys_k]["total_di"] += di
+                if comp: ep_sys_map[sys_k]["completed_di"] += di
+                if sub_k not in ep_area_map:
+                    ep_area_map[sub_k] = {"sub_area": sub_k, "total_di": 0.0, "completed_di": 0.0}
+                ep_area_map[sub_k]["total_di"] += di
+                if comp: ep_area_map[sub_k]["completed_di"] += di
+            raw["ep_sys"]  = sorted(ep_sys_map.values(),  key=lambda x: x["total_di"], reverse=True)
+            raw["ep_area"] = sorted(ep_area_map.values(), key=lambda x: x["total_di"], reverse=True)
+            del ep_rows, ep_sys_map, ep_area_map
+        except Exception as ep_e:
+            print(f"[cache] EP breakdown error: {ep_e}")
+
         # ── Week schedule fallback ──
         if not raw.get("weeks"):
             try:
