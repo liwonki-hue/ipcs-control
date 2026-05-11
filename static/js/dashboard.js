@@ -476,8 +476,11 @@ async function loadSystems() {
     try {
         const dash = await getDashData(), data = dash.systems || [];
         if (!data.length) { document.getElementById("systemBars").innerHTML = '<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No systems data found</div>'; return; }
-        
-        document.getElementById("systemBars").innerHTML = data.map(s => {
+
+        // Sort by unified_readiness (D/I 70% + Support 20% + Test 10%) descending
+        const sorted = [...data].sort((a, b) => (b.unified_readiness || 0) - (a.unified_readiness || 0));
+
+        document.getElementById("systemBars").innerHTML = sorted.map(s => {
             const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
             const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
             const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
@@ -517,8 +520,11 @@ async function loadSubArea() {
     try {
         const dash = await getDashData(), data = dash.subareas || [];
         if (!data.length) { document.getElementById("subareaBars").innerHTML = '<div style="color:#7a95b8;padding:20px;text-align:center;font-size:12px">No sub_area data found</div>'; return; }
-        
-        document.getElementById("subareaBars").innerHTML = data.map(s => {
+
+        // Sort by unified_readiness descending (highest progress first)
+        const sortedSub = [...data].sort((a, b) => (b.unified_readiness || 0) - (a.unified_readiness || 0));
+
+        document.getElementById("subareaBars").innerHTML = sortedSub.map(s => {
             const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
             const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
             const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
