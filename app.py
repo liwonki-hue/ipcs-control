@@ -1,5 +1,7 @@
 import os
 import io
+import gc
+import gzip
 import threading
 import time
 from datetime import datetime
@@ -113,9 +115,9 @@ def _parse_rpc(raw):
     weeks_raw     = lst(raw.get("weeks") or raw.get("week_schedule"))
 
     all_weeks = {}
-    max_wk = 60
     a_wks = [int(a.get("week_no") or 0) for a in actual_raw if a.get("week_no")]
-    if a_wks: max_wk = max(max_wk, max(a_wks))
+    # Limit to actual data range + small buffer (not a fixed 60)
+    max_wk = (max(a_wks) + 6) if a_wks else 30
 
     # Pre-map week labels and dates from weeks_raw
     date_map      = {}   # week_no → week_label
@@ -229,10 +231,10 @@ def _build():
         print("[cache] Background build started...")
 
         # ── Primary: get_dashboard_summary_v17 ──
-        # Deployed & working – returns kpi, sys, unit, area, act, pi, wk
         try:
             res = sb.rpc("get_dashboard_summary_v17", {}).execute()
             d17 = res.data
+            del res  # free httpx response immediately
             if isinstance(d17, list) and d17: d17 = d17[0]
 
             if isinstance(d17, dict) and d17:
@@ -241,19 +243,18 @@ def _build():
                 if kpi17:
                     raw["kpi"] = kpi17 if isinstance(kpi17, list) else [kpi17]
 
-                raw["units"]    = d17.get("unit")    or []
-                raw["areas"]    = d17.get("area")     or []
-                raw["subareas"] = d17.get("subarea")  or d17.get("area") or []
-                raw["systems"]  = d17.get("sys")      or []
-                # v17 uses plan_di – add total_di alias for UI code
+                raw["units"]    = d17.get("unit")   or []
+                raw["areas"]    = d17.get("area")   or []
+                raw["subareas"] = d17.get("subarea") or d17.get("area") or []
+                raw["systems"]  = d17.get("sys")    or []
                 for item in raw["systems"]:
                     if "plan_di" in item and "total_di" not in item:
                         item["total_di"] = item["plan_di"]
 
                 raw["weekly"] = d17.get("act") or []
-                raw["weeks"] = d17.get("wk")  or []
+                raw["weeks"]  = d17.get("wk")  or []
 
-                # Aggregate pi (plan items) → actual_plan_agg {str(wk): {f, e}}
+                # Aggregate pi → actual_plan_agg {str(wk): {f, e}}
                 plan_agg = {}
                 for pi in (d17.get("pi") or []):
                     try:
@@ -265,14 +266,16 @@ def _build():
                         plan_agg[wk]["e"] += ere
                     except (ValueError, TypeError): continue
                 raw["actual_plan_agg"] = {str(k): v for k, v in plan_agg.items()}
+                del plan_agg
+            del d17  # free raw v17 dict after extraction
         except Exception as e:
             print(f"[cache] v17 RPC error: {e}")
 
         # ── Supplement: get_dashboard_aggregates_control_v2 ──
-        # Use for EP data and fab/erect weekly breakdown
         try:
             res2 = sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
             d2   = res2.data
+            del res2  # free httpx response immediately
             if isinstance(d2, list) and d2: d2 = d2[0]
             if isinstance(d2, dict):
                 if d2.get("ep_act"):
@@ -280,7 +283,6 @@ def _build():
                 if d2.get("ep_kpi"):
                     val = d2["ep_kpi"]
                     raw["ep_kpi"] = [val] if isinstance(val, dict) else val
-                # Fill missing unit/sys if v17 was empty
                 if not raw.get("units") and d2.get("unit"):
                     raw["units"] = d2["unit"]
                 if not raw.get("systems") and d2.get("sys"):
@@ -288,45 +290,47 @@ def _build():
                     for item in raw["systems"]:
                         if "plan_di" in item and "total_di" not in item:
                             item["total_di"] = item["plan_di"]
-                # Supplement weekly fab/erect breakdown from v2 if v17 act lacks it
+
+                # Supplement weekly fab/erect breakdown from v2
                 if d2.get("act") and raw.get("weekly"):
-                    # 1. Build a map of dates from week_schedule (v2 uses week_no from schedule)
-                    # Fetch weeks if not already in raw
                     if not raw.get("weeks"):
                         try:
                             raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
                         except: pass
-                    
+
                     sched_map = {w["week_no"]: str(w["week_start_date"])[:10] for w in (raw.get("weeks") or [])}
-                    
-                    # 2. Map v2 data by start date
+
+                    # Build lookup maps ONCE (not inside the inner loop)
                     v2_date_map = {}
+                    v2_wk_map   = {}
                     for a in (d2["act"] or []):
                         wn = a.get("week_no")
-                        if wn and wn in sched_map:
-                            v2_date_map[sched_map[wn]] = a
-                    
-                    # 3. Merge into raw["weekly"] by matching start date
+                        if wn:
+                            v2_wk_map[int(wn)] = a
+                            if wn in sched_map:
+                                v2_date_map[sched_map[wn]] = a
+
                     for item in raw["weekly"]:
-                        # Match by date if possible (robust against week_no mismatch)
                         start_date = str(item.get("week_start") or "")[:10]
                         v2_item = v2_date_map.get(start_date)
-                        
-                        # Fallback to week_no matching if date matching fails
+
                         if not v2_item:
                             wk = item.get("week_no")
                             if wk is None and "week_label" in item:
                                 label = str(item["week_label"])
                                 if label.startswith("W") and label[1:].isdigit():
                                     wk = int(label[1:])
-                            if wk and int(wk) in {a.get("week_no"): a for a in (d2["act"] or [])}:
-                                v2_item = {a.get("week_no"): a for a in (d2["act"] or [])}[int(wk)]
-                        
+                            if wk:
+                                v2_item = v2_wk_map.get(int(wk))
+
                         if v2_item:
                             if not float(item.get("fab_di") or 0):
                                 item["fab_di"] = v2_item.get("fab_di") or 0
                             if not float(item.get("erect_di") or 0):
                                 item["erect_di"] = v2_item.get("erect_di") or 0
+
+                del v2_date_map, v2_wk_map
+            del d2  # free raw v2 dict after extraction
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
@@ -343,11 +347,13 @@ def _build():
             print("[cache] WARNING: kpi empty after all RPCs!")
 
         data = _parse_rpc(raw)
+        del raw  # free the large raw dict — only processed data needed
         kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
         with _lock:
             _cache["data"] = data
             _cache["time"] = time.time()
         _build_fail = False
+        gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
     except Exception as e:
         _build_fail = True
@@ -957,6 +963,20 @@ def api_joints_import_welder():
         print(f"[import-welder] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
+
+# ── Gzip compression for JSON API responses ─────────────────────────────────
+@app.after_request
+def compress_response(response):
+    if (response.status_code == 200
+            and response.content_type.startswith("application/json")
+            and len(response.data) > 2048
+            and "gzip" in request.headers.get("Accept-Encoding", "")):
+        compressed = gzip.compress(response.data, compresslevel=6)
+        if len(compressed) < len(response.data):
+            response.data = compressed
+            response.headers["Content-Encoding"] = "gzip"
+            response.headers["Content-Length"] = len(compressed)
+    return response
 
 # ── Pre-warm cache on startup (works with both python app.py and gunicorn) ──
 threading.Thread(target=_build, daemon=True).start()
