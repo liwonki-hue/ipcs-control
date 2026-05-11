@@ -456,17 +456,17 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
                     <td style="${td}">${fmtNum(tot,0)}</td>
                     <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
                     <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
-                    <td style="${td};font-weight:700;color:${c}">${p}%</td>
+                    <td style="${td};color:${c}">${p}%</td>
                 </tr>`;
             }).join("");
             if(!showTotal) return rowHtml;
             const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
-            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);font-weight:800;border-top:2px solid var(--border)">
+            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
                 <td style="${td}">${fmtNum(sumT,0)}</td>
                 <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
                 <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
-                <td style="${td};color:${totC};font-weight:800">${totP}%</td>
+                <td style="${td};color:${totC}">${totP}%</td>
             </tr>`;
         }
 
