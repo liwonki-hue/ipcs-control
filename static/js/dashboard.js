@@ -91,7 +91,7 @@ function _updateWelderKpiBar(wd) {
     const el  = document.getElementById("kpi-welder-perf");
     const sub = document.getElementById("kpi-welder-sub");
     if (el)  el.textContent  = fmtNum(avg, 2);
-    if (sub) sub.textContent = `${wd.stats?.active_welders || 0} welders · AGG DI/Day`;
+    if (sub) sub.textContent = `${wd.stats?.active_welders || 0} welders · AVG DI/Day`;
 }
 
 function showLoader(show, msg) {
