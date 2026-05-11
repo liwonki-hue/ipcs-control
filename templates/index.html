@@ -179,24 +179,25 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="jmTable" style="width:100% !important; min-width:1500px !important; table-layout:fixed !important;">
+          <table class="data-table" id="jmTable" style="width:100% !important; min-width:1200px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th style="width:65px">ID</th>
-                <th style="width:60px">Phase</th>
-                <th style="width:65px">Sys</th>
-                <th style="width:100px">Sub Area</th>
-                <th style="width:220px">ISO No</th>
-                <th style="width:50px">Rev</th>
-                <th style="width:150px">Spool</th>
-                <th style="width:90px">Mat</th>
-                <th style="width:60px">Size</th>
-                <th style="width:50px">S/F</th>
-                <th style="width:50px">Jnt</th>
-                <th style="width:140px">Welder</th>
-                <th style="width:95px">Work Date</th>
-                <th style="width:85px">Inspection</th>
-                <th style="width:160px">Action</th>
+                <th style="width:0;padding:0;display:none">ID</th>
+                <th style="width:65px;text-align:center">Phase</th>
+                <th style="width:100px">Package</th>
+                <th style="width:55px">Sys</th>
+                <th style="width:85px">Sub Area</th>
+                <th style="width:200px">ISO No</th>
+                <th style="width:38px">Rev</th>
+                <th style="width:70px">Mat</th>
+                <th style="width:48px">Size</th>
+                <th style="width:35px">S/F</th>
+                <th style="width:38px">Jnt</th>
+                <th style="width:100px">Welder</th>
+                <th style="width:88px">Work Date</th>
+                <th style="width:72px">Inspection</th>
+                <th style="width:60px">PWHT</th>
+                <th style="width:130px">Action</th>
               </tr>
             </thead>
             <tbody id="jmBody"></tbody>
@@ -373,10 +374,10 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1100px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1265px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th rowspan="2" style="width:180px">ISO Drawing No</th>
+                <th rowspan="2" style="width:240px">ISO Drawing No</th>
                 <th rowspan="2" style="width:50px">Rev</th>
                 <th rowspan="2" style="width:50px">Jnt</th>
                 <th rowspan="2" style="width:120px">Welder</th>
@@ -412,33 +413,52 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Master</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <select id="tp-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
-          <select id="tp-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
-          <select id="tp-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Pending</option></select>
+          <select id="tp-system"  class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <select id="tp-package" class="filter-sel" style="min-width:120px;"><option value="">Package</option></select>
+          <select id="tp-status"  class="filter-sel" style="min-width:100px;">
+            <option value="">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="pending">PENDING</option>
+          </select>
           <button class="btn-primary" onclick="loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
-          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openTPModal()">+ Add</button>
-
-          <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
-            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export</button>
-            <button class="btn-de" onclick="downloadTPTemplate()" style="background:rgba(99,102,241,0.15);color:#818cf8;border-color:rgba(99,102,241,0.4); padding:5px 10px; font-size:11px;">&#128462; Template</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;">
-              &#128196; Import
-              <input type="file" id="tp-import-file" accept=".xlsx,.xls" style="display:none" onchange="importTPExcel()">
-            </label>
-            <span id="tp-import-status" style="font-size:11px;color:var(--text-dim)"></span>
+          <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;margin-left:6px;" onclick="syncPhasePackage()" title="Sync PHASE &amp; PACKAGE from local Excel">&#8635; Sync Phase/Pkg</button>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
+            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export</button>
           </div>
         </div>
-        <div class="table-wrap">
-          <table class="data-table" id="tpTable">
-            <thead><tr><th>ID</th><th>System</th><th>Sub Area</th><th>Test Pkg No</th><th>Completed Date</th><th>Remark</th><th>Action</th></tr></thead>
+        <div class="table-wrap" style="overflow-x:auto;overflow-y:hidden;">
+          <table class="data-table" id="tpTable" style="width:100%;min-width:1380px;table-layout:fixed;">
+            <thead>
+              <tr>
+                <th style="width:4.9%">Sys</th>
+                <th style="width:8.7%">Package</th>
+                <th style="width:12.5%">ISO Drawing No</th>
+                <th style="width:4.2%">Jnt</th>
+                <th style="width:5.3%">Welding Date</th>
+                <th style="width:6.3%">VT Date</th>
+                <th style="width:5.0%">VT Res</th>
+                <th style="width:6.2%">MT Date</th>
+                <th style="width:4.8%">MT Res</th>
+                <th style="width:6.2%">PT Date</th>
+                <th style="width:4.8%">PT Res</th>
+                <th style="width:6.2%">RT Date</th>
+                <th style="width:4.8%">RT Res</th>
+                <th style="width:6.2%">PWHT Date</th>
+                <th style="width:4.8%">PWHT Res</th>
+                <th style="width:5.8%">STATUS</th>
+                <th style="width:3.5%">Save</th>
+              </tr>
+            </thead>
             <tbody id="tpBody"></tbody>
           </table>
         </div>
         <div class="de-pagination">
           <div id="tp-count">0 rows loaded</div>
-          <button class="btn-nav" id="tp-prev-btn" onclick="tpPage(-1)">Prev</button>
-          <span id="tp-page-info">Page 1</span>
-          <button class="btn-nav" id="tp-next-btn" onclick="tpPage(1)">Next</button>
+          <div style="display:flex;gap:12px;align-items:center;">
+            <button class="btn-nav" id="tp-prev-btn" onclick="tpPage(-1)">Prev</button>
+            <span id="tp-page-info">Page 1</span>
+            <button class="btn-nav" id="tp-next-btn" onclick="tpPage(1)">Next</button>
+          </div>
         </div>
       </div>
     </div>
@@ -502,22 +522,6 @@
 </div>
 
 
-<!-- Modal: Add Test Package -->
-<div id="addTPModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;width:440px;padding:24px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">
-    <h3 style="margin-top:0;margin-bottom:14px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Test Package</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="tp-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Sub Area</label><br><input type="text" id="tp-new-subarea" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Test Pkg No</label><br><input type="text" id="tp-new-testpkg" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. TP-CCP-001"></div>
-      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">Remark</label><br><input type="text" id="tp-new-remark" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-    </div>
-    <div style="margin-top:18px;text-align:right;">
-      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeTPModal()">Cancel</button>
-      <button class="btn-primary" style="background:#2563eb;" onclick="submitTPItem()">Save</button>
-    </div>
-  </div>
-</div>
 
 <div id="addJointModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">

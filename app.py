@@ -471,6 +471,7 @@ def api_joints_get():
         phase   = request.args.get("phase",    "")
         insp    = request.args.get("inspection","")
         nde_only= request.args.get("nde_only", "")
+        pkg     = request.args.get("package",  "")
         q = sb.table("joint_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
@@ -478,6 +479,7 @@ def api_joints_get():
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
         if insp:    q = q.eq("inspection",  insp)
+        if pkg:     q = q.eq("package",     pkg)
         if nde_only == "true": q = q.in_("inspection", ["PT", "MT", "RT"])
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
@@ -670,6 +672,112 @@ def api_joints_import():
     except Exception as e:
         print(f"[joints-import] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Sync Phase + Package from local Excel ─────────────────────────────
+@app.route("/api/joints/sync-phase-package", methods=["POST"])
+def api_joints_sync_phase_package():
+    import openpyxl, os
+    EXCEL_PATH = os.path.join(os.path.dirname(__file__), "Raw File", "BOP Piping Joint Master.xlsx")
+    try:
+        if not os.path.exists(EXCEL_PATH):
+            return jsonify({"ok": False, "error": f"File not found: {EXCEL_PATH}"}), 404
+
+        wb = openpyxl.load_workbook(EXCEL_PATH, read_only=True, data_only=True)
+        ws = wb.active
+        # Headers: System(0), Phase(1), Package(2), Unit(3), Area(4), Sub Area(5),
+        #          Line No(6), ISO Drawing(7), Rev(8), Spool No(9), Bore(10),
+        #          MAT(11), Size(12), S/F(13), Joint(14), ...
+        rows_read = updated = skipped = 0
+        sb = get_sb()
+
+        batch = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            iso = row[7]
+            joint = row[14]
+            phase = row[1]
+            pkg   = row[2]
+            if not iso or joint is None:
+                skipped += 1
+                continue
+            rows_read += 1
+            # Only update if phase or package has a value
+            if not phase and not pkg:
+                continue
+            update = {}
+            if phase: update["phase"]   = str(phase).strip()
+            if pkg:   update["package"] = str(pkg).strip()
+            batch.append((str(iso).strip(), str(int(joint)) if isinstance(joint, float) else str(joint).strip(), update))
+
+        wb.close()
+
+        # Update matching joints in DB
+        for iso, joint_no, upd in batch:
+            try:
+                res = sb.table("joint_master") \
+                    .update(upd) \
+                    .eq("iso_drawing", iso) \
+                    .eq("joint_no",    joint_no) \
+                    .execute()
+                if res.data:
+                    updated += len(res.data)
+            except Exception:
+                pass
+
+        with _lock: _cache.clear()
+        return jsonify({"ok": True, "rows_read": rows_read, "updated": updated, "skipped": skipped})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Test Package Joints (joint-level inspection view) ──────────────────
+@app.route("/api/testpkg-joints", methods=["GET"])
+def api_testpkg_joints():
+    try:
+        sb      = get_sb()
+        limit   = int(request.args.get("limit",  100))
+        offset  = int(request.args.get("offset",   0))
+        pkg     = request.args.get("package",  "").strip()
+        system  = request.args.get("system",   "").strip()
+        status  = request.args.get("status",   "").strip()
+
+        q = sb.table("joint_master").select(
+            "id,system,package,iso_drawing,joint_no,date_completed,"
+            "vt_date,vt_result,"
+            "inspection,mt_date,mt_result,pt_date,pt_result,"
+            "rt_date,rt_result,pwht,pwht_date,pwht_result",
+            count="exact"
+        ).not_.is_("package", "null")
+
+        if pkg:    q = q.eq("package", pkg)
+        if system: q = q.eq("system",  system)
+
+        res = q.order("package").order("iso_drawing").order("joint_no") \
+               .range(offset, offset + limit - 1).execute()
+
+        # Compute STATUS per row
+        rows = []
+        for r in (res.data or []):
+            # Welding not done → always PENDING
+            pending = not r.get("date_completed")
+            if not pending:
+                # VT: date entered but no result → PENDING
+                if r.get("vt_date") and not r.get("vt_result"):
+                    pending = True
+                # NDE: date entered but no result → PENDING
+                elif (r.get("mt_date") and not r.get("mt_result")) or \
+                     (r.get("pt_date") and not r.get("pt_result")) or \
+                     (r.get("rt_date") and not r.get("rt_result")):
+                    pending = True
+                # PWHT required but no result → PENDING
+                elif r.get("pwht") == "Y" and not r.get("pwht_result"):
+                    pending = True
+            r["status"] = "PENDING" if pending else "Completed"
+            rows.append(r)
+
+        return jsonify({"data": rows, "count": res.count})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ── Support Master CRUD ───────────────────────────────────────────────

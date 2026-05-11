@@ -822,22 +822,23 @@ function renderJMTable(rows){
         const dStr=r.date_completed?r.date_completed.substring(0,10):"";
         const wVal=r.welder||"";
         const phaseVal=r.phase||"";
+        const pkgVal=r.package||"";
         return `<tr id="jmrow-${r.id}">
-            <td>${r.id}</td>
-            <td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="text-align:center"></td>
-            <td>${r.system||""}</td>
-            <td>${r.sub_area||""}</td>
-            <td>${r.iso_drawing||""}</td>
-            <td>${r.rev||""}</td>
-            <td>${r.spool_no||""}</td>
+            <td style="display:none">${r.id}</td>
+            <td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="text-align:center;padding:2px 3px"></td>
+            <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
+            <td style="text-align:center">${r.system||""}</td>
+            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.sub_area||""}</td>
+            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+            <td style="text-align:center">${r.rev||""}</td>
             <td>${r.mat||""}</td>
-            <td>${r.size_inch||""}</td>
-            <td>${r.sf||""}</td>
-            <td>${r.joint_no||""}</td>
-            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="Use comma for multiple welders"></td>
+            <td style="text-align:center">${r.size_inch||""}</td>
+            <td style="text-align:center">${r.sf||""}</td>
+            <td style="text-align:center">${r.joint_no||""}</td>
+            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
             <td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td>
             <td>
-                <select class="cell-input" id="inspection-${r.id}" style="text-align:center; text-align-last:center;">
+                <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
                     <option value="">-</option>
                     <option value="VT" ${r.inspection==='VT'?'selected':''}>VT</option>
                     <option value="MT" ${r.inspection==='MT'?'selected':''}>MT</option>
@@ -845,10 +846,17 @@ function renderJMTable(rows){
                     <option value="RT" ${r.inspection==='RT'?'selected':''}>RT</option>
                 </select>
             </td>
+            <td>
+                <select class="cell-input" id="pwht-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
+                    <option value="">-</option>
+                    <option value="Y" ${r.pwht==='Y'?'selected':''}>Y</option>
+                    <option value="N" ${r.pwht==='N'?'selected':''}>N</option>
+                </select>
+            </td>
             <td style="white-space:nowrap">
                 <button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button>
                 <button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
-                <button class="btn-del-row" onclick="deleteJoint(${r.id})" title="Delete Joint">DEL</button>
+                <button class="btn-del-row" onclick="deleteJoint(${r.id})" title="Delete">DEL</button>
             </td>
         </tr>`;
     }).join("");
@@ -898,7 +906,7 @@ function renderNdeTable(rows){
         const pwht_date = r.pwht_date ? r.pwht_date.substring(0,10) : "";
         
         return `<tr id="nderow-${r.id}">
-            <td>${r.iso_drawing||""}</td>
+            <td title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
             <td>${r.rev||""}</td>
             <td>${r.joint_no||""}</td>
             <td>${r.welder||""}</td>
@@ -1011,10 +1019,12 @@ async function saveJointDate(id){
     let val=document.getElementById(`date-${id}`)?.value?.trim()||'';
     let welder=document.getElementById(`welder-${id}`)?.value?.trim()||'';
     let phase=document.getElementById(`phase-${id}`)?.value?.trim()||'';
+    let pkg=document.getElementById(`pkg-${id}`)?.value?.trim()||'';
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
+    let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
     if(val){if(!/^\d{2,4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format (YY-MM-DD)","error");return;}if(val.length===8)val="20"+val;}
     try{
-        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, inspection:inspection||null})});
+        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
         await fetch("/api/cache/clear").catch(()=>{});
         toast(`✓ ID ${id} saved!`);
@@ -1828,118 +1838,136 @@ let tpData = [], tpCurrentPage = 0;
 const TP_PAGE = 100;
 
 async function loadTestPkgMaster() {
-    const system  = document.getElementById("tp-system")?.value  || "";
-    const subarea = document.getElementById("tp-subarea")?.value || "";
-    const status  = document.getElementById("tp-status")?.value  || "";
-    const offset  = tpCurrentPage * TP_PAGE;
+    const pkg    = document.getElementById("tp-package")?.value || "";
+    const system = document.getElementById("tp-system")?.value  || "";
+    const status = document.getElementById("tp-status")?.value  || "";
+    const offset = tpCurrentPage * TP_PAGE;
     try {
+        // Populate package dropdown on first load
+        const tpPkg = document.getElementById("tp-package");
         const tpSys = document.getElementById("tp-system");
-        const tpSub = document.getElementById("tp-subarea");
+        if (tpPkg && tpPkg.options.length <= 1) {
+            ["TRU-CCW-001","TRU-CCW-002"].forEach(p => tpPkg.add(new Option(p, p)));
+        }
         if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
-        if (tpSub && tpSub.options.length <= 1) (metaData.sub_areas||[]).forEach(s => tpSub.add(new Option(s,s)));
+
         const params = new URLSearchParams({limit: TP_PAGE, offset});
-        if (system)  params.set("system",   system);
-        if (subarea) params.set("sub_area", subarea);
-        if (status)  params.set("status",   status);
-        const res = await apiFetch(`/api/testpkg-master?${params}`);
+        if (pkg)    params.set("package", pkg);
+        if (system) params.set("system",  system);
+        if (status) params.set("status",  status);
+        const res = await apiFetch(`/api/testpkg-joints?${params}`);
         tpData = res.data;
         document.getElementById("tp-count").textContent = `${(res.count||0).toLocaleString()} rows (page ${tpCurrentPage+1})`;
         document.getElementById("tp-page-info").textContent = `Page ${tpCurrentPage+1}`;
+        const prevBtn = document.getElementById("tp-prev-btn");
+        const nextBtn = document.getElementById("tp-next-btn");
+        if (prevBtn) prevBtn.disabled = (tpCurrentPage === 0);
+        if (nextBtn) nextBtn.disabled = (res.data.length < TP_PAGE);
         renderTPTable(tpData);
     } catch(e) { console.error("Test Pkg Master load failed", e); }
 }
 
 function tpPage(dir) { tpCurrentPage = Math.max(0, tpCurrentPage + dir); loadTestPkgMaster(); }
 
+function _tpResultBadge(result) {
+    if (!result) return '<span style="color:var(--text-dim)">-</span>';
+    const color = result === "PASS" ? "var(--green)" : "var(--orange)";
+    return `<span style="font-weight:700;color:${color}">${result}</span>`;
+}
+
 function renderTPTable(rows) {
     const tbody = document.getElementById("tpBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel template.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align:center;color:var(--text-dim);padding:20px">No data. Package 필터를 선택하거나 Sync Phase/Pkg 버튼을 클릭하세요.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
-        const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
+        const weldDate = r.date_completed ? r.date_completed.substring(0,10) : "";
+        const vtDate   = r.vt_date   ? r.vt_date.substring(0,10)   : "";
+        const mtDate   = r.mt_date   ? r.mt_date.substring(0,10)   : "";
+        const ptDate   = r.pt_date   ? r.pt_date.substring(0,10)   : "";
+        const rtDate   = r.rt_date   ? r.rt_date.substring(0,10)   : "";
+        const pwhtDate = r.pwht_date ? r.pwht_date.substring(0,10) : "";
+        const statusColor = r.status === "Completed" ? "var(--green)" : "var(--orange)";
+        const statusIcon  = r.status === "Completed" ? "&#10003;" : "&#9679;";
         return `<tr id="tprow-${r.id}">
-          <td>${r.id}</td>
-          <td>${r.system||""}</td>
-          <td>${r.sub_area||""}</td>
-          <td style="font-weight:600;color:var(--indigo)">${r.test_pkg||""}</td>
-          <td><input class="cell-input" id="tp-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:110px"></td>
-          <td style="font-size:11px;color:var(--text-dim)">${r.remark||""}</td>
-          <td style="white-space:nowrap">
-            <button class="btn-save-row" onclick="saveTPDate(${r.id})">Save</button>
-            <button class="btn-clear-row" onclick="deleteTPItem(${r.id})">Del</button>
+          <td style="text-align:center">${r.system||""}</td>
+          <td style="font-weight:600;color:var(--indigo)">${r.package||""}</td>
+          <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+          <td style="text-align:center">${r.joint_no||""}</td>
+          <td style="text-align:center;color:var(--accent)">${weldDate||"-"}</td>
+          <td style="padding:2px;text-align:center"><input type="text" class="cell-input" id="tp-vt-date-${r.id}" value="${vtDate}" placeholder="YY-MM-DD" style="padding:3px 4px;text-align:center"></td>
+          <td style="padding:2px;text-align:center">
+            <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:pointer">
+              <option value="" style="color:#000">-</option>
+              <option value="PASS" style="color:#000" ${r.vt_result==="PASS"?"selected":""}>PASS</option>
+              <option value="FAIL" style="color:#000" ${r.vt_result==="FAIL"?"selected":""}>FAIL</option>
+            </select>
           </td>
+          <td style="text-align:center;font-size:11px">${mtDate||"-"}</td>
+          <td style="text-align:center">${_tpResultBadge(r.mt_result)}</td>
+          <td style="text-align:center;font-size:11px">${ptDate||"-"}</td>
+          <td style="text-align:center">${_tpResultBadge(r.pt_result)}</td>
+          <td style="text-align:center;font-size:11px">${rtDate||"-"}</td>
+          <td style="text-align:center">${_tpResultBadge(r.rt_result)}</td>
+          <td style="text-align:center;font-size:11px">${pwhtDate||"-"}</td>
+          <td style="text-align:center">${_tpResultBadge(r.pwht_result)}</td>
+          <td style="text-align:center;font-weight:700;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
+          <td style="text-align:center"><button class="btn-save-row" style="padding:3px 8px;font-size:10px" onclick="saveTPVT(${r.id})">Save</button></td>
         </tr>`;
     }).join("");
 }
 
-async function saveTPDate(id) {
-    let val = document.getElementById(`tp-date-${id}`)?.value?.trim() || "";
-    if (val && !/^\d{2,4}-\d{2}-\d{2}$/.test(val)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
-    if (val && val.length === 8) val = "20" + val;
+async function saveTPVT(id) {
+    let vtDate = document.getElementById(`tp-vt-date-${id}`)?.value?.trim() || "";
+    const vtRes  = document.getElementById(`tp-vt-res-${id}`)?.value || "";
+    if (vtDate && !/^\d{2,4}-\d{2}-\d{2}$/.test(vtDate)) { toast("VT Date: YY-MM-DD 형식으로 입력", "error"); return; }
+    if (vtDate && vtDate.length === 8) vtDate = "20" + vtDate;
     try {
-        const r = await fetch(`/api/testpkg-master/${id}`, {
-            method:"PATCH", headers:{"Content-Type":"application/json"},
-            body: JSON.stringify({date_completed: val||null, completed: !!val})
+        const r = await fetch(`${API}/api/joints/${id}`, {
+            method: "PATCH",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({vt_date: vtDate||null, vt_result: vtRes||null})
         });
-        if (!r.ok) throw new Error("HTTP "+r.status);
-        toast(`✓ Test Pkg #${id} saved`); fetch("/api/cache/clear");
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        toast(`✓ VT saved (ID ${id})`);
+        loadTestPkgMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
-async function deleteTPItem(id) {
-    if (!confirm(`Delete Test Pkg ID ${id}?`)) return;
+async function syncPhasePackage() {
+    if (!confirm("Raw File 폴더의 BOP Piping Joint Master.xlsx에서 PHASE와 PACKAGE를 동기화합니다.\n계속하시겠습니까?")) return;
+    toast("Syncing...");
     try {
-        const r = await fetch(`/api/testpkg-master/${id}`, {method:"DELETE"});
-        if (!r.ok) throw new Error("HTTP "+r.status);
-        toast("✓ Deleted"); loadTestPkgMaster();
-    } catch(e) { toast(`✗ ${e.message}`, "error"); }
-}
-
-function openTPModal()  { document.getElementById("addTPModal").style.display = "flex"; }
-function closeTPModal() { document.getElementById("addTPModal").style.display = "none"; }
-
-async function submitTPItem() {
-    const data = {
-        system:   document.getElementById("tp-new-system").value.trim(),
-        sub_area: document.getElementById("tp-new-subarea").value.trim(),
-        test_pkg: document.getElementById("tp-new-testpkg").value.trim(),
-        remark:   document.getElementById("tp-new-remark").value.trim(),
-        completed: false
-    };
-    if (!data.system && !data.test_pkg) { toast("System or Test Pkg No required", "error"); return; }
-    try {
-        const r = await fetch("/api/testpkg-master", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
-        const d = await r.json(); if (!d.ok) throw new Error(d.error);
-        toast("✓ Test package added"); closeTPModal(); loadTestPkgMaster();
-    } catch(e) { toast(`✗ ${e.message}`, "error"); }
-}
-
-function downloadTPTemplate() {
-    const sample = [{system:"CCP", sub_area:"PR#3", test_pkg:"TP-CCP-001", completed:"", date_completed:"", remark:""}];
-    const ws = XLSX.utils.json_to_sheet(sample); const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
-    XLSX.writeFile(wb, "TestPkg_Master_Template.xlsx"); toast("✓ Template downloaded");
-}
-
-async function importTPExcel() {
-    const fi = document.getElementById("tp-import-file");
-    if (!fi?.files.length) { toast("Select file first", "error"); return; }
-    const st = document.getElementById("tp-import-status"); if (st) st.textContent = "Uploading...";
-    const fd = new FormData(); fd.append("file", fi.files[0]);
-    try {
-        const res = await fetch("/api/testpkg-master/import", {method:"POST", body:fd});
-        const data = await res.json(); if (!data.ok) throw new Error(data.error);
-        const msg = `✓ Imported ${data.inserted} rows${data.skipped>0?` (${data.skipped} skipped)`:""}`;
-        if (st) st.textContent = msg; toast(msg); fi.value = "";
-        fetch("/api/cache/clear"); loadTestPkgMaster();
-    } catch(e) { const m=`✗ ${e.message}`; if(st) st.textContent=m; toast(m,"error"); }
+        const r = await fetch("/api/joints/sync-phase-package", {method:"POST"});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error);
+        toast(`✓ Sync complete: ${d.updated} joints updated (${d.rows_read} rows read)`);
+        loadTestPkgMaster();
+    } catch(e) { toast(`✗ Sync failed: ${e.message}`, "error"); }
 }
 
 async function exportTPExcel() {
     if (!tpData?.length) { toast("No data", "error"); return; }
-    const rows = tpData.map(r => ({"ID":r.id,"System":r.system||"","Sub Area":r.sub_area||"","Test Pkg No":r.test_pkg||"","Completed":r.completed?"Y":"N","Date Completed":r.date_completed?r.date_completed.substring(0,10):"","Remark":r.remark||""}));
+    const rows = tpData.map(r => ({
+        "ID": r.id,
+        "System": r.system||"",
+        "Package": r.package||"",
+        "ISO Drawing No": r.iso_drawing||"",
+        "Joint No": r.joint_no||"",
+        "Welding Date": r.date_completed ? r.date_completed.substring(0,10) : "",
+        "VT Date": r.vt_date ? r.vt_date.substring(0,10) : "",
+        "VT Result": r.vt_result||"",
+        "MT Date": r.mt_date ? r.mt_date.substring(0,10) : "",
+        "MT Result": r.mt_result||"",
+        "PT Date": r.pt_date ? r.pt_date.substring(0,10) : "",
+        "PT Result": r.pt_result||"",
+        "RT Date": r.rt_date ? r.rt_date.substring(0,10) : "",
+        "RT Result": r.rt_result||"",
+        "PWHT Date": r.pwht_date ? r.pwht_date.substring(0,10) : "",
+        "PWHT Result": r.pwht_result||"",
+        "Status": r.status||""
+    }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
     const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");

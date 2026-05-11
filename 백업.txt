@@ -1,5 +1,0 @@
-1. 웹 서비스 백업
-현재 정상 작동 중인 코드를 언제든지 되돌릴 수 있도록 backup-before-upgrade라는 이름으로 버전을 백업해 두었습니다.
-
-복구 번호(Commit Hash): 75fdafa3a9634ab7ac83b11bf475fedc5b6ae64c
-추후 문제가 발생할 경우, 해당 번호나 태그 이름(backup-before-upgrade)을 말씀해 주시면 언제든지 현재 상태로 즉시 복구해 드리겠습니다.
