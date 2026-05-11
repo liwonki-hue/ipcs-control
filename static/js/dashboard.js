@@ -181,7 +181,9 @@ function navigate(page) {
 //  API HELPERS
 // ================================================================================
 async function apiFetch(url) {
-    const res = await fetch(API + url);
+    const ts = new Date().getTime();
+    const separator = url.includes("?") ? "&" : "?";
+    const res = await fetch(API + url + separator + "_t=" + ts, { cache: "no-store" });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return res.json();
 }
@@ -882,24 +884,86 @@ function ndePage(dir){ndeCurrentPage=Math.max(0,ndeCurrentPage+dir);loadNdePwht(
 function renderNdeTable(rows){
     const tbody=document.getElementById("ndeBody");
     tbody.innerHTML=rows.map(r=>{
-        const dStr=r.date_completed?r.date_completed.substring(0,10):"";
-        return `<tr>
-            <td>${r.id}</td>
-            <td>${r.phase||""}</td>
-            <td>${r.unit||""}</td>
-            <td>${r.system||""}</td>
-            <td>${r.sub_area||""}</td>
+        const pt_date = r.pt_date ? r.pt_date.substring(0,10) : "";
+        const mt_date = r.mt_date ? r.mt_date.substring(0,10) : "";
+        const rt_date = r.rt_date ? r.rt_date.substring(0,10) : "";
+        const pwht_date = r.pwht_date ? r.pwht_date.substring(0,10) : "";
+        
+        return `<tr id="nderow-${r.id}">
             <td>${r.iso_drawing||""}</td>
             <td>${r.rev||""}</td>
-            <td>${r.mat||""}</td>
-            <td>${r.size_inch||""}</td>
-            <td>${r.sf||""}</td>
             <td>${r.joint_no||""}</td>
             <td>${r.welder||""}</td>
-            <td>${dStr}</td>
             <td style="font-weight:700;color:var(--accent)">${r.inspection||""}</td>
+            
+            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px;">
+                <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.pt_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.pt_result==='FAIL'?'selected':''}>FAIL</option>
+                </select>
+            </td>
+            
+            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px;">
+                <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.mt_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.mt_result==='FAIL'?'selected':''}>FAIL</option>
+                </select>
+            </td>
+            
+            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px;">
+                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
+                </select>
+            </td>
+            
+            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px;">
+                <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.pwht_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.pwht_result==='FAIL'?'selected':''}>FAIL</option>
+                </select>
+            </td>
+            <td>
+                <button class="btn-save-row" onclick="saveNdeRow(${r.id})">Save</button>
+            </td>
         </tr>`;
     }).join("");
+}
+
+async function saveNdeRow(id){
+    const data = {
+        pt_date: document.getElementById(`nde-pt-date-${id}`).value.trim() || null,
+        pt_result: document.getElementById(`nde-pt-res-${id}`).value,
+        mt_date: document.getElementById(`nde-mt-date-${id}`).value.trim() || null,
+        mt_result: document.getElementById(`nde-mt-res-${id}`).value,
+        rt_date: document.getElementById(`nde-rt-date-${id}`).value.trim() || null,
+        rt_result: document.getElementById(`nde-rt-res-${id}`).value,
+        pwht_date: document.getElementById(`nde-pwht-date-${id}`).value.trim() || null,
+        pwht_result: document.getElementById(`nde-pwht-res-${id}`).value
+    };
+    
+    // Date normalization
+    ['pt_date', 'mt_date', 'rt_date', 'pwht_date'].forEach(k => {
+        if(data[k] && data[k].length === 8) data[k] = "20" + data[k];
+    });
+
+    try{
+        const r = await fetch(`${API}/api/joints/${id}`, {
+            method: "PATCH",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify(data)
+        });
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        toast("✓ NDE data saved!");
+    }catch(e){ toast("✗ Save failed: " + e.message, "error"); }
 }
 
 async function submitNewJoint(){
@@ -916,7 +980,10 @@ async function deleteJoint(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"DELETE"});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ Joint ID ${id} deleted`);loadJointMaster();fetch("/api/cache/clear");
+        await fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ Joint ID ${id} deleted`);
+        loadJointMaster();
+        loadNdePwht(); // Sync NDE tab
     }catch(e){toast("✗ Failed to delete","error");}
 }
 
@@ -925,8 +992,10 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} date cleared! KPI updating...`);
+        await fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ID ${id} date cleared!`);
         _autoRefreshKpi();
+        loadNdePwht(); // Sync NDE tab
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
 
@@ -939,8 +1008,10 @@ async function saveJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, inspection:inspection||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        toast(`✓ ID ${id} saved! KPI updating...`);
+        await fetch("/api/cache/clear").catch(()=>{});
+        toast(`✓ ID ${id} saved!`);
         _autoRefreshKpi();
+        loadNdePwht(); // Sync NDE tab
     }catch(e){toast(`✗ Save failed: ${e.message}`,"error");}
 }
 
