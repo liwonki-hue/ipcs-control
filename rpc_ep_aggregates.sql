@@ -1,5 +1,5 @@
 -- ============================================================
--- EP 데이터 집계 RPC 함수
+-- EP 데이터 집계 RPC 함수 (v2 - TEXT 타입 completed 컬럼 호환)
 -- Supabase SQL Editor에서 실행 (liwonki project / construction schema)
 -- Python 서버가 joint_master 전체를 메모리에 올리지 않도록
 -- DB 레벨에서 집계 후 결과만 반환
@@ -17,12 +17,16 @@ DECLARE
   v_wk   JSONB;
 BEGIN
   -- EP 시스템별 집계 (total_di, completed_di)
+  -- completed 컬럼이 TEXT 타입인 경우 'true'/'false' 문자열 비교 사용
   SELECT jsonb_agg(row_to_json(t)) INTO v_sys
   FROM (
     SELECT
       system,
-      ROUND(SUM(di)::NUMERIC, 2)                                    AS total_di,
-      ROUND(SUM(CASE WHEN completed THEN di ELSE 0 END)::NUMERIC, 2) AS completed_di
+      ROUND(SUM(di)::NUMERIC, 2) AS total_di,
+      ROUND(SUM(
+        CASE WHEN LOWER(completed::TEXT) IN ('true', 't', '1', 'yes')
+             THEN di ELSE 0 END
+      )::NUMERIC, 2) AS completed_di
     FROM construction.joint_master
     WHERE phase = 'EP'
     GROUP BY system
@@ -34,8 +38,11 @@ BEGIN
   FROM (
     SELECT
       sub_area,
-      ROUND(SUM(di)::NUMERIC, 2)                                    AS total_di,
-      ROUND(SUM(CASE WHEN completed THEN di ELSE 0 END)::NUMERIC, 2) AS completed_di
+      ROUND(SUM(di)::NUMERIC, 2) AS total_di,
+      ROUND(SUM(
+        CASE WHEN LOWER(completed::TEXT) IN ('true', 't', '1', 'yes')
+             THEN di ELSE 0 END
+      )::NUMERIC, 2) AS completed_di
     FROM construction.joint_master
     WHERE phase = 'EP'
     GROUP BY sub_area
@@ -52,7 +59,7 @@ BEGIN
     JOIN construction.week_schedule ws
       ON j.date_completed BETWEEN ws.week_start_date AND ws.week_end_date
     WHERE j.phase = 'EP'
-      AND j.completed = TRUE
+      AND LOWER(j.completed::TEXT) IN ('true', 't', '1', 'yes')
       AND j.date_completed IS NOT NULL
     GROUP BY ws.week_no
     ORDER BY ws.week_no
