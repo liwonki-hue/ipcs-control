@@ -348,62 +348,80 @@ def _build():
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
-        # ── EP system/area breakdown (direct query) ──
+        # ── EP system/area breakdown: get_ep_aggregates() RPC 사용 ──
+        # Python 메모리에 joint_master 전체를 올리지 않고 DB에서 집계 후 결과만 수신
         try:
-            ep_r = sb.schema("construction").table("joint_master") \
-                     .select("system, sub_area, di, completed, date_completed").eq("phase", "EP").execute()
-            ep_rows = ep_r.data or []
+            ep_r = sb.rpc("get_ep_aggregates", {}).execute()
+            ep_data = ep_r.data or {}
             del ep_r
 
-            # Build date→week_no lookup from week schedule
-            _date_wk = {}
-            for _w in (raw.get("weeks") or []):
-                try:
-                    _wno = int(_w.get("week_no") or 0)
-                    _ws  = str(_w.get("week_start_date") or _w.get("start_date") or "")[:10]
-                    _we  = str(_w.get("week_end_date")   or _w.get("end_date")   or "")[:10]
-                    if _wno and _ws:
-                        _d   = datetime.strptime(_ws, "%Y-%m-%d")
-                        _end = datetime.strptime(_we, "%Y-%m-%d") if _we else _d + timedelta(days=6)
-                        while _d <= _end:
-                            _date_wk[_d.strftime("%Y-%m-%d")] = _wno
-                            _d += timedelta(days=1)
-                except: continue
+            # RPC 반환값 구조: {ep_sys:[...], ep_area:[...], ep_weekly:[...]}
+            if isinstance(ep_data, list) and ep_data:
+                ep_data = ep_data[0]
 
-            ep_sys_map, ep_area_map, ep_wk_di = {}, {}, {}
-            for row in ep_rows:
-                sys_k = row.get("system") or "Unknown"
-                sub_k = row.get("sub_area") or "Unknown"
-                di    = float(row.get("di") or 0)
-                comp  = bool(row.get("completed"))
-                dc    = str(row.get("date_completed") or "")[:10]
-                if sys_k not in ep_sys_map:
-                    ep_sys_map[sys_k] = {"system": sys_k, "total_di": 0.0, "completed_di": 0.0}
-                ep_sys_map[sys_k]["total_di"] += di
-                if comp: ep_sys_map[sys_k]["completed_di"] += di
-                if sub_k not in ep_area_map:
-                    ep_area_map[sub_k] = {"sub_area": sub_k, "total_di": 0.0, "completed_di": 0.0}
-                ep_area_map[sub_k]["total_di"] += di
-                if comp: ep_area_map[sub_k]["completed_di"] += di
-                # Map completed DI to week for S-Curve
-                if comp and dc and dc in _date_wk:
-                    wno = _date_wk[dc]
-                    ep_wk_di[wno] = ep_wk_di.get(wno, 0.0) + di
-
-            raw["ep_sys"]  = sorted(ep_sys_map.values(),  key=lambda x: x["total_di"], reverse=True)
-            raw["ep_area"] = sorted(ep_area_map.values(), key=lambda x: x["total_di"], reverse=True)
-            # Build ep_weekly for chart if v2 RPC didn't supply it
-            if ep_wk_di and not raw.get("ep_weekly"):
-                raw["ep_weekly"] = [{"week_no": wk, "completed_di": round(di, 2)}
-                                    for wk, di in sorted(ep_wk_di.items())]
-            # Compute ep_kpi from aggregated data if not already set by v2 RPC
-            if not raw.get("ep_kpi"):
-                tot_ep  = round(sum(v["total_di"]     for v in ep_sys_map.values()), 2)
-                comp_ep = round(sum(v["completed_di"] for v in ep_sys_map.values()), 2)
-                raw["ep_kpi"] = [{"total_di": tot_ep, "completed_di": comp_ep}]
-            del ep_rows, ep_sys_map, ep_area_map, _date_wk, ep_wk_di
+            if isinstance(ep_data, dict):
+                raw["ep_sys"]  = ep_data.get("ep_sys")  or []
+                raw["ep_area"] = ep_data.get("ep_area") or []
+                ep_wk_rpc = ep_data.get("ep_weekly") or []
+                if ep_wk_rpc and not raw.get("ep_weekly"):
+                    raw["ep_weekly"] = ep_wk_rpc
+                # ep_kpi 계산 (RPC에서 오지 않는 경우 ep_sys 집계로 계산)
+                if not raw.get("ep_kpi") and raw.get("ep_sys"):
+                    tot_ep  = round(sum(v.get("total_di", 0)     for v in raw["ep_sys"]), 2)
+                    comp_ep = round(sum(v.get("completed_di", 0) for v in raw["ep_sys"]), 2)
+                    raw["ep_kpi"] = [{"total_di": tot_ep, "completed_di": comp_ep}]
+                del ep_data
         except Exception as ep_e:
-            print(f"[cache] EP breakdown error: {ep_e}")
+            print(f"[cache] get_ep_aggregates RPC error: {ep_e}")
+            # Fallback: 직접 쿼리 (RPC 미배포 환경 호환)
+            try:
+                ep_r = sb.schema("construction").table("joint_master") \
+                         .select("system, sub_area, di, completed, date_completed").eq("phase", "EP").execute()
+                ep_rows = ep_r.data or []
+                del ep_r
+                _date_wk = {}
+                for _w in (raw.get("weeks") or []):
+                    try:
+                        _wno = int(_w.get("week_no") or 0)
+                        _ws  = str(_w.get("week_start_date") or "")[:10]
+                        _we  = str(_w.get("week_end_date")   or "")[:10]
+                        if _wno and _ws:
+                            _d   = datetime.strptime(_ws, "%Y-%m-%d")
+                            _end = datetime.strptime(_we, "%Y-%m-%d") if _we else _d + timedelta(days=6)
+                            while _d <= _end:
+                                _date_wk[_d.strftime("%Y-%m-%d")] = _wno
+                                _d += timedelta(days=1)
+                    except: continue
+                ep_sys_map, ep_area_map, ep_wk_di = {}, {}, {}
+                for row in ep_rows:
+                    sys_k = row.get("system") or "Unknown"
+                    sub_k = row.get("sub_area") or "Unknown"
+                    di    = float(row.get("di") or 0)
+                    comp  = bool(row.get("completed"))
+                    dc    = str(row.get("date_completed") or "")[:10]
+                    if sys_k not in ep_sys_map:
+                        ep_sys_map[sys_k] = {"system": sys_k, "total_di": 0.0, "completed_di": 0.0}
+                    ep_sys_map[sys_k]["total_di"] += di
+                    if comp: ep_sys_map[sys_k]["completed_di"] += di
+                    if sub_k not in ep_area_map:
+                        ep_area_map[sub_k] = {"sub_area": sub_k, "total_di": 0.0, "completed_di": 0.0}
+                    ep_area_map[sub_k]["total_di"] += di
+                    if comp: ep_area_map[sub_k]["completed_di"] += di
+                    if comp and dc and dc in _date_wk:
+                        wno = _date_wk[dc]
+                        ep_wk_di[wno] = ep_wk_di.get(wno, 0.0) + di
+                raw["ep_sys"]  = sorted(ep_sys_map.values(),  key=lambda x: x["total_di"], reverse=True)
+                raw["ep_area"] = sorted(ep_area_map.values(), key=lambda x: x["total_di"], reverse=True)
+                if ep_wk_di and not raw.get("ep_weekly"):
+                    raw["ep_weekly"] = [{"week_no": wk, "completed_di": round(di, 2)}
+                                        for wk, di in sorted(ep_wk_di.items())]
+                if not raw.get("ep_kpi"):
+                    tot_ep  = round(sum(v["total_di"]     for v in ep_sys_map.values()), 2)
+                    comp_ep = round(sum(v["completed_di"] for v in ep_sys_map.values()), 2)
+                    raw["ep_kpi"] = [{"total_di": tot_ep, "completed_di": comp_ep}]
+                del ep_rows, ep_sys_map, ep_area_map, _date_wk, ep_wk_di
+            except Exception as ep_e2:
+                print(f"[cache] EP fallback error: {ep_e2}")
 
         # ── Week schedule fallback ──
         if not raw.get("weeks"):
@@ -822,35 +840,56 @@ def api_joints_sync_phase_package():
 
         wb.close()
 
-        # N+1 쿼리 제거: ISO+Joint_no 기준으로 DB ID를 먼저 조회한 후 배치 upsert
-        # 1) 고유 ISO 목록으로 DB에서 id, iso_drawing, joint_no 조회
-        isos = list({b[0] for b in batch})
-        db_rows = []
-        for i in range(0, len(isos), 200):
+        # ── bulk_update_phase_package() RPC 단일 호출로 N+1 완전 제거 ──
+        # DB에서 ISO+joint_no 매칭 및 UPDATE 처리 → Python 메모리 최소화
+        rpc_payload = [
+            {"iso": iso, "joint_no": joint_no,
+             "phase": upd.get("phase"), "package": upd.get("package")}
+            for iso, joint_no, upd in batch
+        ]
+        del batch
+
+        rpc_used = False
+        if rpc_payload:
             try:
-                r = sb.table("joint_master") \
-                    .select("id, iso_drawing, joint_no") \
-                    .in_("iso_drawing", isos[i:i+200]).execute()
-                db_rows.extend(r.data or [])
-                del r
-            except Exception: pass
+                # JSONB 배열을 RPC에 전달 (최대 2000건씩 분할)
+                for i in range(0, len(rpc_payload), 2000):
+                    chunk = rpc_payload[i:i+2000]
+                    res = sb.rpc("bulk_update_phase_package",
+                                 {"updates": chunk}).execute()
+                    updated += int(res.data or 0)
+                    del res
+                rpc_used = True
+            except Exception as rpc_e:
+                print(f"[sync] bulk_update_phase_package RPC 실패, Python 배치로 폴백: {rpc_e}")
 
-        # 2) (iso, joint_no) → id 룩업맵 생성
-        def _norm(v):
-            try: return str(int(float(str(v).strip())))
-            except: return str(v).strip()
-        lookup = {(row["iso_drawing"], _norm(row["joint_no"])): row["id"] for row in db_rows}
-        del db_rows
+        # Fallback: RPC 미배포 시 Python 배치 upsert
+        if not rpc_used and rpc_payload:
+            isos = list({r["iso"] for r in rpc_payload})
+            db_rows = []
+            for i in range(0, len(isos), 200):
+                try:
+                    r = sb.table("joint_master") \
+                        .select("id, iso_drawing, joint_no") \
+                        .in_("iso_drawing", isos[i:i+200]).execute()
+                    db_rows.extend(r.data or [])
+                    del r
+                except Exception: pass
 
-        # 3) id 매핑 후 배치 upsert
-        upsert_records = []
-        for iso, joint_no, upd in batch:
-            jid = lookup.get((iso, _norm(joint_no)))
-            if jid:
-                upsert_records.append({"id": jid, **upd})
-        del batch, lookup
+            def _norm(v):
+                try: return str(int(float(str(v).strip())))
+                except: return str(v).strip()
+            lookup = {(row["iso_drawing"], _norm(row["joint_no"])): row["id"] for row in db_rows}
+            del db_rows
 
-        if upsert_records:
+            upsert_records = []
+            for rec in rpc_payload:
+                jid = lookup.get((rec["iso"], _norm(rec["joint_no"])))
+                upd = {k: v for k, v in {"phase": rec["phase"], "package": rec["package"]}.items() if v}
+                if jid and upd:
+                    upsert_records.append({"id": jid, **upd})
+            del lookup
+
             for i in range(0, len(upsert_records), 500):
                 try:
                     res = sb.table("joint_master").upsert(upsert_records[i:i+500]).execute()
@@ -859,6 +898,7 @@ def api_joints_sync_phase_package():
                 except Exception: pass
             del upsert_records
 
+        del rpc_payload
         with _lock: _cache.clear()
         return jsonify({"ok": True, "rows_read": rows_read, "updated": updated, "skipped": skipped})
     except Exception as e:
