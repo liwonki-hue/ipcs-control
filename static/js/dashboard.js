@@ -313,8 +313,13 @@ async function renderOverview(kpi, wkData, units, systems) {
         const _fillGauge = (pathId, textId, p) => {
             const gp = document.getElementById(pathId), gt = document.getElementById(textId);
             if (!gp || !gt) return;
-            gp.style.stroke = "#f97316"; gp.style.strokeDashoffset = Math.PI * 84 * (1 - Math.min(p/100,1));
-            gt.textContent = `${p}%`; gt.style.fill = "#f97316";
+            // 0%도 최소 아크(2%)를 표시해 게이지가 존재함을 인식 가능하게 함
+            const visP   = Math.max(p, p > 0 ? p : 0);
+            const offset = Math.PI * 84 * (1 - Math.min(visP / 100, 1));
+            gp.style.stroke          = p > 0 ? "#f97316" : "#374151";  // 0%는 회색
+            gp.style.strokeDashoffset = p > 0 ? offset : Math.PI * 84 * 0.98; // 0%도 2% 아크
+            gt.textContent = `${p}%`;
+            gt.style.fill  = p > 0 ? "#f97316" : "#6b7280";
         };
 
         // Piping Progress gauge

@@ -435,7 +435,43 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
+        # ── Support & TestPkg 집계 → kpi에 주입 (v17 RPC 미제공 필드 보완) ──
+        try:
+            # support_master: completed 컬럼 또는 date_completed 존재 여부로 완료 판단
+            sr = sb.table("support_master").select("completed, date_completed").execute()
+            s_rows = sr.data or []
+            del sr
+            s_total = len(s_rows)
+            s_comp  = sum(1 for x in s_rows if x.get("completed") == True or x.get("date_completed"))
+            del s_rows
+
+            # test_package_master
+            tr = sb.table("test_package_master").select("status").execute()
+            t_rows = tr.data or []
+            del tr
+            t_total = len(t_rows)
+            t_comp  = sum(1 for x in t_rows if (x.get("status") or "").upper()
+                         in ("COMPLETED", "DONE", "PASS", "YES", "Y"))
+            del t_rows
+
+            # kpi 리스트의 첫 번째 항목에 주입
+            kpi_list = raw.get("kpi")
+            if isinstance(kpi_list, list) and kpi_list:
+                kpi_list[0]["support_total"] = s_total
+                kpi_list[0]["support_comp"]  = s_comp
+                kpi_list[0]["testpkg_total"] = t_total
+                kpi_list[0]["testpkg_comp"]  = t_comp
+            elif isinstance(kpi_list, dict):
+                kpi_list["support_total"] = s_total
+                kpi_list["support_comp"]  = s_comp
+                kpi_list["testpkg_total"] = t_total
+                kpi_list["testpkg_comp"]  = t_comp
+            print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}")
+        except Exception as sp_e:
+            print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
+
         data = _parse_rpc(raw)
+
         del raw  # free the large raw dict — only processed data needed
         kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
         with _lock:

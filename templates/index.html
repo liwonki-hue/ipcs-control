@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=3.0">
+<link rel="stylesheet" href="/static/css/index.css?v=3.1">
 </head>
 <body>
 
@@ -74,14 +74,22 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div></div>
       <div class="grid-3">
         <div class="col">
-          <div class="panel"><div class="panel-title">Overall Piping Readiness</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING READINESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
-          <div class="panel"><div class="panel-title">By Discipline</div><div id="disciplineList"></div></div>
+          <div class="panel"><div class="panel-title">Overall Piping Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
+          <div class="panel" style="margin-top:8px"><div class="panel-title">Support Overall Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="supportGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="supportGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">SUPPORT PROGRESS</text></svg></div><div class="stat-list" id="supportStats"></div></div>
         </div>
         <div class="col col-wide">
-          <div class="panel"><div class="panel-title">Cumulative S-Curve &mdash; Plan vs Actual</div><div style="position:relative;height:220px"><canvas id="scurveChart"></canvas></div></div>
-          <div class="panel"><div class="panel-title">Weekly DI Productivity</div><div style="position:relative;height:170px"><canvas id="weeklyBar"></canvas></div></div>
+          <div class="panel"><div class="panel-title">Cumulative S-Curve &mdash; Plan vs Actual</div><div style="position:relative;height:185px"><canvas id="scurveChart"></canvas></div></div>
+          <div class="panel"><div class="panel-title">Weekly DI Productivity</div><div style="position:relative;height:140px"><canvas id="weeklyBar"></canvas></div></div>
         </div>
-        <div class="col"><div class="panel"><div class="panel-title">Progress by Unit</div><div id="unitOverview"></div></div></div>
+        <div class="col">
+          <div class="panel"><div class="panel-title">Progress by Unit</div><div id="unitOverview"></div></div>
+          <div class="panel" style="margin-top:8px"><div class="panel-title">Test Package Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="testpkgGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="testpkgGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">TEST PKG PROGRESS</text></svg></div><div class="stat-list" id="testpkgStats"></div></div>
+        </div>
+      </div>
+      <!-- By System: two tables below the 3-col grid -->
+      <div class="grid-2" style="margin-top:0">
+        <div class="panel"><div class="panel-title">By System (1)</div><div class="table-wrap" id="overviewSysTable1"></div></div>
+        <div class="panel"><div class="panel-title">By System (2)</div><div class="table-wrap" id="overviewSysTable2"></div></div>
       </div>
     </div>
 
@@ -271,10 +279,11 @@
 
       <!-- KPI Cards -->
       <div class="panel" style="margin-bottom:10px">
-        <div class="grid-4" id="welderKpi">
+        <div class="grid-5" id="welderKpi">
           <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Joints Completed</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="welder-week-di" style="color:var(--yellow)">—</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">Last Week DI</div></div>
           <div class="kpi-card"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">AVG DI / Day</div></div>
         </div>
       </div>
@@ -289,6 +298,12 @@
           <div class="panel-title">Monthly Welder Performance</div>
           <div style="position:relative;height:210px"><canvas id="welderSysChart"></canvas></div>
         </div>
+      </div>
+
+      <!-- Daily Welder Activity -->
+      <div class="panel" style="margin-bottom:10px" id="welderDailyPanel">
+        <div class="panel-title">Daily Welder Activity</div>
+        <div class="table-wrap" id="welderDailyTableWrap" style="max-height:280px;overflow-y:auto;scrollbar-gutter:stable"></div>
       </div>
 
       <!-- Welder Performance: dual-column table -->
@@ -604,6 +619,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=3.0"></script>
+<script src="/static/js/dashboard.js?v=3.1"></script>
 </body>
 </html>
