@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Load meta and dashboard data in parallel — saves 200-500ms vs sequential
         const [, data] = await Promise.all([loadMeta(), getDashData()]);
         renderKPI(data.kpi, data.weekly);
-        renderOverview(data.kpi, data.weekly, data.units);
+        renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
         console.error("[BOP] Init error:", e);
         showLoader(false, "Load failed: " + e.message);
@@ -146,7 +146,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "simulation"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "simulation", "welder"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
@@ -302,47 +302,117 @@ function renderKPI(d, wkData) {
 // ================================================================================
 async function loadOverview() {
     const data = await getDashData();
-    renderOverview(data.kpi, data.weekly, data.units);
+    renderOverview(data.kpi, data.weekly, data.units, data.systems);
 }
 
-async function renderOverview(kpi, wkData, units) {
+async function renderOverview(kpi, wkData, units, systems) {
     try {
-        const d = kpi, pct = d.unified_readiness || d.overall_pct || 0;
-        const r = 84, circ = Math.PI * r;
-        const offset = circ * (1 - Math.min(pct/100,1));
-        const gc = pct>=80?"#22d3a1":pct>=50?"#f5c542":"#ff8c42";
-        const gp = document.getElementById("gaugePath");
-        gp.style.stroke = gc; gp.style.strokeDashoffset = offset;
-        document.getElementById("gaugeText").textContent = `${pct}%`;
-        document.getElementById("gaugeText").style.fill = gc;
+        const d = kpi;
+        const _mkStats = (rows) => rows.map(([l,v]) =>
+            `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+        const _fillGauge = (pathId, textId, p) => {
+            const gp = document.getElementById(pathId), gt = document.getElementById(textId);
+            if (!gp || !gt) return;
+            gp.style.stroke = "#f97316"; gp.style.strokeDashoffset = Math.PI * 84 * (1 - Math.min(p/100,1));
+            gt.textContent = `${p}%`; gt.style.fill = "#f97316";
+        };
 
+        // Piping Progress gauge
+        _fillGauge("gaugePath", "gaugeText", d.overall_pct || 0);
+
+        // Piping Progress stats
         const stats = document.getElementById("overviewStats");
-        stats.innerHTML = [
-            ["D/I Completion (wt 70%)", `${d.overall_pct||0}%`],
-            ["Support (EA) (wt 20%)", `${d.support_pct||0}%`],
-            ["Test Package (wt 10%)", `${d.testpkg_pct||0}%`],
-            ["Total Plan DI", fmtNum(d.total_plan_di,0)],
-            ["Completed DI", fmtNum(d.completed_di,0)]
-        ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+        const _remDI = Math.max(0, (d.total_plan_di||0) - (d.completed_di||0));
+        if (stats) stats.innerHTML = _mkStats([
+            ["D/I Completion", `${d.overall_pct||0}%`],
+            ["Total Plan DI",  fmtNum(d.total_plan_di,0)],
+            ["Completed DI",   fmtNum(d.completed_di,0)],
+            ["Remaining DI",   fmtNum(_remDI,0)]
+        ]);
 
-        const disc = document.getElementById("disciplineList");
-        disc.innerHTML = [["Fabrication (S)",d.fab_pct,"var(--accent)"],["Erection (F)",d.erect_pct,"var(--green)"]]
-            .map(([n,p,c]) => `<div class="disc-row"><div class="disc-head"><span class="disc-name">${n}</span><span class="disc-pct" style="color:${c}">${p}%</span></div><div class="disc-track"><div class="disc-fill" style="width:${Math.min(p,100)}%;background:linear-gradient(90deg,${c}60,${c})"></div></div></div>`).join("");
+        // Support Progress gauge
+        const sPct = d.support_pct || 0;
+        _fillGauge("supportGaugePath", "supportGaugeText", sPct);
+        const sStats = document.getElementById("supportStats");
+        if (sStats) {
+            const sRem = Math.max(0, (d.support_total||0) - (d.support_comp||0));
+            sStats.innerHTML = _mkStats([
+                ["Support Completion", `${sPct}%`],
+                ["Total Support (EA)", fmtNum(d.support_total||0,0)],
+                ["Completed (EA)",     fmtNum(d.support_comp||0,0)],
+                ["Remaining (EA)",     fmtNum(sRem,0)]
+            ]);
+        }
+
+        // Test Package Progress gauge
+        const tPct = d.testpkg_pct || 0;
+        _fillGauge("testpkgGaugePath", "testpkgGaugeText", tPct);
+        const tStats = document.getElementById("testpkgStats");
+        if (tStats) {
+            const tRem = Math.max(0, (d.testpkg_total||0) - (d.testpkg_comp||0));
+            tStats.innerHTML = _mkStats([
+                ["Test Pkg Completion", `${tPct}%`],
+                ["Total Test Pkg",      fmtNum(d.testpkg_total||0,0)],
+                ["Completed",           fmtNum(d.testpkg_comp||0,0)],
+                ["Remaining",           fmtNum(tRem,0)]
+            ]);
+        }
+
+        // ── By System: split 23 systems across two tables ──────────────
+        const sysList = (systems || []).slice().sort((a, b) => (b.progress_pct||0) - (a.progress_pct||0));
+        const mid = Math.ceil(sysList.length / 2);
+        const mkSysRows = arr => arr.map(s => {
+            const p = s.progress_pct || 0, c = pctColor(p);
+            const rem = Math.max(0, (s.total_di||s.plan_di||0) - (s.completed_di||0));
+            return `<tr>
+                <td style="text-align:left">${s.system||"—"}</td>
+                <td style="text-align:right">${fmtNum(s.total_di||s.plan_di||0,0)}</td>
+                <td style="text-align:right">${fmtNum(s.completed_di||0,0)}</td>
+                <td style="text-align:right;color:var(--orange)">${fmtNum(rem,0)}</td>
+                <td style="text-align:right;color:${c}">${p}%</td>
+            </tr>`;
+        }).join("");
+        const sysThead = `<thead><tr><th style="text-align:left">System</th><th style="text-align:right">Plan DI</th><th style="text-align:right">Done DI</th><th style="text-align:right">Remaining</th><th>Progress</th></tr></thead>`;
+        const t1 = document.getElementById("overviewSysTable1");
+        const t2 = document.getElementById("overviewSysTable2");
+        if (t1) t1.innerHTML = `<table class="data-table" style="width:100%">${sysThead}<tbody>${mkSysRows(sysList.slice(0,mid))}</tbody></table>`;
+        if (t2) t2.innerHTML = `<table class="data-table" style="width:100%">${sysThead}<tbody>${mkSysRows(sysList.slice(mid))}</tbody></table>`;
 
         const indMap = {};
         const actWks = wkData.filter(w => w.completed_di > 0);
-        const lastActIdx = wkData.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
-        const wkView = lastActIdx >= 0 ? wkData.slice(0, lastActIdx + 1) : wkData.slice(0, 10);
         actWks.forEach(w => { indMap[w.week_no] = w.completed_di; });
 
         destroyChart("scurveChart");
+        const firstActIdx = wkData.findIndex(w => w.completed_di > 0);
+        const lastActIdx  = wkData.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
+        const cumulLine   = wkData.map((w, i) => (firstActIdx >= 0 && i >= firstActIdx && i <= lastActIdx) ? w.cumul_actual : null);
+
+        // Plan S-Curve: smooth theoretical S-shape (cubic smoothstep) over plan span
+        const totalPlanDI = (kpi && kpi.total_plan_di) ? kpi.total_plan_di : 0;
+        const pStart = 0;
+        const pEnd   = wkData.length - 1;
+        const pDur   = pEnd - pStart;
+        const planSCurve = wkData.map((_, i) => {
+            if (totalPlanDI <= 0 || pDur <= 0) return null;
+            if (i < pStart || i > pEnd) return null;
+            const t = (i - pStart) / pDur;
+            return Math.round(totalPlanDI * (3*t*t - 2*t*t*t));  // cubic smoothstep S-curve
+        });
+
+        const scurveLabels = wkData.map((_, i) => `W${i + 1}`);
         charts["scurveChart"] = new Chart(document.getElementById("scurveChart").getContext("2d"), {
             type: "bar",
-            data: { labels: wkView.map(w=>w.week_label), datasets: [
-                { label:"Actual Work DI", type:"bar", data:wkView.map(w=>indMap[w.week_no]||null), backgroundColor:"rgba(37,99,235,0.6)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.7, order:3, datalabels:{display:true,align:'top',anchor:'end',offset:2,color:'#2563eb',font:{size:9,weight:'600'},formatter:(v)=>v>0?fmtNum(v,0):''} }
+            data: { labels: scurveLabels, datasets: [
+                { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:false} },
+                { label:"Plan S-Curve",type:"line", yAxisID:"yCum", data:planSCurve, borderColor:"rgba(180,185,195,0.55)", borderWidth:2, borderDash:[6,4], fill:false, pointRadius:0, pointHoverRadius:4, tension:0, order:2, datalabels:{display:false} },
+                { label:"Actual Cum.", type:"line", yAxisID:"yCum", data:cumulLine,  borderColor:"#2563eb", borderWidth:2, fill:false, pointRadius:0, pointHoverRadius:4, tension:0.3, order:1, spanGaps:false, datalabels:{display:false} }
             ]},
             options: { ...chartOpts("Weekly DI Progress"),
-                scales: { ...chartOpts("").scales, x:{...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){const label=this.getLabelForValue(val);const wkNum=parseInt(label.replace("W",""));if(wkNum===1||wkNum%5===0)return label;return "";}}}, y:{...chartOpts("").scales.y,beginAtZero:true} },
+                scales: {
+                    x:{ ...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){if(index===0||index%5===4)return this.getLabelForValue(val);return "";}} },
+                    yBar:{ type:"linear", position:"left",  beginAtZero:true, grid:{color:"rgba(255,255,255,0.05)"}, ticks:{color:"#4a6080",font:{size:9}}, title:{display:false} },
+                    yCum:{ type:"linear", position:"right", beginAtZero:true, grid:{display:false}, ticks:{color:"#2563eb",font:{size:9}}, title:{display:false} }
+                },
                 plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
         });
 
@@ -364,7 +434,7 @@ async function renderOverview(kpi, wkData, units) {
 
         document.getElementById("unitOverview").innerHTML = units.map(u => {
             const p=u.progress_pct, c=pctColor(p);
-            return `<div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid #162032"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px"><div><div style="font-size:13px;font-weight:600">Unit ${u.unit}</div><div style="font-size:10px;color:#7a95b8">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:20px;font-weight:700;color:${c};font-family:'DM Mono',monospace">${p}%</div></div><div style="height:4px;background:#1e2d45;border-radius:2px"><div style="height:100%;width:${Math.min(p,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:#7a95b8;margin-top:3px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
+            return `<div style="margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div><div style="font-size:11px;font-weight:400">Unit ${u.unit}</div><div style="font-size:10px;color:var(--text-dim)">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:13px;font-weight:400;color:${c};font-family:'DM Mono',monospace">${p}%</div></div><div style="height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${Math.min(p,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:var(--text-dim);margin-top:2px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
         }).join("");
     } catch(e) { console.error("Overview failed", e); }
 }
@@ -461,7 +531,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             }).join("");
             if(!showTotal) return rowHtml;
             const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
-            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
                 <td style="${td}">${fmtNum(sumT,0)}</td>
                 <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
@@ -630,14 +700,14 @@ async function loadWeekly() {
             const comp=w.completed_di||0, fab=w.fab_di||0, erect=w.erect_di||0;
             const dateStr = w.week_start && w.week_end ? `${w.week_start.slice(5)} ~ ${w.week_end.slice(5)}` : (w.week_start ? w.week_start.slice(5) : "");
             return `<tr>
-                <td style="color:var(--accent);font-weight:600">${w.week_label}</td>
+                <td style="color:var(--accent)">${w.week_label}</td>
                 <td style="font-size:11px;color:var(--text-dim)">${dateStr}</td>
                 <td>${fmtNum(fab,0)}</td>
                 <td>${fmtNum(erect,0)}</td>
-                <td style="font-weight:700">${fmtNum(comp,0)}</td>
+                <td>${fmtNum(comp,0)}</td>
             </tr>`;
         }).join("");
-        html+=`<tr style="background:rgba(37,99,235,0.05);font-weight:800;border-top:1px solid var(--border)">
+        html+=`<tr style="background:rgba(37,99,235,0.05);border-top:1px solid var(--border)">
             <td style="color:var(--accent)">Total</td><td></td>
             <td>${fmtNum(totalFab,0)}</td>
             <td>${fmtNum(totalErect,0)}</td>
@@ -645,36 +715,54 @@ async function loadWeekly() {
         </tr>`;
         tbody.innerHTML=html;
 
-        // Breakdown panels
+        // Breakdown panels — 5분 클라이언트 캐시로 반복 요청 방지
         try {
-            const bd=await fetch("/api/weekly-last-breakdown").then(r=>r.json());
+            const _now = Date.now();
+            if (!loadWeekly._bdCache || (_now - loadWeekly._bdCacheTime > 300000)) {
+                loadWeekly._bdCache = await fetch("/api/weekly-last-breakdown").then(r=>r.json());
+                loadWeekly._bdCacheTime = _now;
+            }
+            const bd = loadWeekly._bdCache;
             const weekLabel = bd.week_label || "";
             const dateRange = bd.week_start && bd.week_end ? `${bd.week_start.slice(5)} ~ ${bd.week_end.slice(5)}` : "";
             document.getElementById("weeklySystemTitle").textContent  = `${weekLabel} Breakdown — By System`;
             document.getElementById("weeklyMaterialTitle").textContent = `${weekLabel} Breakdown — By Material`;
             document.getElementById("weeklySubareaTitle").textContent = `${weekLabel} Breakdown — By Sub Area`;
+            const mkTotalRow = arr => {
+                const sf=arr.reduce((s,r)=>s+(r.fab_di||0),0);
+                const se=arr.reduce((s,r)=>s+(r.erect_di||0),0);
+                const sc=arr.reduce((s,r)=>s+(r.completed_di||0),0);
+                const bld="font-weight:700";
+                return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+                    <td style="${bld};color:var(--accent)">Total</td>
+                    <td style="${bld};font-size:11px;color:var(--text-dim)">${dateRange}</td>
+                    <td style="${bld}">${fmtNum(sf,1)}</td>
+                    <td style="${bld}">${fmtNum(se,1)}</td>
+                    <td style="${bld};color:var(--accent)">${fmtNum(sc,1)}</td>
+                </tr>`;
+            };
             const mkSysRows = arr => arr.map(r=>`<tr>
-                <td style="font-weight:600">${r.system||r.mat||r.name||""}</td>
+                <td>${r.system||r.mat||r.name||""}</td>
                 <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
-                <td style="font-weight:700;color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
-            </tr>`).join("");
-            const mkSubRows = arr => arr.map(r=>`<tr>
-                <td style="font-weight:600">${r.sub_area||r.name||""}</td>
+                <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
+            </tr>`).join("") + mkTotalRow(arr);
+            const mkSubRows = (arr, showTotal=false, totalArr=null) => arr.map(r=>`<tr>
+                <td>${r.sub_area||r.name||""}</td>
                 <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
-                <td style="font-weight:700;color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
-            </tr>`).join("");
+                <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
+            </tr>`).join("") + (showTotal ? mkTotalRow(totalArr||arr) : "");
             document.querySelector("#weeklySystemTable tbody").innerHTML = mkSysRows(bd.systems||[]);
             if(document.querySelector("#weeklyMaterialTable tbody")) {
                 document.querySelector("#weeklyMaterialTable tbody").innerHTML = mkSysRows(bd.materials||[]);
             }
             const allSubs = bd.subareas || [];
             const mid = Math.ceil(allSubs.length / 2);
-            document.querySelector("#weeklySubareaTable tbody").innerHTML  = mkSubRows(allSubs.slice(0, mid));
-            document.querySelector("#weeklySubareaTable2 tbody").innerHTML = mkSubRows(allSubs.slice(mid));
+            document.querySelector("#weeklySubareaTable tbody").innerHTML  = mkSubRows(allSubs.slice(0, mid), false);
+            document.querySelector("#weeklySubareaTable2 tbody").innerHTML = mkSubRows(allSubs.slice(mid), true, allSubs);
             const title2El = document.getElementById("weeklySubareaTitle2");
             if (title2El) title2El.textContent = `${weekLabel} Breakdown — By Sub Area (2)`;
         } catch(e2) { console.warn("Breakdown fetch failed", e2); }
@@ -1058,10 +1146,10 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        await fetch("/api/cache/clear").catch(()=>{});
+        // cache/clear 제거: 단순 날짜 삭제는 백그라운드 캐시가 자연 만료되도록 둠
         toast(`✓ ID ${id} date cleared!`);
+        _dashData = null; // 메모리 내 캐시만 무효화
         _autoRefreshKpi();
-        loadNdePwht(); // Sync NDE tab
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
 
@@ -1076,10 +1164,11 @@ async function saveJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        await fetch("/api/cache/clear").catch(()=>{});
+        // cache/clear + loadNdePwht() 제거: 행 1개 저장 시마다 전체 재빌드는 과도한 부하
+        // _dashData null 처리만으로 다음 navigate 시 자동 갱신됨
+        _dashData = null;
         toast(`✓ ID ${id} saved!`);
         _autoRefreshKpi();
-        loadNdePwht(); // Sync NDE tab
     }catch(e){toast(`✗ Save failed: ${e.message}`,"error");}
 }
 
@@ -1090,7 +1179,7 @@ async function refreshWeeklySummary(){
         weekData=fresh.weekly||[];
         renderKPI(fresh.kpi,fresh.weekly);
         const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
-        if(visPage==="overview")renderOverview(fresh.kpi,fresh.weekly,fresh.units);
+        if(visPage==="overview")renderOverview(fresh.kpi,fresh.weekly,fresh.units,fresh.systems);
     }catch(e){console.warn("Weekly summary refresh failed:",e);}
 }
 
@@ -1108,12 +1197,12 @@ async function refreshData(){
 }
 
 // Auto-refresh KPI in background after save operations
+// polling 횟수를 20→8회로 줄여 서버 부하 감소 (캐시 TTL=1200초이므로 충분)
 async function _autoRefreshKpi(){
-    _dashData=null;
     fetch("/api/cache/clear").catch(()=>{});
-    await new Promise(r=>setTimeout(r,1000));
-    for(let i=0;i<20;i++){
-        await new Promise(r=>setTimeout(r,1500));
+    await new Promise(r=>setTimeout(r,2000));
+    for(let i=0;i<8;i++){
+        await new Promise(r=>setTimeout(r,2000));
         try{
             const res=await fetch("/api/dashboard");
             if(res.status===200){
@@ -1238,10 +1327,16 @@ let _selectedWelder = null;
 async function loadWelder() {
     _selectedWelder = null;
     try {
-        const res = await fetch("/api/welder-summary");
+        const [res, dailyRes, dashData] = await Promise.all([
+            fetch("/api/welder-summary"),
+            fetch("/api/welder-daily"),
+            getDashData()
+        ]);
         if (!res.ok) throw new Error("API error " + res.status);
         _welderData = await res.json();
-        renderWelder(_welderData);
+        const dailyData = dailyRes.ok ? await dailyRes.json() : [];
+        renderWelder(_welderData, dashData);
+        renderWelderDaily(dailyData, _welderData.weekly || []);
     } catch(e) {
         console.error("Welder load failed", e);
         const bodyA = document.getElementById("welderRankBodyA");
@@ -1249,12 +1344,72 @@ async function loadWelder() {
     }
 }
 
+function renderWelderDaily(daily, weekly) {
+    const wrap  = document.getElementById("welderDailyTableWrap");
+    const title = document.querySelector("#welderDailyPanel .panel-title");
+    if (!wrap) return;
+    if (!daily.length) { wrap.innerHTML = `<p style="color:var(--text-dim);font-size:11px;padding:10px">No daily data.</p>`; return; }
+
+    // ── Last work week: Mon–Sun of most recent date ──
+    const sortedDesc  = [...daily].sort((a, b) => b.day.localeCompare(a.day));
+    const latestDate  = new Date(sortedDesc[0].day);
+    const daysFromMon = (latestDate.getDay() + 6) % 7;
+    const monDate     = new Date(latestDate); monDate.setDate(latestDate.getDate() - daysFromMon);
+    const sunDate     = new Date(monDate);    sunDate.setDate(monDate.getDate() + 6);
+    const monStr      = monDate.toISOString().slice(0, 10);
+    const sunStr      = sunDate.toISOString().slice(0, 10);
+    const wkDates     = daily.filter(d => d.day >= monStr && d.day <= sunStr)
+                             .sort((a, b) => a.day.localeCompare(b.day));
+
+    // Match week label
+    const sortedWkly = [...weekly].sort((a, b) => (b.week_no || 0) - (a.week_no || 0));
+    const matchedWk  = sortedWkly.find(w => w.week_start && w.week_end
+        ? (monStr >= w.week_start && monStr <= w.week_end)
+        : w.total_di > 0);
+    const wkLabel = matchedWk?.week_label || "";
+    if (title) title.textContent = `Daily Welder Activity${wkLabel ? " — " + wkLabel : ""}`;
+
+    const sumWelders = wkDates.reduce((s, d) => s + d.welder_count, 0);
+    const totalDI    = wkDates.reduce((s, d) => s + d.total_di, 0);
+
+    // ── Horizontal layout: dates as columns ──
+    const thCells = wkDates.map(d => {
+        const dt   = new Date(d.day);
+        const isWe = dt.getDay() === 0 || dt.getDay() === 6;
+        return `<th style="text-align:center${isWe ? ";color:var(--orange)" : ""}">${d.day.slice(5)}</th>`;
+    }).join("") + `<th style="text-align:center;color:var(--accent)">Total</th>`;
+
+    // Welders row
+    const welderCells = wkDates.map(d =>
+        `<td style="text-align:center">${d.welder_count}</td>`
+    ).join("") + `<td style="text-align:center;color:var(--accent)">${sumWelders}</td>`;
+
+    // DI row
+    const diCells = wkDates.map(d =>
+        `<td style="text-align:center">${fmtNum(d.total_di, 1)}</td>`
+    ).join("") + `<td style="text-align:center;color:var(--accent)">${fmtNum(totalDI, 1)}</td>`;
+
+    wrap.innerHTML = `<table class="data-table" style="width:100%">
+        <thead><tr>
+            <th style="text-align:left;min-width:80px"></th>${thCells}
+        </tr></thead>
+        <tbody>
+            <tr>
+                <td style="color:var(--text-dim)">Welders</td>${welderCells}
+            </tr>
+            <tr>
+                <td style="color:var(--text-dim)">Total DI</td>${diCells}
+            </tr>
+        </tbody>
+    </table>`;
+}
+
 // Helper: render one half of a welder table (No / Welder ID / Joint / Total DI / Avg DI/Day)
 function _welderHalfRows(rows, startIdx, accentColor) {
     if (!rows.length) return "";
     return rows.map((r, i) => `<tr>
         <td style="text-align:center;color:var(--text-dim)">${startIdx + i + 1}</td>
-        <td style="font-weight:600;color:${accentColor}">${r.welder}</td>
+        <td style="color:${accentColor}">${r.welder}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.joints, 1)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.total_di, 1)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--green)">${fmtNum(r.avg_di_per_day, 2)}</td>
@@ -1286,7 +1441,7 @@ function _welderSubTable(rows, startIdx, accentColor) {
     </table>`;
 }
 
-function renderWelder(data) {
+function renderWelder(data, dashData) {
     const s = data.stats || {};
     document.getElementById("welder-active").textContent       = s.active_welders || 0;
     document.getElementById("welder-total-joints").textContent = (s.total_joints || 0).toLocaleString();
@@ -1296,6 +1451,18 @@ function renderWelder(data) {
         ? ranking.reduce((sum, r) => sum + (r.avg_di_per_day || 0), 0) / ranking.length
         : 0;
     document.getElementById("welder-avg-di").textContent = fmtNum(avgDiDay, 2);
+
+    // Overall Week Actual: last active week DI from main dashboard data
+    const weekDiEl = document.getElementById("welder-week-di");
+    if (weekDiEl && dashData) {
+        const wkData  = dashData.weekly || [];
+        const actWks  = wkData.filter(w => w.completed_di > 0);
+        const lastWk  = actWks[actWks.length - 1];
+        weekDiEl.textContent = lastWk ? fmtNum(lastWk.completed_di, 0) : "—";
+        const subEl = weekDiEl.nextElementSibling;
+        if (subEl && lastWk) subEl.textContent = lastWk.week_label || "Last Week DI";
+    }
+
     _updateWelderKpiBar(data);  // sync top-bar KPI card
 
     // ── Welder Performance: dual-column split table ────────────────────────────
@@ -1306,7 +1473,8 @@ function renderWelder(data) {
         if (bA) bA.innerHTML = empty;
         if (bB) bB.innerHTML = "";
     } else {
-        _renderSplitWelderTable(ranking, "welderRankBodyA", "welderRankBodyB", "var(--accent)");
+        const sortedRanking = ranking.slice().sort((a, b) => (b.avg_di_per_day || 0) - (a.avg_di_per_day || 0));
+        _renderSplitWelderTable(sortedRanking, "welderRankBodyA", "welderRankBodyB", "var(--accent)");
     }
 
     // ── Weekly chart: fixed 6-week frame ending at last active week ─────────────
