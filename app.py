@@ -81,7 +81,7 @@ def _parse_rpc(raw):
         return round((c / t) * 100, 2)
 
     # 1. KPI processing
-    kpi = first(raw.get("kpi"))
+    kpi = first(raw.get("kpi")) or {}
     if kpi:
         tdi  = kpi.get("total_di", 0) or 0
         cdi  = kpi.get("completed_di", 0) or 0
@@ -284,6 +284,7 @@ def _build():
             del d17  # free raw v17 dict after extraction
         except Exception as e:
             print(f"[cache] v17 RPC error: {e}")
+            raise Exception("Primary RPC (v17) failed. Aborting cache build.") from e
 
         # ── Supplement: get_dashboard_aggregates_control_v2 ──
         try:
