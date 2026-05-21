@@ -146,7 +146,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "simulation", "welder"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "welder"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
@@ -155,16 +155,6 @@ function navigate(page) {
             epKpiRow.style.display = page === "early_power" ? "grid" : "none";
         }
 
-        // Simulation page specific (already handled but reinforced)
-        if (page === "simulation") {
-            target.style.display = "flex";
-            target.style.flexDirection = "column";
-            target.style.height = "calc(100vh - 80px)"; // Increased height since KPI row is hidden
-            const frame = document.getElementById("simulationFrame");
-            if (frame && !frame.src.includes("localhost:8501")) {
-                frame.src = "http://localhost:8501";
-            }
-        }
     }
 
     switch(page) {
@@ -178,7 +168,7 @@ function navigate(page) {
         case "support_master": loadSupportMaster(); break;
         case "nde_pwht":    loadNdePwht();      break;
         case "testpkg_master": loadTestPkgMaster(); break;
-        case "simulation":  /* handled above */ break;
+
     }
 }
 
