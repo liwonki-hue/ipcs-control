@@ -42,24 +42,24 @@ _sb = None
 _sb_lock = threading.Lock()
 
 def get_sb():
-    """싱글톤 Supabase 클라이언트. 연결 오류 시 재생성."""
+    """Singleton Supabase client. Re-creates on connection error."""
     global _sb
     with _sb_lock:
         if _sb is None:
             try:
-                options = ClientOptions(schema="construction")
+                options = ClientOptions(schema="construction", postgrest_client_timeout=30)
                 _sb = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
             except Exception as e:
-                print(f"[supabase] 연결 실패: {e}")
+                print(f"[supabase] connection failed: {e}")
                 raise
     return _sb
 
 def reset_sb():
-    """Supabase 클라이언트 강제 재생성 (연결 오류 복구용)."""
+    """Force re-create the Supabase client (for connection error recovery)."""
     global _sb
     with _sb_lock:
         _sb = None
-    print("[supabase] 클라이언트 재설정됨")
+    print("[supabase] client reset")
 
 # ── RPC data processing ────────────────────────────────────────────────
 def _parse_rpc(raw):
@@ -235,7 +235,7 @@ _cache      = {}
 _lock       = threading.Lock()
 _building   = False
 _build_fail = False
-CACHE_TTL   = 1200  # 20 minutes — Render 무료 플랜 DB 호출 최소화
+CACHE_TTL   = 1200  # 20 minutes — minimize DB calls on Render free tier
 
 def _build():
     global _building, _build_fail
@@ -349,14 +349,14 @@ def _build():
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
-        # ── EP system/area breakdown: get_ep_aggregates() RPC 사용 ──
-        # Python 메모리에 joint_master 전체를 올리지 않고 DB에서 집계 후 결과만 수신
+        # ── EP system/area breakdown: uses get_ep_aggregates() RPC ──
+        # Aggregates in DB and returns only results — avoids loading entire joint_master into Python memory
         try:
             ep_r = sb.rpc("get_ep_aggregates", {}).execute()
             ep_data = ep_r.data or {}
             del ep_r
 
-            # RPC 반환값 구조: {ep_sys:[...], ep_area:[...], ep_weekly:[...]}
+            # RPC return structure: {ep_sys:[...], ep_area:[...], ep_weekly:[...]}
             if isinstance(ep_data, list) and ep_data:
                 ep_data = ep_data[0]
 
@@ -366,7 +366,7 @@ def _build():
                 ep_wk_rpc = ep_data.get("ep_weekly") or []
                 if ep_wk_rpc and not raw.get("ep_weekly"):
                     raw["ep_weekly"] = ep_wk_rpc
-                # ep_kpi 계산 (RPC에서 오지 않는 경우 ep_sys 집계로 계산)
+                # Compute ep_kpi from ep_sys aggregates when not provided by RPC
                 if not raw.get("ep_kpi") and raw.get("ep_sys"):
                     tot_ep  = round(sum(v.get("total_di", 0)     for v in raw["ep_sys"]), 2)
                     comp_ep = round(sum(v.get("completed_di", 0) for v in raw["ep_sys"]), 2)
@@ -374,7 +374,7 @@ def _build():
                 del ep_data
         except Exception as ep_e:
             print(f"[cache] get_ep_aggregates RPC error: {ep_e}")
-            # Fallback: 직접 쿼리 (RPC 미배포 환경 호환)
+            # Fallback: direct query for environments where RPC is not deployed
             try:
                 ep_r = sb.schema("construction").table("joint_master") \
                          .select("system, sub_area, di, completed, date_completed").eq("phase", "EP").execute()
@@ -436,9 +436,9 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
-        # ── Support & TestPkg 집계 → kpi에 주입 (v17 RPC 미제공 필드 보완) ──
+        # ── Support & TestPkg aggregates → inject into kpi (supplements fields not in v17 RPC) ──
         try:
-            # support_master: completed 컬럼 또는 date_completed 존재 여부로 완료 판단
+            # support_master: completed = True or date_completed present
             sr = sb.table("support_master").select("completed, date_completed").execute()
             s_rows = sr.data or []
             del sr
@@ -455,7 +455,7 @@ def _build():
                          in ("COMPLETED", "DONE", "PASS", "YES", "Y"))
             del t_rows
 
-            # kpi 리스트의 첫 번째 항목에 주입
+            # Inject into the first item of the kpi list
             kpi_list = raw.get("kpi")
             if isinstance(kpi_list, list) and kpi_list:
                 kpi_list[0]["support_total"] = s_total
@@ -475,9 +475,29 @@ def _build():
 
         del raw  # free the large raw dict — only processed data needed
         kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
+        
+        # Populate _meta_cache safely
+        try:
+            m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
+            m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
+            m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
+            m_sub   = sorted(list(set(a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("subarea") or a.get("area")))))
+        except Exception as me:
+            print(f"[cache] Meta extraction error: {me}")
+            m_units, m_sys, m_area, m_sub = [], [], [], []
+        
+        global _meta_cache
         with _lock:
             _cache["data"] = data
             _cache["time"] = time.time()
+            _meta_cache["data"] = {
+                "units": m_units,
+                "systems": m_sys,
+                "areas": m_area,
+                "sub_areas": m_sub
+            }
+            _meta_cache["time"] = time.time()
+            
         _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
@@ -525,20 +545,15 @@ def api_cache_clear():
 
 @app.route("/api/meta", methods=["GET"])
 def api_meta():
-    global _meta_cache
+    global _meta_cache, _building
     now   = time.time()
-    force = request.args.get("t") is not None
-    if not force and _meta_cache["data"] and (now - _meta_cache["time"]) < 3600:
+    force = False  # Disabled ?t= to prevent blocking Gunicorn thread
+    if not force and _meta_cache.get("data") and (now - _meta_cache["time"]) < 3600:
         return jsonify(_meta_cache["data"])
-    try:
-        sb       = get_sb()
-        res      = sb.rpc("get_distinct_meta_v2", {}).execute()
-        res_data = res.data or {"units": [], "systems": [], "areas": [], "sub_areas": []}
-        _meta_cache = {"time": now, "data": res_data}
-        return jsonify(res_data)
-    except Exception as e:
-        print(f"[api-meta] Error: {e}")
-        return jsonify({"error": str(e)}), 500
+    
+    # If not in cache, _build() will populate it eventually.
+    # We should just return 202 instead of blocking the thread.
+    return jsonify({"building": True, "message": "Meta data is building..."}), 202
 
 # ══════════════════════════════════════════════════════════════════════
 #  PAGE
@@ -750,7 +765,7 @@ def api_welder_daily():
             .not_.is_("welder", "null") \
             .execute()
         rows = res.data or []
-        del res  # 응답 객체 즉시 해제
+        del res  # free response object immediately
         daily = defaultdict(lambda: {"welders": set(), "total_di": 0.0})
         for row in rows:
             day = str(row.get("date_completed") or "")[:10]
@@ -760,7 +775,7 @@ def api_welder_daily():
             for w in [x.strip() for x in wl.split("/") if x.strip()]:
                 daily[day]["welders"].add(w)
             daily[day]["total_di"] += float(row.get("di") or 0)
-        del rows  # 원본 데이터 즉시 해제
+        del rows  # free raw data immediately
         result = []
         for day in sorted(daily.keys(), reverse=True):
             d   = daily[day]
@@ -877,8 +892,8 @@ def api_joints_sync_phase_package():
 
         wb.close()
 
-        # ── bulk_update_phase_package() RPC 단일 호출로 N+1 완전 제거 ──
-        # DB에서 ISO+joint_no 매칭 및 UPDATE 처리 → Python 메모리 최소화
+        # ── Single bulk_update_phase_package() RPC call — eliminates N+1 queries ──
+        # ISO+joint_no matching and UPDATE handled in DB → minimal Python memory usage
         rpc_payload = [
             {"iso": iso, "joint_no": joint_no,
              "phase": upd.get("phase"), "package": upd.get("package")}
@@ -889,7 +904,7 @@ def api_joints_sync_phase_package():
         rpc_used = False
         if rpc_payload:
             try:
-                # JSONB 배열을 RPC에 전달 (최대 2000건씩 분할)
+                # Pass JSONB array to RPC in chunks of up to 2000
                 for i in range(0, len(rpc_payload), 2000):
                     chunk = rpc_payload[i:i+2000]
                     res = sb.rpc("bulk_update_phase_package",
@@ -898,9 +913,9 @@ def api_joints_sync_phase_package():
                     del res
                 rpc_used = True
             except Exception as rpc_e:
-                print(f"[sync] bulk_update_phase_package RPC 실패, Python 배치로 폴백: {rpc_e}")
+                print(f"[sync] bulk_update_phase_package RPC failed, falling back to Python batch: {rpc_e}")
 
-        # Fallback: RPC 미배포 시 Python 배치 upsert
+        # Fallback: Python batch upsert when RPC is not deployed
         if not rpc_used and rpc_payload:
             isos = list({r["iso"] for r in rpc_payload})
             db_rows = []
@@ -957,7 +972,7 @@ def api_testpkg_joints():
             "id,system,package,iso_drawing,joint_no,date_completed,"
             "vt_date,vt_result,"
             "inspection,mt_date,mt_result,pt_date,pt_result,"
-            "rt_date,rt_result,pwht,pwht_date,pwht_result",
+            "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result",
             count="exact"
         ).not_.is_("package", "null")
 
@@ -979,7 +994,8 @@ def api_testpkg_joints():
                 # NDE: date entered but no result → PENDING
                 elif (r.get("mt_date") and not r.get("mt_result")) or \
                      (r.get("pt_date") and not r.get("pt_result")) or \
-                     (r.get("rt_date") and not r.get("rt_result")):
+                     (r.get("rt_date") and not r.get("rt_result")) or \
+                     (r.get("rt_2_date") and not r.get("rt_2_result")):
                     pending = True
                 # PWHT required but no result → PENDING
                 elif r.get("pwht") == "Y" and not r.get("pwht_result"):
@@ -1301,6 +1317,11 @@ def compress_response(response):
 # ── Pre-warm cache on startup (works with both python app.py and gunicorn) ──
 threading.Thread(target=_build, daemon=True).start()
 
+@app.route("/debug_path")
+def debug_path():
+    import os
+    return jsonify({"cwd": os.getcwd(), "file": __file__})
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0",
-            port=int(os.environ.get("PORT", 5001)))
+            port=int(os.environ.get("PORT", 5005)))

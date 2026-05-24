@@ -303,11 +303,11 @@ async function renderOverview(kpi, wkData, units, systems) {
         const _fillGauge = (pathId, textId, p) => {
             const gp = document.getElementById(pathId), gt = document.getElementById(textId);
             if (!gp || !gt) return;
-            // 0%도 최소 아크(2%)를 표시해 게이지가 존재함을 인식 가능하게 함
+            // Show a minimal arc (2%) even at 0% so the gauge remains visible
             const visP   = Math.max(p, p > 0 ? p : 0);
             const offset = Math.PI * 84 * (1 - Math.min(visP / 100, 1));
-            gp.style.stroke          = p > 0 ? "#f97316" : "#374151";  // 0%는 회색
-            gp.style.strokeDashoffset = p > 0 ? offset : Math.PI * 84 * 0.98; // 0%도 2% 아크
+            gp.style.stroke          = p > 0 ? "#f97316" : "#374151";  // 0% = gray
+            gp.style.strokeDashoffset = p > 0 ? offset : Math.PI * 84 * 0.98; // 0% = 2% arc
             gt.textContent = `${p}%`;
             gt.style.fill  = p > 0 ? "#f97316" : "#6b7280";
         };
@@ -710,7 +710,7 @@ async function loadWeekly() {
         </tr>`;
         tbody.innerHTML=html;
 
-        // Breakdown panels — 5분 클라이언트 캐시로 반복 요청 방지
+        // Breakdown panels — 5-min client cache to reduce repeated requests
         try {
             const _now = Date.now();
             if (!loadWeekly._bdCache || (_now - loadWeekly._bdCacheTime > 300000)) {
@@ -1063,15 +1063,40 @@ function renderNdeTable(rows){
                 </select>
             </td>
             
-            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px;">
-                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%; text-align-last:center;">
-                    <option value="">-</option>
-                    <option value="PASS" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
-                    <option value="FAIL" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
+            <td style="border-right:none; padding-right:2px; ${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px; ${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}">
+                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%; text-align-last:center; ${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
+                    <option value="" color="#000">-</option>
+                    <option value="PASS" color="#000" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" color="#000" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
-            
+            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px;">
+                <select class="cell-input" id="nde-rt-find-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="" color="#000">-</option>
+                    <option value="POR"   color="#000" ${r.rt_finding==='POR'  ?'selected':''}>POR (Porosity)</option>
+                    <option value="SLAG"  color="#000" ${r.rt_finding==='SLAG' ?'selected':''}>SLAG (Slag Incl.)</option>
+                    <option value="LF"    color="#000" ${r.rt_finding==='LF'   ?'selected':''}>LF (Lack of Fusion)</option>
+                    <option value="IP"    color="#000" ${r.rt_finding==='IP'   ?'selected':''}>IP (Incomplete Pen.)</option>
+                    <option value="IC"    color="#000" ${r.rt_finding==='IC'   ?'selected':''}>IC (Internal Concavity)</option>
+                    <option value="UC"    color="#000" ${r.rt_finding==='UC'   ?'selected':''}>UC (Undercut)</option>
+                    <option value="OL"    color="#000" ${r.rt_finding==='OL'   ?'selected':''}>OL (Overlap)</option>
+                    <option value="BT"    color="#000" ${r.rt_finding==='BT'   ?'selected':''}>BT (Burn Through)</option>
+                    <option value="HB"    color="#000" ${r.rt_finding==='HB'   ?'selected':''}>HB (Hollow Bead)</option>
+                    <option value="TI"    color="#000" ${r.rt_finding==='TI'   ?'selected':''}>TI (Tungsten Incl.)</option>
+                    <option value="CRACK" color="#000" ${r.rt_finding==='CRACK'?'selected':''}>CRACK</option>
+                    <option value="MULTI" color="#000" ${r.rt_finding==='MULTI'?'selected':''}>MULTI (Multiple)</option>
+                </select>
+            </td>
+            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px; background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%"></td>
+            <td style="border-left:none; padding-left:2px; background:rgba(59,130,246,0.07)">
+                <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%; text-align-last:center;">
+                    <option value="" color="#000">-</option>
+                    <option value="PASS" color="#000" ${r.rt_2_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" color="#000" ${r.rt_2_result==='FAIL'?'selected':''}>FAIL</option>
+                </select>
+            </td>
+
             <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%"></td>
             <td style="border-left:none; padding-left:2px;">
                 <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%; text-align-last:center;">
@@ -1095,12 +1120,15 @@ async function saveNdeRow(id){
         mt_result: document.getElementById(`nde-mt-res-${id}`).value,
         rt_date: document.getElementById(`nde-rt-date-${id}`).value.trim() || null,
         rt_result: document.getElementById(`nde-rt-res-${id}`).value,
+        rt_finding: document.getElementById(`nde-rt-find-${id}`).value || null,
+        rt_2_date: document.getElementById(`nde-rt-2-date-${id}`).value.trim() || null,
+        rt_2_result: document.getElementById(`nde-rt-2-res-${id}`).value,
         pwht_date: document.getElementById(`nde-pwht-date-${id}`).value.trim() || null,
         pwht_result: document.getElementById(`nde-pwht-res-${id}`).value
     };
-    
+
     // Date normalization
-    ['pt_date', 'mt_date', 'rt_date', 'pwht_date'].forEach(k => {
+    ['pt_date', 'mt_date', 'rt_date', 'rt_2_date', 'pwht_date'].forEach(k => {
         if(data[k] && data[k].length === 8) data[k] = "20" + data[k];
     });
 
@@ -1141,9 +1169,9 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        // cache/clear 제거: 단순 날짜 삭제는 백그라운드 캐시가 자연 만료되도록 둠
+        // Removed cache/clear: simple date deletion lets the background cache expire naturally
         toast(`✓ ID ${id} date cleared!`);
-        _dashData = null; // 메모리 내 캐시만 무효화
+        _dashData = null; // Invalidate in-memory cache only
         _autoRefreshKpi();
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
@@ -1159,8 +1187,8 @@ async function saveJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        // cache/clear + loadNdePwht() 제거: 행 1개 저장 시마다 전체 재빌드는 과도한 부하
-        // _dashData null 처리만으로 다음 navigate 시 자동 갱신됨
+        // Removed cache/clear + loadNdePwht(): rebuilding cache on every single row save is too expensive
+        // Setting _dashData=null ensures auto-refresh on next navigate
         _dashData = null;
         toast(`✓ ID ${id} saved!`);
         _autoRefreshKpi();
@@ -1192,7 +1220,7 @@ async function refreshData(){
 }
 
 // Auto-refresh KPI in background after save operations
-// polling 횟수를 20→8회로 줄여 서버 부하 감소 (캐시 TTL=1200초이므로 충분)
+// Reduced polling from 20 to 8 iterations to lower server load (cache TTL=1200s is sufficient)
 async function _autoRefreshKpi(){
     fetch("/api/cache/clear").catch(()=>{});
     await new Promise(r=>setTimeout(r,2000));
@@ -2091,7 +2119,7 @@ function _tpResultBadge(result) {
 function renderTPTable(rows) {
     const tbody = document.getElementById("tpBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="18" style="text-align:center;color:var(--text-dim);padding:20px">No data. Package 필터를 선택하거나 Sync Phase/Pkg 버튼을 클릭하세요.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="18" style="text-align:center;color:var(--text-dim);padding:20px">No data. Select a Package filter or click the Sync Phase/Pkg button.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -2134,7 +2162,7 @@ function renderTPTable(rows) {
 async function saveTPVT(id) {
     let vtDate = document.getElementById(`tp-vt-date-${id}`)?.value?.trim() || "";
     const vtRes  = document.getElementById(`tp-vt-res-${id}`)?.value || "";
-    if (vtDate && !/^\d{2,4}-\d{2}-\d{2}$/.test(vtDate)) { toast("VT Date: YY-MM-DD 형식으로 입력", "error"); return; }
+    if (vtDate && !/^\d{2,4}-\d{2}-\d{2}$/.test(vtDate)) { toast("VT Date: enter in YY-MM-DD format", "error"); return; }
     if (vtDate && vtDate.length === 8) vtDate = "20" + vtDate;
     try {
         const r = await fetch(`${API}/api/joints/${id}`, {
@@ -2149,7 +2177,7 @@ async function saveTPVT(id) {
 }
 
 async function syncPhasePackage() {
-    if (!confirm("Raw File 폴더의 BOP Piping Joint Master.xlsx에서 PHASE와 PACKAGE를 동기화합니다.\n계속하시겠습니까?")) return;
+    if (!confirm("Sync PHASE and PACKAGE from BOP Piping Joint Master.xlsx in the Raw File folder.\nDo you want to continue?")) return;
     toast("Syncing...");
     try {
         const r = await fetch("/api/joints/sync-phase-package", {method:"POST"});
