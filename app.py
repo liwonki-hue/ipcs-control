@@ -4,7 +4,6 @@ import gc
 import gzip
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from flask import Flask, render_template, jsonify, request
 from supabase import create_client, Client
@@ -238,204 +237,149 @@ _building   = False
 _build_fail = False
 CACHE_TTL   = 1200  # 20 minutes — minimize DB calls on Render free tier
 
-def _make_sb():
-    """각 스레드용 독립 Supabase 클라이언트 생성 (thread-safe 병렬 실행용)."""
-    options = ClientOptions(schema="construction", postgrest_client_timeout=90)
-    return create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
-
 def _build():
     global _building, _build_fail
     try:
-        import time as _time
-        _t0 = _time.time()
-        print("[cache] Background build started (parallel fetch, each thread own client)...")
-
-        # ── 5개 DB 호출 병렬 실행 — 각 스레드가 독립 클라이언트 사용 ──
-        def _fetch_v17():
-            t = _time.time()
-            res = _make_sb().rpc("get_dashboard_summary_v17", {}).execute()
-            d = res.data; del res
-            print(f"[cache] v17 done in {_time.time()-t:.1f}s")
-            return d
-
-        def _fetch_v2():
-            try:
-                t = _time.time()
-                res = _make_sb().rpc("get_dashboard_aggregates_control_v2", {}).execute()
-                d = res.data; del res
-                print(f"[cache] v2 done in {_time.time()-t:.1f}s")
-                return d
-            except Exception as e:
-                print(f"[cache] v2 RPC error (non-critical): {e}"); return None
-
-        def _fetch_ep():
-            try:
-                t = _time.time()
-                res = _make_sb().rpc("get_ep_aggregates", {}).execute()
-                d = res.data; del res
-                print(f"[cache] EP done in {_time.time()-t:.1f}s")
-                return d
-            except Exception as e:
-                print(f"[cache] EP RPC error: {e}"); return None
-
-        def _fetch_support():
-            try:
-                t = _time.time()
-                res = _make_sb().table("support_master").select("completed, date_completed").execute()
-                print(f"[cache] support done in {_time.time()-t:.1f}s")
-                return res.data or []
-            except Exception as e:
-                print(f"[cache] support_master error: {e}"); return []
-
-        def _fetch_testpkg():
-            try:
-                t = _time.time()
-                # status 컬럼은 DB에 없음 — vt_result로 완료 여부 판단
-                res = _make_sb().table("test_package_master").select("vt_result").execute()
-                print(f"[cache] testpkg done in {_time.time()-t:.1f}s")
-                return res.data or []
-            except Exception as e:
-                print(f"[cache] test_package_master error: {e}"); return []
-
-        with ThreadPoolExecutor(max_workers=5) as pool:
-            f_v17     = pool.submit(_fetch_v17)
-            f_v2      = pool.submit(_fetch_v2)
-            f_ep      = pool.submit(_fetch_ep)
-            f_support = pool.submit(_fetch_support)
-            f_testpkg = pool.submit(_fetch_testpkg)
-            try:
-                d17_raw = f_v17.result()
-            except Exception as e:
-                print(f"[cache] v17 RPC error: {e}")
-                raise Exception("Primary RPC (v17) failed. Aborting cache build.") from e
-
-            # ── v17 완료 즉시 부분 캐시 설정 → 사용자 202 대기 해소 ──
-            _d17_p = d17_raw[0] if (isinstance(d17_raw, list) and d17_raw) else d17_raw
-            if isinstance(_d17_p, dict):
-                _rp = {
-                    "kpi":      (_d17_p.get("kpi") if isinstance(_d17_p.get("kpi"), list)
-                                 else ([_d17_p["kpi"]] if _d17_p.get("kpi") else [])),
-                    "units":    _d17_p.get("unit")    or [],
-                    "areas":    _d17_p.get("area")    or [],
-                    "subareas": _d17_p.get("subarea") or _d17_p.get("area") or [],
-                    "systems":  _d17_p.get("sys")     or [],
-                    "weekly":   _d17_p.get("act")     or [],
-                    "weeks":    _d17_p.get("wk")      or [],
-                }
-                _partial = _parse_rpc(_rp)
-                with _lock:
-                    _cache["data"] = _partial
-                    _cache["time"] = time.time()
-                print(f"[cache] Partial cache ready in {_time.time()-_t0:.1f}s (v17 only)")
-
-            d2_raw  = f_v2.result()
-            ep_raw  = f_ep.result()
-            s_rows  = f_support.result()
-            t_rows  = f_testpkg.result()
-        print(f"[cache] All fetches done in {_time.time()-_t0:.1f}s total")
-
+        sb  = get_sb()
         raw = {}
+        print("[cache] Background build started...")
 
-        # ── v17 처리 ──
-        d17 = d17_raw
-        if isinstance(d17, list) and d17: d17 = d17[0]
-        if isinstance(d17, dict) and d17:
-            print(f"[cache] v17 RPC OK. Keys: {list(d17.keys())}")
-            kpi17 = d17.get("kpi")
-            if kpi17:
-                raw["kpi"] = kpi17 if isinstance(kpi17, list) else [kpi17]
-            raw["units"]    = d17.get("unit")    or []
-            raw["areas"]    = d17.get("area")    or []
-            raw["subareas"] = d17.get("subarea") or d17.get("area") or []
-            raw["systems"]  = d17.get("sys")     or []
-            for item in raw["systems"]:
-                if "plan_di" in item and "total_di" not in item:
-                    item["total_di"] = item["plan_di"]
-            raw["weekly"] = d17.get("act") or []
-            raw["weeks"]  = d17.get("wk")  or []
-            plan_agg = {}
-            for pi in (d17.get("pi") or []):
-                try:
-                    wk  = int(pi.get("week_no") or 0)
-                    fab = float(pi.get("plan_fab_di", 0) or 0)
-                    ere = float(pi.get("plan_erect_di", 0) or 0)
-                    if wk not in plan_agg: plan_agg[wk] = {"f": 0.0, "e": 0.0}
-                    plan_agg[wk]["f"] += fab
-                    plan_agg[wk]["e"] += ere
-                except (ValueError, TypeError): continue
-            raw["actual_plan_agg"] = {str(k): v for k, v in plan_agg.items()}
-            del plan_agg
-        del d17, d17_raw
+        # ── Primary: get_dashboard_summary_v17 ──
+        try:
+            res = sb.rpc("get_dashboard_summary_v17", {}).execute()
+            d17 = res.data
+            del res  # free httpx response immediately
+            if isinstance(d17, list) and d17: d17 = d17[0]
 
-        # ── v2 처리 ──
-        d2 = d2_raw
-        if isinstance(d2, list) and d2: d2 = d2[0]
-        if isinstance(d2, dict):
-            if d2.get("ep_act"):
-                raw["ep_weekly"] = d2["ep_act"]
-            if d2.get("ep_kpi"):
-                val = d2["ep_kpi"]
-                raw["ep_kpi"] = [val] if isinstance(val, dict) else val
-            if not raw.get("units") and d2.get("unit"):
-                raw["units"] = d2["unit"]
-            if not raw.get("systems") and d2.get("sys"):
-                raw["systems"] = d2["sys"]
+            if isinstance(d17, dict) and d17:
+                print(f"[cache] v17 RPC OK. Keys: {list(d17.keys())}")
+                kpi17 = d17.get("kpi")
+                if kpi17:
+                    raw["kpi"] = kpi17 if isinstance(kpi17, list) else [kpi17]
+
+                raw["units"]    = d17.get("unit")   or []
+                raw["areas"]    = d17.get("area")   or []
+                raw["subareas"] = d17.get("subarea") or d17.get("area") or []
+                raw["systems"]  = d17.get("sys")    or []
                 for item in raw["systems"]:
                     if "plan_di" in item and "total_di" not in item:
                         item["total_di"] = item["plan_di"]
-            if d2.get("act") and raw.get("weekly"):
-                if not raw.get("weeks"):
-                    try:
-                        raw["weeks"] = get_sb().table("week_schedule").select("*").order("week_no").execute().data or []
-                    except Exception: pass
-                sched_map   = {w["week_no"]: str(w["week_start_date"])[:10] for w in (raw.get("weeks") or [])}
-                v2_date_map = {}
-                v2_wk_map   = {}
-                for a in (d2["act"] or []):
-                    wn = a.get("week_no")
-                    if wn:
-                        v2_wk_map[int(wn)] = a
-                        if wn in sched_map:
-                            v2_date_map[sched_map[wn]] = a
-                for item in raw["weekly"]:
-                    start_date = str(item.get("week_start") or "")[:10]
-                    v2_item = v2_date_map.get(start_date)
-                    if not v2_item:
-                        wk = item.get("week_no")
-                        if wk is None and "week_label" in item:
-                            label = str(item["week_label"])
-                            if label.startswith("W") and label[1:].isdigit():
-                                wk = int(label[1:])
-                        if wk:
-                            v2_item = v2_wk_map.get(int(wk))
-                    if v2_item:
-                        if not float(item.get("fab_di") or 0):
-                            item["fab_di"] = v2_item.get("fab_di") or 0
-                        if not float(item.get("erect_di") or 0):
-                            item["erect_di"] = v2_item.get("erect_di") or 0
-                del v2_date_map, v2_wk_map
-        del d2, d2_raw
 
-        # ── EP 처리 (RPC 성공 시) / 실패 시 fallback ──
-        ep_data = ep_raw
-        if isinstance(ep_data, list) and ep_data: ep_data = ep_data[0]
-        if isinstance(ep_data, dict):
-            raw["ep_sys"]  = ep_data.get("ep_sys")  or []
-            raw["ep_area"] = ep_data.get("ep_area") or []
-            ep_wk_rpc = ep_data.get("ep_weekly") or []
-            if ep_wk_rpc and not raw.get("ep_weekly"):
-                raw["ep_weekly"] = ep_wk_rpc
-            if not raw.get("ep_kpi") and raw.get("ep_sys"):
-                tot_ep  = round(sum(v.get("total_di", 0)     for v in raw["ep_sys"]), 2)
-                comp_ep = round(sum(v.get("completed_di", 0) for v in raw["ep_sys"]), 2)
-                raw["ep_kpi"] = [{"total_di": tot_ep, "completed_di": comp_ep}]
-            del ep_data
-        else:
-            # EP RPC 실패 — joint_master 직접 조회로 fallback
+                raw["weekly"] = d17.get("act") or []
+                raw["weeks"]  = d17.get("wk")  or []
+
+                # Aggregate pi → actual_plan_agg {str(wk): {f, e}}
+                plan_agg = {}
+                for pi in (d17.get("pi") or []):
+                    try:
+                        wk  = int(pi.get("week_no") or 0)
+                        fab = float(pi.get("plan_fab_di", 0) or 0)
+                        ere = float(pi.get("plan_erect_di", 0) or 0)
+                        if wk not in plan_agg: plan_agg[wk] = {"f": 0.0, "e": 0.0}
+                        plan_agg[wk]["f"] += fab
+                        plan_agg[wk]["e"] += ere
+                    except (ValueError, TypeError): continue
+                raw["actual_plan_agg"] = {str(k): v for k, v in plan_agg.items()}
+                del plan_agg
+            del d17  # free raw v17 dict after extraction
+        except Exception as e:
+            print(f"[cache] v17 RPC error: {e}")
+            raise Exception("Primary RPC (v17) failed. Aborting cache build.") from e
+
+        # ── Supplement: get_dashboard_aggregates_control_v2 ──
+        try:
+            res2 = sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
+            d2   = res2.data
+            del res2  # free httpx response immediately
+            if isinstance(d2, list) and d2: d2 = d2[0]
+            if isinstance(d2, dict):
+                if d2.get("ep_act"):
+                    raw["ep_weekly"] = d2["ep_act"]
+                if d2.get("ep_kpi"):
+                    val = d2["ep_kpi"]
+                    raw["ep_kpi"] = [val] if isinstance(val, dict) else val
+                if not raw.get("units") and d2.get("unit"):
+                    raw["units"] = d2["unit"]
+                if not raw.get("systems") and d2.get("sys"):
+                    raw["systems"] = d2["sys"]
+                    for item in raw["systems"]:
+                        if "plan_di" in item and "total_di" not in item:
+                            item["total_di"] = item["plan_di"]
+
+                # Supplement weekly fab/erect breakdown from v2
+                if d2.get("act") and raw.get("weekly"):
+                    if not raw.get("weeks"):
+                        try:
+                            raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
+                        except: pass
+
+                    sched_map = {w["week_no"]: str(w["week_start_date"])[:10] for w in (raw.get("weeks") or [])}
+
+                    # Build lookup maps ONCE (not inside the inner loop)
+                    v2_date_map = {}
+                    v2_wk_map   = {}
+                    for a in (d2["act"] or []):
+                        wn = a.get("week_no")
+                        if wn:
+                            v2_wk_map[int(wn)] = a
+                            if wn in sched_map:
+                                v2_date_map[sched_map[wn]] = a
+
+                    for item in raw["weekly"]:
+                        start_date = str(item.get("week_start") or "")[:10]
+                        v2_item = v2_date_map.get(start_date)
+
+                        if not v2_item:
+                            wk = item.get("week_no")
+                            if wk is None and "week_label" in item:
+                                label = str(item["week_label"])
+                                if label.startswith("W") and label[1:].isdigit():
+                                    wk = int(label[1:])
+                            if wk:
+                                v2_item = v2_wk_map.get(int(wk))
+
+                        if v2_item:
+                            if not float(item.get("fab_di") or 0):
+                                item["fab_di"] = v2_item.get("fab_di") or 0
+                            if not float(item.get("erect_di") or 0):
+                                item["erect_di"] = v2_item.get("erect_di") or 0
+
+                del v2_date_map, v2_wk_map
+            del d2  # free raw v2 dict after extraction
+        except Exception as e2:
+            print(f"[cache] v2 RPC error (non-critical): {e2}")
+
+        # ── EP system/area breakdown: uses get_ep_aggregates() RPC ──
+        # Aggregates in DB and returns only results — avoids loading entire joint_master into Python memory
+        try:
+            ep_r = sb.rpc("get_ep_aggregates", {}).execute()
+            ep_data = ep_r.data or {}
+            del ep_r
+
+            # RPC return structure: {ep_sys:[...], ep_area:[...], ep_weekly:[...]}
+            if isinstance(ep_data, list) and ep_data:
+                ep_data = ep_data[0]
+
+            if isinstance(ep_data, dict):
+                raw["ep_sys"]  = ep_data.get("ep_sys")  or []
+                raw["ep_area"] = ep_data.get("ep_area") or []
+                ep_wk_rpc = ep_data.get("ep_weekly") or []
+                if ep_wk_rpc and not raw.get("ep_weekly"):
+                    raw["ep_weekly"] = ep_wk_rpc
+                # Compute ep_kpi from ep_sys aggregates when not provided by RPC
+                if not raw.get("ep_kpi") and raw.get("ep_sys"):
+                    tot_ep  = round(sum(v.get("total_di", 0)     for v in raw["ep_sys"]), 2)
+                    comp_ep = round(sum(v.get("completed_di", 0) for v in raw["ep_sys"]), 2)
+                    raw["ep_kpi"] = [{"total_di": tot_ep, "completed_di": comp_ep}]
+                del ep_data
+        except Exception as ep_e:
+            print(f"[cache] get_ep_aggregates RPC error: {ep_e}")
+            # Fallback: direct query for environments where RPC is not deployed
             try:
-                ep_r = get_sb().schema("construction").table("joint_master") \
+                ep_r = sb.schema("construction").table("joint_master") \
                          .select("system, sub_area, di, completed, date_completed").eq("phase", "EP").execute()
-                ep_rows = ep_r.data or []; del ep_r
+                ep_rows = ep_r.data or []
+                del ep_r
                 _date_wk = {}
                 for _w in (raw.get("weeks") or []):
                     try:
@@ -448,7 +392,7 @@ def _build():
                             while _d <= _end:
                                 _date_wk[_d.strftime("%Y-%m-%d")] = _wno
                                 _d += timedelta(days=1)
-                    except Exception: continue
+                    except: continue
                 ep_sys_map, ep_area_map, ep_wk_di = {}, {}, {}
                 for row in ep_rows:
                     sys_k = row.get("system") or "Unknown"
@@ -479,12 +423,11 @@ def _build():
                 del ep_rows, ep_sys_map, ep_area_map, _date_wk, ep_wk_di
             except Exception as ep_e2:
                 print(f"[cache] EP fallback error: {ep_e2}")
-        del ep_raw
 
         # ── Week schedule fallback ──
         if not raw.get("weeks"):
             try:
-                raw["weeks"] = get_sb().table("week_schedule").select("*").order("week_no").execute().data or []
+                raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
                 print(f"[cache] Fetched {len(raw['weeks'])} weeks from table")
             except Exception as we:
                 print(f"[cache] week_schedule error: {we}")
@@ -493,14 +436,26 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
-        # ── Support & TestPkg 집계 → kpi 주입 ──
+        # ── Support & TestPkg aggregates → inject into kpi (supplements fields not in v17 RPC) ──
         try:
+            # support_master: completed = True or date_completed present
+            sr = sb.table("support_master").select("completed, date_completed").execute()
+            s_rows = sr.data or []
+            del sr
             s_total = len(s_rows)
             s_comp  = sum(1 for x in s_rows if x.get("completed") == True or x.get("date_completed"))
             del s_rows
+
+            # test_package_master
+            tr = sb.table("test_package_master").select("status").execute()
+            t_rows = tr.data or []
+            del tr
             t_total = len(t_rows)
-            t_comp  = sum(1 for x in t_rows if (x.get("vt_result") or "").strip())
+            t_comp  = sum(1 for x in t_rows if (x.get("status") or "").upper()
+                         in ("COMPLETED", "DONE", "PASS", "YES", "Y"))
             del t_rows
+
+            # Inject into the first item of the kpi list
             kpi_list = raw.get("kpi")
             if isinstance(kpi_list, list) and kpi_list:
                 kpi_list[0]["support_total"] = s_total
