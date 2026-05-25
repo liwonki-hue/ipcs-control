@@ -16,7 +16,7 @@ jobs:
       - name: HTTP GET Request to Render Service
         run: |
           # 아래 URL을 실제 Render 서비스 주소로 수정하여 사용하세요.
-          curl -s -o /dev/null -w "%{http_code}" https://ipcs-bop-dashboard.onrender.com
+          curl -s -o /dev/null -w "%{http_code}" https://ipcs-control.onrender.com
         # -s: Silent 모드
         # -o /dev/null: 응답 바디를 버림
         # -w "%{http_code}": HTTP 상태 코드만 출력 (로깅용)

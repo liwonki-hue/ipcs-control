@@ -290,7 +290,8 @@ def _build():
         def _fetch_testpkg():
             try:
                 t = _time.time()
-                res = _make_sb().table("test_package_master").select("status").execute()
+                # status 컬럼은 DB에 없음 — vt_result로 완료 여부 판단
+                res = _make_sb().table("test_package_master").select("vt_result").execute()
                 print(f"[cache] testpkg done in {_time.time()-t:.1f}s")
                 return res.data or []
             except Exception as e:
@@ -307,6 +308,26 @@ def _build():
             except Exception as e:
                 print(f"[cache] v17 RPC error: {e}")
                 raise Exception("Primary RPC (v17) failed. Aborting cache build.") from e
+
+            # ── v17 완료 즉시 부분 캐시 설정 → 사용자 202 대기 해소 ──
+            _d17_p = d17_raw[0] if (isinstance(d17_raw, list) and d17_raw) else d17_raw
+            if isinstance(_d17_p, dict):
+                _rp = {
+                    "kpi":      (_d17_p.get("kpi") if isinstance(_d17_p.get("kpi"), list)
+                                 else ([_d17_p["kpi"]] if _d17_p.get("kpi") else [])),
+                    "units":    _d17_p.get("unit")    or [],
+                    "areas":    _d17_p.get("area")    or [],
+                    "subareas": _d17_p.get("subarea") or _d17_p.get("area") or [],
+                    "systems":  _d17_p.get("sys")     or [],
+                    "weekly":   _d17_p.get("act")     or [],
+                    "weeks":    _d17_p.get("wk")      or [],
+                }
+                _partial = _parse_rpc(_rp)
+                with _lock:
+                    _cache["data"] = _partial
+                    _cache["time"] = time.time()
+                print(f"[cache] Partial cache ready in {_time.time()-_t0:.1f}s (v17 only)")
+
             d2_raw  = f_v2.result()
             ep_raw  = f_ep.result()
             s_rows  = f_support.result()
@@ -478,8 +499,7 @@ def _build():
             s_comp  = sum(1 for x in s_rows if x.get("completed") == True or x.get("date_completed"))
             del s_rows
             t_total = len(t_rows)
-            t_comp  = sum(1 for x in t_rows if (x.get("status") or "").upper()
-                         in ("COMPLETED", "DONE", "PASS", "YES", "Y"))
+            t_comp  = sum(1 for x in t_rows if (x.get("vt_result") or "").strip())
             del t_rows
             kpi_list = raw.get("kpi")
             if isinstance(kpi_list, list) and kpi_list:
