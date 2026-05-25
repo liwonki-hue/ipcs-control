@@ -33,19 +33,22 @@ async function getDashData(forceRefresh=false) {
         }
     }
 
+    const _t0 = Date.now();
     for (let i = 0; i < MAX_ATTEMPTS; i++) {
         try {
             const res = await fetchWithTimeout("/api/dashboard", TIMEOUT_MS);
+            const elapsed = Math.round((Date.now() - _t0) / 1000);
             if (res.status === 202) {
-                _updateLoader(`Building data... ${(i+1)*2}s (${i+1}/${MAX_ATTEMPTS})`);
+                _updateLoader(`Building data... ${elapsed}s (${i+1}/${MAX_ATTEMPTS})`);
                 await new Promise(r => setTimeout(r, RETRY_MS));
                 continue;
             }
             _dashData = await res.json();
             return _dashData;
         } catch(e) {
+            const elapsed = Math.round((Date.now() - _t0) / 1000);
             if (e.message === "fetch_timeout") {
-                _updateLoader(`Server starting... (${i+1}/${MAX_ATTEMPTS})`);
+                _updateLoader(`Server starting... ${elapsed}s (${i+1}/${MAX_ATTEMPTS})`);
                 await new Promise(r => setTimeout(r, RETRY_MS));
                 continue;
             }
