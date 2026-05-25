@@ -47,7 +47,7 @@ def get_sb():
     with _sb_lock:
         if _sb is None:
             try:
-                options = ClientOptions(schema="construction", postgrest_client_timeout=30)
+                options = ClientOptions(schema="construction", postgrest_client_timeout=90)
                 _sb = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
             except Exception as e:
                 print(f"[supabase] connection failed: {e}")
@@ -231,11 +231,13 @@ def _parse_rpc(raw):
     }
 
 # ── In-memory cache ──────────────────────────────────────────────────
-_cache      = {}
-_lock       = threading.Lock()
-_building   = False
-_build_fail = False
-CACHE_TTL   = 1200  # 20 minutes — minimize DB calls on Render free tier
+_cache           = {}
+_lock            = threading.Lock()
+_building        = False
+_build_fail      = False
+_build_fail_time = 0          # epoch seconds when last build failed
+BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
+CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
 
 def _build():
     global _building, _build_fail
@@ -446,13 +448,12 @@ def _build():
             s_comp  = sum(1 for x in s_rows if x.get("completed") == True or x.get("date_completed"))
             del s_rows
 
-            # test_package_master
-            tr = sb.table("test_package_master").select("status").execute()
+            # test_package_master — status 컬럼 없음, completed/date_completed으로 판단
+            tr = sb.table("test_package_master").select("completed, date_completed").execute()
             t_rows = tr.data or []
             del tr
             t_total = len(t_rows)
-            t_comp  = sum(1 for x in t_rows if (x.get("status") or "").upper()
-                         in ("COMPLETED", "DONE", "PASS", "YES", "Y"))
+            t_comp  = sum(1 for x in t_rows if x.get("completed") == True or x.get("date_completed"))
             del t_rows
 
             # Inject into the first item of the kpi list
@@ -503,6 +504,7 @@ def _build():
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
     except Exception as e:
         _build_fail = True
+        _build_fail_time = time.time()
         print(f"[cache] CRITICAL BUILD ERROR: {e}")
         import traceback; traceback.print_exc()
     finally:
@@ -510,7 +512,7 @@ def _build():
 
 
 def get_cache(force=False):
-    global _building, _build_fail
+    global _building, _build_fail, _build_fail_time
     with _lock:
         has  = "data" in _cache
         age  = time.time() - _cache.get("time", 0) if has else float("inf")
@@ -521,8 +523,14 @@ def get_cache(force=False):
 
     with _lock:
         if not _building:
-            _building = True
-            threading.Thread(target=_build, daemon=True).start()
+            now = time.time()
+            # If last build failed recently, wait for cooldown before retrying
+            if _build_fail and (now - _build_fail_time) < BUILD_FAIL_RETRY_SEC:
+                pass  # skip — too soon after last failure
+            else:
+                _build_fail = False  # reset flag before new attempt
+                _building = True
+                threading.Thread(target=_build, daemon=True).start()
 
     # Return existing data (possibly stale) while rebuild runs
     with _lock: return _cache.get("data")
@@ -573,6 +581,13 @@ def api_test():
 def api_dashboard():
     data = get_cache()
     if data is None:
+        # Build permanently failed and cooldown hasn't expired yet → tell client to show error
+        if _build_fail and not _building:
+            wait_left = max(0, round(BUILD_FAIL_RETRY_SEC - (time.time() - _build_fail_time)))
+            return jsonify({
+                "build_failed": True,
+                "message": f"Cache build failed. Auto-retry in {wait_left}s. Check server logs.",
+            }), 503
         return jsonify({"building": True}), 202
     return jsonify(data)
 
@@ -1305,28 +1320,4 @@ def api_joints_import_welder():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ── Gzip compression for JSON API responses ─────────────────────────────────
-@app.after_request
-def compress_response(response):
-    if (response.status_code == 200
-            and response.content_type.startswith("application/json")
-            and len(response.data) > 2048
-            and "gzip" in request.headers.get("Accept-Encoding", "")):
-        compressed = gzip.compress(response.data, compresslevel=6)
-        if len(compressed) < len(response.data):
-            response.data = compressed
-            response.headers["Content-Encoding"] = "gzip"
-            response.headers["Content-Length"] = len(compressed)
-    return response
-
-# ── Pre-warm cache on startup (works with both python app.py and gunicorn) ──
-threading.Thread(target=_build, daemon=True).start()
-
-@app.route("/debug_path")
-def debug_path():
-    import os
-    return jsonify({"cwd": os.getcwd(), "file": __file__})
-
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0",
-            port=int(os.environ.get("PORT", 5005)))
+# ── Gzip compression for JSON API responses ────────

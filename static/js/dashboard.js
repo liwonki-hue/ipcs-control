@@ -43,6 +43,20 @@ async function getDashData(forceRefresh=false) {
                 await new Promise(r => setTimeout(r, RETRY_MS));
                 continue;
             }
+            // 503: 서버 캐시 빌드 실패 — 자동 재시도 대기
+            if (res.status === 503) {
+                let body = {};
+                try { body = await res.json(); } catch(_) {}
+                const msg = body.message || "Cache build failed. Auto-retrying...";
+                _updateLoader(`⚠ ${msg} (${elapsed}s)`);
+                await new Promise(r => setTimeout(r, 15000));
+                continue;
+            }
+            if (!res.ok) {
+                let body = {};
+                try { body = await res.json(); } catch(_) {}
+                throw new Error(body.message || `Server error ${res.status}`);
+            }
             _dashData = await res.json();
             return _dashData;
         } catch(e) {
@@ -114,6 +128,19 @@ function showLoader(show, msg) {
           <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
         `;
         document.body.appendChild(el);
+    }
+    // Error mode: show message + retry button instead of spinner
+    if (!show && msg) {
+        el.style.display = "flex";
+        el.style.pointerEvents = "auto";
+        el.innerHTML = `
+          <div style="color:#ff5252;font-size:18px;margin-bottom:10px">&#9888; Load Failed</div>
+          <div style="color:#e0e6ef;font-size:13px;text-align:center;max-width:480px;line-height:1.6">${msg}</div>
+          <button onclick="location.reload()" style="margin-top:20px;padding:10px 28px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;letter-spacing:0.04em">&#8635; Retry</button>
+          <div style="color:#4a6080;font-size:11px;margin-top:10px">F5 또는 위 버튼으로 재시도</div>
+          <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+        `;
+        return;
     }
     el.style.display = show ? "flex" : "none";
     el.style.pointerEvents = show ? "auto" : "none";
