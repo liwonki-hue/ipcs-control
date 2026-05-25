@@ -238,41 +238,60 @@ _building   = False
 _build_fail = False
 CACHE_TTL   = 1200  # 20 minutes — minimize DB calls on Render free tier
 
+def _make_sb():
+    """각 스레드용 독립 Supabase 클라이언트 생성 (thread-safe 병렬 실행용)."""
+    options = ClientOptions(schema="construction", postgrest_client_timeout=90)
+    return create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
+
 def _build():
     global _building, _build_fail
     try:
-        sb = get_sb()
-        print("[cache] Background build started (parallel fetch)...")
+        import time as _time
+        _t0 = _time.time()
+        print("[cache] Background build started (parallel fetch, each thread own client)...")
 
-        # ── 5개 DB 호출 병렬 실행 — 순차 실행 대비 빌드 시간 대폭 단축 ──
+        # ── 5개 DB 호출 병렬 실행 — 각 스레드가 독립 클라이언트 사용 ──
         def _fetch_v17():
-            res = sb.rpc("get_dashboard_summary_v17", {}).execute()
-            d = res.data; del res; return d
+            t = _time.time()
+            res = _make_sb().rpc("get_dashboard_summary_v17", {}).execute()
+            d = res.data; del res
+            print(f"[cache] v17 done in {_time.time()-t:.1f}s")
+            return d
 
         def _fetch_v2():
             try:
-                res = sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
-                d = res.data; del res; return d
+                t = _time.time()
+                res = _make_sb().rpc("get_dashboard_aggregates_control_v2", {}).execute()
+                d = res.data; del res
+                print(f"[cache] v2 done in {_time.time()-t:.1f}s")
+                return d
             except Exception as e:
                 print(f"[cache] v2 RPC error (non-critical): {e}"); return None
 
         def _fetch_ep():
             try:
-                res = sb.rpc("get_ep_aggregates", {}).execute()
-                d = res.data; del res; return d
+                t = _time.time()
+                res = _make_sb().rpc("get_ep_aggregates", {}).execute()
+                d = res.data; del res
+                print(f"[cache] EP done in {_time.time()-t:.1f}s")
+                return d
             except Exception as e:
                 print(f"[cache] EP RPC error: {e}"); return None
 
         def _fetch_support():
             try:
-                res = sb.table("support_master").select("completed, date_completed").execute()
+                t = _time.time()
+                res = _make_sb().table("support_master").select("completed, date_completed").execute()
+                print(f"[cache] support done in {_time.time()-t:.1f}s")
                 return res.data or []
             except Exception as e:
                 print(f"[cache] support_master error: {e}"); return []
 
         def _fetch_testpkg():
             try:
-                res = sb.table("test_package_master").select("status").execute()
+                t = _time.time()
+                res = _make_sb().table("test_package_master").select("status").execute()
+                print(f"[cache] testpkg done in {_time.time()-t:.1f}s")
                 return res.data or []
             except Exception as e:
                 print(f"[cache] test_package_master error: {e}"); return []
@@ -292,6 +311,7 @@ def _build():
             ep_raw  = f_ep.result()
             s_rows  = f_support.result()
             t_rows  = f_testpkg.result()
+        print(f"[cache] All fetches done in {_time.time()-_t0:.1f}s total")
 
         raw = {}
 
@@ -345,7 +365,7 @@ def _build():
             if d2.get("act") and raw.get("weekly"):
                 if not raw.get("weeks"):
                     try:
-                        raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
+                        raw["weeks"] = get_sb().table("week_schedule").select("*").order("week_no").execute().data or []
                     except Exception: pass
                 sched_map   = {w["week_no"]: str(w["week_start_date"])[:10] for w in (raw.get("weeks") or [])}
                 v2_date_map = {}
@@ -392,7 +412,7 @@ def _build():
         else:
             # EP RPC 실패 — joint_master 직접 조회로 fallback
             try:
-                ep_r = sb.schema("construction").table("joint_master") \
+                ep_r = get_sb().schema("construction").table("joint_master") \
                          .select("system, sub_area, di, completed, date_completed").eq("phase", "EP").execute()
                 ep_rows = ep_r.data or []; del ep_r
                 _date_wk = {}
@@ -443,7 +463,7 @@ def _build():
         # ── Week schedule fallback ──
         if not raw.get("weeks"):
             try:
-                raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
+                raw["weeks"] = get_sb().table("week_schedule").select("*").order("week_no").execute().data or []
                 print(f"[cache] Fetched {len(raw['weeks'])} weeks from table")
             except Exception as we:
                 print(f"[cache] week_schedule error: {we}")
