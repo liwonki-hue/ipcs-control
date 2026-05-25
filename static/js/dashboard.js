@@ -1076,73 +1076,73 @@ function renderNdeTable(rows){
         const pwht_date = r.pwht_date ? r.pwht_date.substring(0,10) : "";
         
         return `<tr id="nderow-${r.id}">
-            <td title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
-            <td>${r.rev||""}</td>
-            <td>${r.joint_no||""}</td>
-            <td title="${r.welder||""}">${r.welder||""}</td>
-            <td style="font-weight:700;color:var(--accent)">${r.inspection||""}</td>
+            <td style="text-align:center" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+            <td style="text-align:center">${r.rev||""}</td>
+            <td style="text-align:center">${r.joint_no||""}</td>
+            <td style="text-align:center" title="${r.welder||""}">${r.welder||""}</td>
+            <td style="text-align:center;font-weight:700;color:var(--accent)">${r.inspection||""}</td>
             
-            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px;">
-                <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%; text-align-last:center;">
+            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;">
+                <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
                     <option value="PASS" ${r.pt_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.pt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
             
-            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px;">
-                <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%; text-align-last:center;">
+            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;">
+                <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
                     <option value="PASS" ${r.mt_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.mt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
             
-            <td style="border-right:none; padding-right:2px; ${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px; ${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}">
-                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%; text-align-last:center; ${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
-                    <option value="" color="#000">-</option>
-                    <option value="PASS" color="#000" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
-                    <option value="FAIL" color="#000" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
+            <td style="text-align:center;border-right:none;padding-right:2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"> 
+                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
-            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px;">
-                <select class="cell-input" id="nde-rt-find-${r.id}" style="width:100%; text-align-last:center;">
-                    <option value="" color="#000">-</option>
-                    <option value="POR"   color="#000" ${r.rt_finding==='POR'  ?'selected':''}>POR (Porosity)</option>
-                    <option value="SLAG"  color="#000" ${r.rt_finding==='SLAG' ?'selected':''}>SLAG (Slag Incl.)</option>
-                    <option value="LF"    color="#000" ${r.rt_finding==='LF'   ?'selected':''}>LF (Lack of Fusion)</option>
-                    <option value="IP"    color="#000" ${r.rt_finding==='IP'   ?'selected':''}>IP (Incomplete Pen.)</option>
-                    <option value="IC"    color="#000" ${r.rt_finding==='IC'   ?'selected':''}>IC (Internal Concavity)</option>
-                    <option value="UC"    color="#000" ${r.rt_finding==='UC'   ?'selected':''}>UC (Undercut)</option>
-                    <option value="OL"    color="#000" ${r.rt_finding==='OL'   ?'selected':''}>OL (Overlap)</option>
-                    <option value="BT"    color="#000" ${r.rt_finding==='BT'   ?'selected':''}>BT (Burn Through)</option>
-                    <option value="HB"    color="#000" ${r.rt_finding==='HB'   ?'selected':''}>HB (Hollow Bead)</option>
-                    <option value="TI"    color="#000" ${r.rt_finding==='TI'   ?'selected':''}>TI (Tungsten Incl.)</option>
-                    <option value="CRACK" color="#000" ${r.rt_finding==='CRACK'?'selected':''}>CRACK</option>
-                    <option value="MULTI" color="#000" ${r.rt_finding==='MULTI'?'selected':''}>MULTI (Multiple)</option>
+            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;">
+                <select class="cell-input" id="nde-rt-find-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="POR" ${r.rt_finding==='POR'  ?'selected':''}>POR (Porosity)</option>
+                    <option value="SLAG" ${r.rt_finding==='SLAG' ?'selected':''}>SLAG (Slag Incl.)</option>
+                    <option value="LF" ${r.rt_finding==='LF'   ?'selected':''}>LF (Lack of Fusion)</option>
+                    <option value="IP" ${r.rt_finding==='IP'   ?'selected':''}>IP (Incomplete Pen.)</option>
+                    <option value="IC" ${r.rt_finding==='IC'   ?'selected':''}>IC (Internal Concavity)</option>
+                    <option value="UC" ${r.rt_finding==='UC'   ?'selected':''}>UC (Undercut)</option>
+                    <option value="OL" ${r.rt_finding==='OL'   ?'selected':''}>OL (Overlap)</option>
+                    <option value="BT" ${r.rt_finding==='BT'   ?'selected':''}>BT (Burn Through)</option>
+                    <option value="HB" ${r.rt_finding==='HB'   ?'selected':''}>HB (Hollow Bead)</option>
+                    <option value="TI" ${r.rt_finding==='TI'   ?'selected':''}>TI (Tungsten Incl.)</option>
+                    <option value="CRACK" ${r.rt_finding==='CRACK'?'selected':''}>CRACK</option>
+                    <option value="MULTI" ${r.rt_finding==='MULTI'?'selected':''}>MULTI (Multiple)</option>
                 </select>
             </td>
-            <td style="border-left:none; padding-left:2px; border-right:none; padding-right:2px; background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px; background:rgba(59,130,246,0.07)">
-                <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%; text-align-last:center;">
-                    <option value="" color="#000">-</option>
-                    <option value="PASS" color="#000" ${r.rt_2_result==='PASS'?'selected':''}>PASS</option>
-                    <option value="FAIL" color="#000" ${r.rt_2_result==='FAIL'?'selected':''}>FAIL</option>
+            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;background:rgba(59,130,246,0.07)">
+                <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+                    <option value="">-</option>
+                    <option value="PASS" ${r.rt_2_result==='PASS'?'selected':''}>PASS</option>
+                    <option value="FAIL" ${r.rt_2_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
 
-            <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%"></td>
-            <td style="border-left:none; padding-left:2px;">
-                <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%; text-align-last:center;">
+            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;">
+                <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
                     <option value="PASS" ${r.pwht_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.pwht_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
-            <td>
+            <td style="text-align:center">
                 <button class="btn-save-row" onclick="saveNdeRow(${r.id})">Save</button>
             </td>
         </tr>`;
