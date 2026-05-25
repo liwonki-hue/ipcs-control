@@ -65,8 +65,11 @@ function _updateLoader(msg) {
 document.addEventListener("DOMContentLoaded", async () => {
     showLoader(true);
     try {
-        // Load meta and dashboard data in parallel — saves 200-500ms vs sequential
-        const [, data] = await Promise.all([loadMeta(), getDashData()]);
+        // allSettled: meta 실패해도 대시보드 데이터는 독립 렌더링
+        const [metaRes, dataRes] = await Promise.allSettled([loadMeta(), getDashData()]);
+        if (metaRes.status === "rejected") console.warn("[BOP] Meta load failed:", metaRes.reason);
+        if (dataRes.status === "rejected") throw dataRes.reason;
+        const data = dataRes.value;
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
@@ -209,7 +212,7 @@ function toast(msg, type="success") {
 // ================================================================================
 async function loadMeta() {
     try {
-        metaData = await apiFetch("/api/meta?t=" + Date.now());
+        metaData = await apiFetch("/api/meta");
         console.log("[BOP] MetaData loaded:", metaData);
         
         // Populate Joint Master filters
@@ -958,7 +961,7 @@ function renderJMTable(rows){
         const pkgVal=r.package||"";
         return `<tr id="jmrow-${r.id}">
             <td style="display:none">${r.id}</td>
-            <td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="text-align:center;padding:2px 3px"></td>
+            <td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 3px"></td>
             <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
             <td style="text-align:center">${r.system||""}</td>
             <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.sub_area||""}</td>
@@ -1009,11 +1012,15 @@ let ndeData=[];
 async function loadNdePwht() {
     const unit=document.getElementById("nde-unit")?.value||"", system=document.getElementById("nde-system")?.value||"";
     const isoVal=document.getElementById("nde-iso")?.value?.trim()||"";
+    const inspVal=document.getElementById("nde-insp")?.value||"";
+    const welderVal=document.getElementById("nde-welder")?.value?.trim()||"";
     const offset=ndeCurrentPage*NDE_PAGE_SIZE;
     try {
         const params=new URLSearchParams({limit:NDE_PAGE_SIZE,offset,nde_only:"true"});
         if(unit)params.set("unit",unit); if(system)params.set("system",system);
         if(isoVal)params.set("iso",isoVal);
+        if(inspVal)params.set("inspection",inspVal);
+        if(welderVal)params.set("welder",welderVal);
         const res=await apiFetch(`/api/joints?${params}`);
         ndeData=res.data;
         document.getElementById("nde-count").textContent=`${res.count.toLocaleString()} rows loaded (page ${ndeCurrentPage+1})`;
@@ -1042,7 +1049,7 @@ function renderNdeTable(rows){
             <td title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
             <td>${r.rev||""}</td>
             <td>${r.joint_no||""}</td>
-            <td>${r.welder||""}</td>
+            <td title="${r.welder||""}">${r.welder||""}</td>
             <td style="font-weight:700;color:var(--accent)">${r.inspection||""}</td>
             
             <td style="border-right:none; padding-right:2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%"></td>
@@ -1257,7 +1264,7 @@ function chartOpts(yLabel){
 async function downloadWithPicker(wb,name){
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'}),blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     if('showSaveFilePicker'in window){try{const handle=await window.showSaveFilePicker({suggestedName:name,types:[{description:'Excel File',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]});const writable=await handle.createWritable();await writable.write(blob);await writable.close();return true;}catch(e){if(e.name==='AbortError')return false;console.warn("Picker failed, falling back",e);}}
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},2000);return true;
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);return true;
 }
 
 async function exportSystemsExcel(type){
@@ -2079,20 +2086,17 @@ let tpData = [], tpCurrentPage = 0;
 const TP_PAGE = 100;
 
 async function loadTestPkgMaster() {
-    const pkg    = document.getElementById("tp-package")?.value || "";
+    const iso    = document.getElementById("tp-iso")?.value?.trim() || "";
+    const pkg    = document.getElementById("tp-package")?.value?.trim() || "";
     const system = document.getElementById("tp-system")?.value  || "";
     const status = document.getElementById("tp-status")?.value  || "";
     const offset = tpCurrentPage * TP_PAGE;
     try {
-        // Populate package dropdown on first load
-        const tpPkg = document.getElementById("tp-package");
         const tpSys = document.getElementById("tp-system");
-        if (tpPkg && tpPkg.options.length <= 1) {
-            ["TRU-CCW-001","TRU-CCW-002"].forEach(p => tpPkg.add(new Option(p, p)));
-        }
         if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
 
         const params = new URLSearchParams({limit: TP_PAGE, offset});
+        if (iso)    params.set("iso",     iso);
         if (pkg)    params.set("package", pkg);
         if (system) params.set("system",  system);
         if (status) params.set("status",  status);

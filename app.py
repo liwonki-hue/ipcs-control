@@ -21,7 +21,7 @@ def load_env_manually():
                     try:
                         key, val = line.split("=", 1)
                         os.environ[key.strip()] = val.strip()
-                    except:
+                    except Exception:
                         continue
 
 load_env_manually()
@@ -613,14 +613,16 @@ def api_joints_get():
         insp    = request.args.get("inspection","")
         nde_only= request.args.get("nde_only", "")
         pkg     = request.args.get("package",  "")
+        welder  = request.args.get("welder",   "")
         q = sb.table("joint_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
-        if iso:     q = q.eq("iso_drawing", iso)
+        if iso:     q = q.ilike("iso_drawing", f"%{iso}%")
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
         if insp:    q = q.eq("inspection",  insp)
         if pkg:     q = q.eq("package",     pkg)
+        if welder:  q = q.ilike("welder",   f"%{welder}%")
         if nde_only == "true": q = q.in_("inspection", ["PT", "MT", "RT"])
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
@@ -865,32 +867,31 @@ def api_joints_sync_phase_package():
             return jsonify({"ok": False, "error": f"File not found: {EXCEL_PATH}"}), 404
 
         wb = openpyxl.load_workbook(EXCEL_PATH, read_only=True, data_only=True)
-        ws = wb.active
-        # Headers: System(0), Phase(1), Package(2), Unit(3), Area(4), Sub Area(5),
-        #          Line No(6), ISO Drawing(7), Rev(8), Spool No(9), Bore(10),
-        #          MAT(11), Size(12), S/F(13), Joint(14), ...
         rows_read = updated = skipped = 0
         sb = get_sb()
-
         batch = []
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            iso = row[7]
-            joint = row[14]
-            phase = row[1]
-            pkg   = row[2]
-            if not iso or joint is None:
-                skipped += 1
-                continue
-            rows_read += 1
-            # Only update if phase or package has a value
-            if not phase and not pkg:
-                continue
-            update = {}
-            if phase: update["phase"]   = str(phase).strip()
-            if pkg:   update["package"] = str(pkg).strip()
-            batch.append((str(iso).strip(), str(int(joint)) if isinstance(joint, float) else str(joint).strip(), update))
-
-        wb.close()
+        try:
+            ws = wb.active
+            # Headers: System(0), Phase(1), Package(2), Unit(3), Area(4), Sub Area(5),
+            #          Line No(6), ISO Drawing(7), Rev(8), Spool No(9), Bore(10),
+            #          MAT(11), Size(12), S/F(13), Joint(14), ...
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                iso = row[7]
+                joint = row[14]
+                phase = row[1]
+                pkg   = row[2]
+                if not iso or joint is None:
+                    skipped += 1
+                    continue
+                rows_read += 1
+                if not phase and not pkg:
+                    continue
+                update = {}
+                if phase: update["phase"]   = str(phase).strip()
+                if pkg:   update["package"] = str(pkg).strip()
+                batch.append((str(iso).strip(), str(int(joint)) if isinstance(joint, float) else str(joint).strip(), update))
+        finally:
+            wb.close()
 
         # ── Single bulk_update_phase_package() RPC call — eliminates N+1 queries ──
         # ISO+joint_no matching and UPDATE handled in DB → minimal Python memory usage
@@ -967,6 +968,7 @@ def api_testpkg_joints():
         pkg     = request.args.get("package",  "").strip()
         system  = request.args.get("system",   "").strip()
         status  = request.args.get("status",   "").strip()
+        iso     = request.args.get("iso",      "").strip()
 
         q = sb.table("joint_master").select(
             "id,system,package,iso_drawing,joint_no,date_completed,"
@@ -976,7 +978,8 @@ def api_testpkg_joints():
             count="exact"
         ).not_.is_("package", "null")
 
-        if pkg:    q = q.eq("package", pkg)
+        if pkg:    q = q.ilike("package",     f"%{pkg}%")
+        if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
         if system: q = q.eq("system",  system)
 
         res = q.order("package").order("iso_drawing").order("joint_no") \
@@ -1028,7 +1031,9 @@ def api_support_get():
         if area:    q = q.eq("area",        area)
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
-        if iso:     q = q.or_(f"iso_drawing.ilike.%{iso}%,support_drawing.ilike.%{iso}%")
+        if iso:
+            iso_s = iso.replace(",", "").replace("(", "").replace(")", "")
+            q = q.or_(f"iso_drawing.ilike.%{iso_s}%,support_drawing.ilike.%{iso_s}%")
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()

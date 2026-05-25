@@ -211,13 +211,13 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Joint Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()" style="width:160px;">
           <select id="jm-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
           <select id="jm-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
           <select id="jm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
           <select id="jm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">RT</option></select>
-          <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()" style="width:140px;">
           <button class="btn-primary" onclick="loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openAddJointModal()">+ Add Joint</button>
 
@@ -365,12 +365,12 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <input id="sm-iso" class="filter-sel" type="text" placeholder="Search Drawing" oninput="loadSupportMaster()" style="width:160px;">
           <select id="sm-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
           <select id="sm-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
           <select id="sm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
           <select id="sm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="sm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
-          <input id="sm-iso" class="filter-sel" type="text" placeholder="Search Drawing" oninput="loadSupportMaster()" style="width:140px;">
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openSMModal()">+ Add Support</button>
 
@@ -430,10 +430,17 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">NDE &amp; PWHT</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <input id="nde-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadNdePwht()" style="width:160px;">
           <select id="nde-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
           <select id="nde-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
-          <input id="nde-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadNdePwht()" style="width:140px;">
-          <button class="btn-primary" onclick="loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
+          <select id="nde-insp" class="filter-sel" onchange="ndeCurrentPage=0;loadNdePwht()" style="min-width:100px;">
+            <option value="">Inspection</option>
+            <option value="PT">PT</option>
+            <option value="MT">MT</option>
+            <option value="RT">RT</option>
+          </select>
+          <input id="nde-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="ndeCurrentPage=0;loadNdePwht()" style="width:120px;">
+          <button class="btn-primary" onclick="ndeCurrentPage=0;loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
           
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-de btn-de-export" onclick="exportNDEExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
@@ -441,13 +448,13 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1580px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1620px !important; table-layout:fixed !important;">
             <thead>
               <tr>
                 <th rowspan="2" style="width:250px">ISO Drawing No</th>
                 <th rowspan="2" style="width:60px">Rev</th>
                 <th rowspan="2" style="width:60px">Jnt</th>
-                <th rowspan="2" style="width:120px">Welder</th>
+                <th rowspan="2" style="width:160px">Welder</th>
                 <th rowspan="2" style="width:85px">Inspec</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">PT</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">MT</th>
@@ -483,8 +490,9 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Master</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
+          <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:160px;">
           <select id="tp-system"  class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
-          <select id="tp-package" class="filter-sel" style="min-width:120px;"><option value="">Package</option></select>
+          <input id="tp-package" class="filter-sel" type="text" placeholder="Package" oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:130px;">
           <select id="tp-status"  class="filter-sel" style="min-width:100px;">
             <option value="">All Status</option>
             <option value="completed">Completed</option>
