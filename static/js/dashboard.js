@@ -93,13 +93,39 @@ document.addEventListener("DOMContentLoaded", async () => {
     } finally {
         showLoader(false);
     }
+    // Background: weekly actuals 보완 (date_completed 기준 정확한 주간 실적)
+    setTimeout(() => {
+        fetch("/api/weekly-actuals").then(r => r.json()).then(wa => {
+            if (!Array.isArray(wa) || !wa.length) return;
+            const waMap = {};
+            wa.forEach(w => { if (w.week_no) waMap[w.week_no] = w; });
+            if (!_dashData) return;
+            (_dashData.weekly || []).forEach(w => {
+                const m = waMap[w.week_no];
+                if (m) {
+                    w.completed_di = m.completed_di || w.completed_di;
+                    w.fab_di       = m.fab_di       || w.fab_di;
+                    w.erect_di     = m.erect_di     || w.erect_di;
+                }
+            });
+            // v17에 없는 주차 추가
+            const existing = new Set((_dashData.weekly||[]).map(w=>w.week_no));
+            wa.forEach(w => {
+                if (!existing.has(w.week_no)) _dashData.weekly.push(w);
+            });
+            _dashData.weekly.sort((a,b)=>a.week_no-b.week_no);
+            renderKPI(_dashData.kpi, _dashData.weekly);
+            renderOverview(_dashData.kpi, _dashData.weekly, _dashData.units, _dashData.systems);
+        }).catch(() => {});
+    }, 1500);
+
     // Background: fetch welder summary after initial render (non-blocking, delayed)
     setTimeout(() => {
         fetch("/api/welder-summary").then(r => r.json()).then(wd => {
             _welderData = wd;
             _updateWelderKpiBar(wd);
         }).catch(() => {});
-    }, 2000);
+    }, 3000);
 });
 
 function _updateWelderKpiBar(wd) {

@@ -351,41 +351,6 @@ def _build():
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
-        # ── Weekly actuals override: date_completed 기준 정확한 주간 실적 ──
-        try:
-            wa_r = sb.rpc("get_weekly_actuals", {}).execute()
-            wa_data = wa_r.data
-            del wa_r
-            if isinstance(wa_data, list) and wa_data and isinstance(wa_data[0], dict) and "week_no" not in wa_data[0]:
-                wa_data = wa_data[0]  # unwrap if nested
-            if isinstance(wa_data, list) and wa_data:
-                # week_no → {completed_di, fab_di, erect_di} 맵 생성
-                wa_map = {int(r["week_no"]): r for r in wa_data if r.get("week_no")}
-                # 기존 weekly(act) 데이터를 override
-                updated = []
-                for item in (raw.get("weekly") or []):
-                    wno = int(item.get("week_no") or 0)
-                    if wno in wa_map:
-                        item["completed_di"] = wa_map[wno].get("completed_di", 0)
-                        item["fab_di"]       = wa_map[wno].get("fab_di",       0)
-                        item["erect_di"]     = wa_map[wno].get("erect_di",     0)
-                    updated.append(item)
-                # wa_map에 있지만 기존 weekly에 없는 주차 추가
-                existing_wnos = {int(i.get("week_no") or 0) for i in updated}
-                for wno, r in sorted(wa_map.items()):
-                    if wno not in existing_wnos:
-                        updated.append({
-                            "week_no":      wno,
-                            "completed_di": r.get("completed_di", 0),
-                            "fab_di":       r.get("fab_di",       0),
-                            "erect_di":     r.get("erect_di",     0),
-                        })
-                raw["weekly"] = sorted(updated, key=lambda x: int(x.get("week_no") or 0))
-                del wa_map, updated, wa_data
-                print(f"[cache] weekly actuals overridden from get_weekly_actuals()")
-        except Exception as wa_e:
-            print(f"[cache] get_weekly_actuals error (non-critical): {wa_e}")
-
         # ── EP system/area breakdown: uses get_ep_aggregates() RPC ──
         # Aggregates in DB and returns only results — avoids loading entire joint_master into Python memory
         try:
@@ -646,6 +611,18 @@ def api_status():
 @app.route("/api/health")
 def api_health():
     return jsonify({"status": "ok", "uptime": "running"})
+
+@app.route("/api/weekly-actuals")
+def api_weekly_actuals():
+    """date_completed 기준 주간 실적 집계 — 별도 호출로 캐시 빌드 비블로킹"""
+    try:
+        res = get_sb().rpc("get_weekly_actuals", {}).execute()
+        data = res.data
+        if isinstance(data, list) and data and not isinstance(data[0], dict):
+            data = data[0]
+        return jsonify(data or [])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # ── Joint Master ───────────────────────────────────────────────────────
 @app.route("/api/joints", methods=["GET"])
