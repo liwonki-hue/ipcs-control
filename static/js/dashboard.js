@@ -39,7 +39,8 @@ async function getDashData(forceRefresh=false) {
             const res = await fetchWithTimeout("/api/dashboard", TIMEOUT_MS);
             const elapsed = Math.round((Date.now() - _t0) / 1000);
             if (res.status === 202) {
-                _updateLoader(`Building data... ${elapsed}s (${i+1}/${MAX_ATTEMPTS})`);
+                const estMin = elapsed < 60 ? "1~2분" : elapsed < 150 ? "2~3분" : "잠시만";
+                _updateLoader(`서버 기동 중... ${elapsed}s · 예상 대기: ${estMin} (${i+1}/${MAX_ATTEMPTS})`);
                 await new Promise(r => setTimeout(r, RETRY_MS));
                 continue;
             }
@@ -159,7 +160,7 @@ function showLoader(show, msg) {
         el.innerHTML = `
           <div style="width:48px;height:48px;border:3px solid #1e2d45;border-top:3px solid #00d4ff;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px"></div>
           <div style="color:#00d4ff;font-size:14px;font-weight:600;letter-spacing:0.06em">LOADING DATA</div>
-          <div style="color:#7a95b8;font-size:11px;margin-top:6px;font-family:DM Mono,monospace">47,304 joints · please wait...</div>
+          <div style="color:#7a95b8;font-size:11px;margin-top:6px;font-family:DM Mono,monospace">Cold start: 약 3~4분 소요 · 잠시 기다려 주세요...</div>
           <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
         `;
         document.body.appendChild(el);
