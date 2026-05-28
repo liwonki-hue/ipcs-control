@@ -326,7 +326,7 @@ select:focus, input:focus { border-color: var(--accent); }
     font-family: 'DM Mono', monospace;
     font-size: 11px;
     width: 100%;
-    text-align: center;
+    text-align: center !important;
     padding: 4px 6px;
     outline: none;
     transition: all 0.2s;
@@ -340,3 +340,4 @@ select:focus, input:focus { border-color: var(--accent); }
     color: var(--muted);
     opacity: 0.5;
 }
+input.cell-input { box-sizing: border-box !important; text-align: center !important; }

@@ -351,6 +351,41 @@ def _build():
         except Exception as e2:
             print(f"[cache] v2 RPC error (non-critical): {e2}")
 
+        # ── Weekly actuals override: date_completed 기준 정확한 주간 실적 ──
+        try:
+            wa_r = sb.rpc("get_weekly_actuals", {}).execute()
+            wa_data = wa_r.data
+            del wa_r
+            if isinstance(wa_data, list) and wa_data and isinstance(wa_data[0], dict) and "week_no" not in wa_data[0]:
+                wa_data = wa_data[0]  # unwrap if nested
+            if isinstance(wa_data, list) and wa_data:
+                # week_no → {completed_di, fab_di, erect_di} 맵 생성
+                wa_map = {int(r["week_no"]): r for r in wa_data if r.get("week_no")}
+                # 기존 weekly(act) 데이터를 override
+                updated = []
+                for item in (raw.get("weekly") or []):
+                    wno = int(item.get("week_no") or 0)
+                    if wno in wa_map:
+                        item["completed_di"] = wa_map[wno].get("completed_di", 0)
+                        item["fab_di"]       = wa_map[wno].get("fab_di",       0)
+                        item["erect_di"]     = wa_map[wno].get("erect_di",     0)
+                    updated.append(item)
+                # wa_map에 있지만 기존 weekly에 없는 주차 추가
+                existing_wnos = {int(i.get("week_no") or 0) for i in updated}
+                for wno, r in sorted(wa_map.items()):
+                    if wno not in existing_wnos:
+                        updated.append({
+                            "week_no":      wno,
+                            "completed_di": r.get("completed_di", 0),
+                            "fab_di":       r.get("fab_di",       0),
+                            "erect_di":     r.get("erect_di",     0),
+                        })
+                raw["weekly"] = sorted(updated, key=lambda x: int(x.get("week_no") or 0))
+                del wa_map, updated, wa_data
+                print(f"[cache] weekly actuals overridden from get_weekly_actuals()")
+        except Exception as wa_e:
+            print(f"[cache] get_weekly_actuals error (non-critical): {wa_e}")
+
         # ── EP system/area breakdown: uses get_ep_aggregates() RPC ──
         # Aggregates in DB and returns only results — avoids loading entire joint_master into Python memory
         try:
@@ -482,7 +517,7 @@ def _build():
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
             m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
             m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
-            m_sub   = sorted(list(set(a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("subarea") or a.get("area")))))
+            m_sub   = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
         except Exception as me:
             print(f"[cache] Meta extraction error: {me}")
             m_units, m_sys, m_area, m_sub = [], [], [], []
@@ -997,27 +1032,41 @@ def api_testpkg_joints():
         if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
         if system: q = q.eq("system",  system)
 
+        # status 필터: completed = vt_result=PASS + date_completed, pending = 그 외
+        if status == "completed":
+            q = q.not_.is_("date_completed", "null").eq("vt_result", "PASS")
+        elif status == "pending":
+            q = q.or_("date_completed.is.null,vt_result.neq.PASS,vt_result.is.null")
+
         res = q.order("package").order("iso_drawing").order("joint_no") \
                .range(offset, offset + limit - 1).execute()
 
         # Compute STATUS per row
         rows = []
         for r in (res.data or []):
-            # Welding not done → always PENDING
-            pending = not r.get("date_completed")
-            if not pending:
-                # VT: date entered but no result → PENDING
-                if r.get("vt_date") and not r.get("vt_result"):
-                    pending = True
-                # NDE: date entered but no result → PENDING
-                elif (r.get("mt_date") and not r.get("mt_result")) or \
-                     (r.get("pt_date") and not r.get("pt_result")) or \
-                     (r.get("rt_date") and not r.get("rt_result")) or \
-                     (r.get("rt_2_date") and not r.get("rt_2_result")):
-                    pending = True
-                # PWHT required but no result → PENDING
-                elif r.get("pwht") == "Y" and not r.get("pwht_result"):
-                    pending = True
+            pending = True  # default PENDING
+
+            if r.get("date_completed"):  # 용접 완료된 경우만 추가 판단
+                has_nde  = any([r.get("mt_date"), r.get("pt_date"),
+                                r.get("rt_date"), r.get("rt_2_date")])
+                has_pwht = r.get("pwht") == "Y"
+
+                # VT: date + result=PASS 필수
+                vt_ok = bool(r.get("vt_date")) and r.get("vt_result") == "PASS"
+
+                if not has_nde and not has_pwht:
+                    # NDE/PWHT 요건 없음 → VT PASS만으로 Completed
+                    pending = not vt_ok
+                else:
+                    # NDE/PWHT 요건 있음 → VT + NDE + PWHT 모두 PASS
+                    nde_ok = True
+                    if r.get("mt_date")   and r.get("mt_result")   != "PASS": nde_ok = False
+                    if r.get("pt_date")   and r.get("pt_result")   != "PASS": nde_ok = False
+                    if r.get("rt_date")   and r.get("rt_result")   != "PASS": nde_ok = False
+                    if r.get("rt_2_date") and r.get("rt_2_result") != "PASS": nde_ok = False
+                    pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
+                    pending = not (vt_ok and nde_ok and pwht_ok)
+
             r["status"] = "PENDING" if pending else "Completed"
             rows.append(r)
 
@@ -1039,6 +1088,7 @@ def api_support_get():
         subarea = request.args.get("sub_area", "").strip()
         status  = request.args.get("status",   "").strip()
         phase   = request.args.get("phase",    "").strip()
+        pkg     = request.args.get("package", "").strip()
         iso     = request.args.get("iso",      "").strip()
         q = sb.table("support_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
@@ -1046,6 +1096,7 @@ def api_support_get():
         if area:    q = q.eq("area",        area)
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
+        if pkg:     q = q.ilike("package",  f"%{pkg}%")
         if iso:
             iso_s = iso.replace(",", "").replace("(", "").replace(")", "")
             q = q.or_(f"iso_drawing.ilike.%{iso_s}%,support_drawing.ilike.%{iso_s}%")
@@ -1150,6 +1201,57 @@ def api_support_import():
         return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
     except Exception as e:
         print(f"[support-import] Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/support-master/sync-phase-package", methods=["POST"])
+def api_support_sync_phase_package():
+    """joint_master의 iso_drawing으로 phase/package를 매칭해 support_master에 업데이트."""
+    try:
+        sb = get_sb()
+        # 1. joint_master에서 iso_drawing별 phase/package 수집 (SELECT DISTINCT)
+        jm_res = sb.table("joint_master").select("iso_drawing, phase, package") \
+            .not_.is_("iso_drawing", "null").execute()
+        iso_map = {}
+        for row in (jm_res.data or []):
+            iso = (row.get("iso_drawing") or "").strip()
+            ph  = (row.get("phase")   or "").strip() or None
+            pkg = (row.get("package") or "").strip() or None
+            if iso and (ph or pkg):
+                # 먼저 나온 값 우선
+                if iso not in iso_map:
+                    iso_map[iso] = {"phase": ph, "package": pkg}
+                else:
+                    if ph  and not iso_map[iso]["phase"]:   iso_map[iso]["phase"]   = ph
+                    if pkg and not iso_map[iso]["package"]: iso_map[iso]["package"] = pkg
+        del jm_res
+
+        if not iso_map:
+            return jsonify({"ok": False, "error": "joint_master에 phase/package 데이터 없음"}), 404
+
+        # 2. support_master에서 iso_drawing이 있는 행 조회
+        sm_res = sb.table("support_master").select("id, iso_drawing, phase, package") \
+            .not_.is_("iso_drawing", "null").execute()
+        sm_rows = sm_res.data or []
+        del sm_res
+
+        updated = 0
+        for row in sm_rows:
+            iso = (row.get("iso_drawing") or "").strip()
+            if not iso or iso not in iso_map:
+                continue
+            mapped = iso_map[iso]
+            patch = {}
+            if mapped.get("phase")   and not row.get("phase"):   patch["phase"]   = mapped["phase"]
+            if mapped.get("package") and not row.get("package"): patch["package"] = mapped["package"]
+            if patch:
+                sb.table("support_master").update(patch).eq("id", row["id"]).execute()
+                updated += 1
+
+        with _lock: _cache.clear()
+        return jsonify({"ok": True, "updated": updated, "iso_matched": len(iso_map)})
+    except Exception as e:
+        print(f"[sm-sync-phase-pkg] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
@@ -1320,4 +1422,28 @@ def api_joints_import_welder():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ── Gzip compression for JSON API responses ────────
+# ── Gzip compression for JSON API responses ─────────────────────────────────
+@app.after_request
+def compress_response(response):
+    if (response.status_code == 200
+            and response.content_type.startswith("application/json")
+            and len(response.data) > 2048
+            and "gzip" in request.headers.get("Accept-Encoding", "")):
+        compressed = gzip.compress(response.data, compresslevel=6)
+        if len(compressed) < len(response.data):
+            response.data = compressed
+            response.headers["Content-Encoding"] = "gzip"
+            response.headers["Content-Length"] = len(compressed)
+    return response
+
+# ── Pre-warm cache on startup (works with both python app.py and gunicorn) ──
+threading.Thread(target=_build, daemon=True).start()
+
+@app.route("/debug_path")
+def debug_path():
+    import os
+    return jsonify({"cwd": os.getcwd(), "file": __file__})
+
+if __name__ == "__main__":
+    app.run(debug=True, host="0.0.0.0",
+            port=int(os.environ.get("PORT", 5005)))

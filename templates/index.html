@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=3.3">
+<link rel="stylesheet" href="/static/css/index.css?v=3.9">
 </head>
 <body>
 
@@ -243,7 +243,7 @@
             <thead>
               <tr>
                 <th style="width:0;padding:0;display:none">ID</th>
-                <th style="width:65px;text-align:center">Phase</th>
+                <th style="width:80px;text-align:center">Phase</th>
                 <th style="width:100px">Package</th>
                 <th style="width:55px">Sys</th>
                 <th style="width:85px">Sub Area</th>
@@ -257,7 +257,7 @@
                 <th style="width:88px">Work Date</th>
                 <th style="width:72px">Inspection</th>
                 <th style="width:60px">PWHT</th>
-                <th style="width:130px">Action</th>
+                <th style="width:115px">Action</th>
               </tr>
             </thead>
             <tbody id="jmBody"></tbody>
@@ -371,8 +371,10 @@
           <select id="sm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
           <select id="sm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="sm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
+          <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;loadSupportMaster()" style="width:130px;">
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openSMModal()">+ Add Support</button>
+          <button class="btn-primary" style="background:#f59e0b; padding:6px 12px; margin-left:6px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
@@ -392,20 +394,21 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="smTable" style="width:100% !important; min-width:1530px !important; table-layout:fixed !important;">
+          <table class="data-table" id="smTable" style="width:100% !important; min-width:1620px !important; table-layout:fixed !important;">
             <thead>
               <tr>
                 <th style="width:50px">NO.</th>
-                <th style="width:60px">PHASE</th>
-                <th style="width:60px">UNIT</th>
+                <th style="width:80px">PHASE</th>
+                <th style="width:120px">PACKAGE</th>
+                <th style="width:40px">UNIT</th>
                 <th style="width:80px">SYSTEM</th>
                 <th style="width:80px">AREA</th>
                 <th style="width:100px">SUB AREA</th>
                 <th style="width:280px">SUPPORT DRAWING</th>
                 <th style="width:40px">REV</th>
-                <th style="width:180px">ISO DRAWING</th>
-                <th style="width:220px">LINE NO</th>
-                <th style="width:160px">WELDER</th>
+                <th style="width:220px">ISO DRAWING</th>
+                <th style="width:180px">LINE NO</th>
+                <th style="width:130px">WELDER</th>
                 <th style="width:100px">WORK DATE</th>
                 <th style="width:120px">ACTION</th>
               </tr>
@@ -464,12 +467,12 @@
                 <th rowspan="2" style="width:80px">Action</th>
               </tr>
               <tr>
-                <th style="width:90px;font-size:9px;border-right:none">Date</th><th style="width:70px;font-size:9px;border-left:none">Result</th>
-                <th style="width:90px;font-size:9px;border-right:none">Date</th><th style="width:70px;font-size:9px;border-left:none">Result</th>
-                <th style="width:90px;font-size:9px;border-right:none">Date</th><th style="width:70px;font-size:9px;border-left:none;border-right:none">Result</th>
-                <th style="width:90px;font-size:9px;border-right:none;border-left:none">Finding</th>
-                <th style="width:90px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:70px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
-                <th style="width:90px;font-size:9px;border-right:none">Date</th><th style="width:70px;font-size:9px;border-left:none">Result</th>
+                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
+                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
+                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none;border-right:none">Result</th>
+                <th style="width:80px;font-size:9px;border-right:none;border-left:none">Finding</th>
+                <th style="width:115px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:50px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
+                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
               </tr>
             </thead>
             <tbody id="ndeBody"></tbody>
@@ -565,6 +568,7 @@
     <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Support Item</h3>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><input type="text" id="sm-new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
+      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Package</label><br><input type="text" id="sm-new-package" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Unit</label><br><input type="text" id="sm-new-unit" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="sm-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
       <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Area</label><br><input type="text" id="sm-new-area" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
@@ -614,6 +618,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=3.3"></script>
+<script src="/static/js/dashboard.js?v=3.9"></script>
 </body>
 </html>

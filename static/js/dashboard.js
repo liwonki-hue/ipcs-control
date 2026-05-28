@@ -82,11 +82,9 @@ function _updateLoader(msg) {
 document.addEventListener("DOMContentLoaded", async () => {
     showLoader(true);
     try {
-        // allSettled: meta 실패해도 대시보드 데이터는 독립 렌더링
-        const [metaRes, dataRes] = await Promise.allSettled([loadMeta(), getDashData()]);
-        if (metaRes.status === "rejected") console.warn("[BOP] Meta load failed:", metaRes.reason);
-        if (dataRes.status === "rejected") throw dataRes.reason;
-        const data = dataRes.value;
+        // getDashData() 먼저 대기 → 캐시 빌드 완료 후 meta도 즉시 반환됨
+        const data = await getDashData();
+        await loadMeta();
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
@@ -110,9 +108,20 @@ function _updateWelderKpiBar(wd) {
     const avg = ranking.reduce((s, r) => s + (r.avg_di_per_day || 0), 0) / ranking.length;
     const avgTxt = fmtNum(avg, 2);
     const subTxt = `${wd.stats?.active_welders || 0} welders · AVG DI/Day`;
-    // Update both project KPI bar and EP KPI row
-    ["kpi-welder-perf",  "ep-kpi-welder"]     .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = avgTxt; });
-    ["kpi-welder-sub",   "ep-kpi-welder-sub"]  .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = subTxt; });
+    ["kpi-welder-perf",  "ep-kpi-welder"]    .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = avgTxt; });
+    ["kpi-welder-sub",   "ep-kpi-welder-sub"].forEach(id => { const el=document.getElementById(id); if(el) el.textContent = subTxt; });
+
+    // 메인 KPI 바의 Overall Week Actual을 웰더 주간 데이터로 갱신
+    const wklyAll = (wd.weekly || []).filter(w => (w.total_di || 0) > 0);
+    const lastWk  = wklyAll[wklyAll.length - 1];
+    if (lastWk) {
+        const kpiWeekEl    = document.getElementById("kpi-week");
+        const kpiWeekSubEl = document.getElementById("kpi-week-sub");
+        if (kpiWeekEl)    kpiWeekEl.textContent    = fmtNum(lastWk.total_di, 0);
+        if (kpiWeekSubEl) kpiWeekSubEl.textContent = `Current Week Progress (${lastWk.week_label})`;
+        const card = document.getElementById("kpi-week-card");
+        if (card) card.style.borderTopColor = "var(--accent)";
+    }
 }
 
 function showLoader(show, msg) {
@@ -271,6 +280,10 @@ async function loadMeta() {
         const ndeSys  = document.getElementById("nde-system");
         if (ndeUnit) { ndeUnit.innerHTML = '<option value="">Unit</option>'; metaData.units.forEach(u => ndeUnit.add(new Option(u, u))); }
         if (ndeSys)  { ndeSys.innerHTML = '<option value="">System</option>'; metaData.systems.forEach(s => ndeSys.add(new Option(s, s))); }
+
+        // Populate Test Package Master filters
+        const tpSys = document.getElementById("tp-system");
+        if (tpSys) { tpSys.innerHTML = '<option value="">System</option>'; metaData.systems.forEach(s => tpSys.add(new Option(s, s))); }
     } catch(e) { console.error("Meta load failed", e); }
 }
 
@@ -991,7 +1004,7 @@ function renderJMTable(rows){
         const pkgVal=r.package||"";
         return `<tr id="jmrow-${r.id}">
             <td style="display:none">${r.id}</td>
-            <td><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 3px"></td>
+            <td style="padding:2px"><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 4px"></td>
             <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
             <td style="text-align:center">${r.system||""}</td>
             <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.sub_area||""}</td>
@@ -1002,7 +1015,7 @@ function renderJMTable(rows){
             <td style="text-align:center">${r.sf||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
             <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
-            <td><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD"></td>
+            <td style="padding:2px;text-align:center"><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD" style="width:100%;text-align:center;padding:2px 4px"></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
                     <option value="">-</option>
@@ -1082,7 +1095,7 @@ function renderNdeTable(rows){
             <td style="text-align:center" title="${r.welder||""}">${r.welder||""}</td>
             <td style="text-align:center;font-weight:700;color:var(--accent)">${r.inspection||""}</td>
             
-            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
             <td style="text-align:center;border-left:none;padding-left:2px;">
                 <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
@@ -1091,7 +1104,7 @@ function renderNdeTable(rows){
                 </select>
             </td>
             
-            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
             <td style="text-align:center;border-left:none;padding-left:2px;">
                 <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
@@ -1100,7 +1113,7 @@ function renderNdeTable(rows){
                 </select>
             </td>
             
-            <td style="text-align:center;border-right:none;padding-right:2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-right:none;padding:3px 2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
             <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"> 
                 <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
                     <option value="">-</option>
@@ -1125,7 +1138,7 @@ function renderNdeTable(rows){
                     <option value="MULTI" ${r.rt_finding==='MULTI'?'selected':''}>MULTI (Multiple)</option>
                 </select>
             </td>
-            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
             <td style="text-align:center;border-left:none;padding-left:2px;background:rgba(59,130,246,0.07)">
                 <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
@@ -1134,7 +1147,7 @@ function renderNdeTable(rows){
                 </select>
             </td>
 
-            <td style="text-align:center;border-right:none;padding-right:2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%;text-align:center"></td>
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
             <td style="text-align:center;border-left:none;padding-left:2px;">
                 <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
                     <option value="">-</option>
@@ -1512,13 +1525,13 @@ function renderWelder(data, dashData) {
         : 0;
     document.getElementById("welder-avg-di").textContent = fmtNum(avgDiDay, 2);
 
-    // Overall Week Actual: last active week DI from main dashboard data
+    // Overall Week Actual: last active week DI from welder weekly data
     const weekDiEl = document.getElementById("welder-week-di");
-    if (weekDiEl && dashData) {
-        const wkData  = dashData.weekly || [];
-        const actWks  = wkData.filter(w => w.completed_di > 0);
-        const lastWk  = actWks[actWks.length - 1];
-        weekDiEl.textContent = lastWk ? fmtNum(lastWk.completed_di, 0) : "—";
+    if (weekDiEl) {
+        const wkData = data.weekly || [];
+        const actWks = wkData.filter(w => (w.total_di || 0) > 0);
+        const lastWk = actWks[actWks.length - 1];
+        weekDiEl.textContent = lastWk ? fmtNum(lastWk.total_di, 0) : "—";
         const subEl = weekDiEl.nextElementSibling;
         if (subEl && lastWk) subEl.textContent = lastWk.week_label || "Last Week DI";
     }
@@ -1856,16 +1869,26 @@ async function exportWelderExcel() {
 // ================================================================================
 let smData = [], smCurrentPage = 0;
 const SM_PAGE_SIZE = 50;
+let _smPhaseSynced = false;
 
 async function loadSupportMaster() {
+    // 세션 첫 로드 시 ISO Drawing 기준으로 Phase/Package 자동 매칭 (백그라운드)
+    if (!_smPhaseSynced) {
+        _smPhaseSynced = true;
+        fetch("/api/support-master/sync-phase-package", {method: "POST"})
+            .then(r => r.json())
+            .then(d => { if (d.ok && d.updated > 0) loadSupportMaster(); })
+            .catch(() => {});
+    }
     const unit    = document.getElementById("sm-unit")?.value    || "";
     const system  = document.getElementById("sm-system")?.value  || "";
     const subarea = document.getElementById("sm-subarea")?.value || "";
     const status  = document.getElementById("sm-status")?.value  || "";
     const phase   = document.getElementById("sm-phase")?.value   || "";
+    const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
     const iso     = document.getElementById("sm-iso")?.value?.trim() || "";
     const offset  = smCurrentPage * SM_PAGE_SIZE;
-    
+
     try {
         const params = new URLSearchParams({limit: SM_PAGE_SIZE, offset});
         if (unit)    params.set("unit",     unit);
@@ -1873,6 +1896,7 @@ async function loadSupportMaster() {
         if (subarea) params.set("sub_area", subarea);
         if (status)  params.set("status",   status);
         if (phase)   params.set("phase",    phase);
+        if (pkg)     params.set("package",  pkg);
         if (iso)     params.set("iso",      iso);
         
         const res = await apiFetch(`/api/support-master?${params}`);
@@ -1984,17 +2008,18 @@ function renderSMTable(rows) {
         const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
         return `<tr id="smrow-${r.id}">
           <td>${r.id}</td>
-          <td><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="text-align:center"></td>
+          <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="width:100%;text-align:center;padding:2px 4px"></td>
+          <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${r.package||""}" style="text-align:center"></td>
           <td>${r.unit||""}</td>
           <td>${r.system||""}</td>
           <td>${r.area||""}</td>
           <td>${r.sub_area||""}</td>
           <td>${r.support_drawing||""}</td>
           <td>${r.revision||""}</td>
-          <td style="font-size:11px;font-family:'DM Mono',monospace">${r.iso_drawing||""}</td>
+          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td>${r.line_no||""}</td>
           <td><input class="cell-input" id="sm-welder-${r.id}" type="text" value="${r.welder||""}"></td>
-          <td><input class="cell-input" id="sm-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:100px"></td>
+          <td style="padding:2px;text-align:center"><input class="cell-input" id="sm-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:100%;text-align:center;padding:2px 4px"></td>
           <td style="white-space:nowrap">
             <button class="btn-save-row" onclick="saveSMRow(${r.id})">Save</button>
             <button class="btn-clear-row" onclick="deleteSMItem(${r.id})">Del</button>
@@ -2007,18 +2032,20 @@ async function saveSMRow(id) {
     let dateVal = document.getElementById(`sm-date-${id}`)?.value?.trim() || "";
     let welder  = document.getElementById(`sm-welder-${id}`)?.value?.trim() || "";
     let phase   = document.getElementById(`sm-phase-${id}`)?.value?.trim() || "";
-    
+    let pkg     = document.getElementById(`sm-pkg-${id}`)?.value?.trim() || "";
+
     if (dateVal && !/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
     if (dateVal && dateVal.length === 8) dateVal = "20" + dateVal;
-    
+
     try {
         const r = await fetch(`/api/support-master/${id}`, {
             method: "PATCH", headers: {"Content-Type":"application/json"},
             body: JSON.stringify({
-                date_completed: dateVal || null, 
+                date_completed: dateVal || null,
                 completed: !!dateVal,
                 welder: welder || null,
-                phase: phase || null
+                phase: phase || null,
+                package: pkg || null
             })
         });
         if (!r.ok) throw new Error("HTTP "+r.status);
@@ -2042,6 +2069,7 @@ function closeSMModal() { document.getElementById("addSMModal").style.display = 
 async function submitSMItem() {
     const data = {
         phase:           document.getElementById("sm-new-phase").value.trim(),
+        package:         document.getElementById("sm-new-package")?.value?.trim() || null,
         unit:            document.getElementById("sm-new-unit").value.trim(),
         system:          document.getElementById("sm-new-system").value.trim(),
         area:            document.getElementById("sm-new-area").value.trim(),
@@ -2220,6 +2248,18 @@ async function syncPhasePackage() {
         toast(`✓ Sync complete: ${d.updated} joints updated (${d.rows_read} rows read)`);
         loadTestPkgMaster();
     } catch(e) { toast(`✗ Sync failed: ${e.message}`, "error"); }
+}
+
+async function syncSMPhasePackage() {
+    if (!confirm("Support Master의 ISO Drawing으로 Joint Master에서 Phase/Package를 매칭합니다.\n계속하시겠습니까?")) return;
+    toast("Syncing...", "info");
+    try {
+        const r = await fetch("/api/support-master/sync-phase-package", {method:"POST"});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error);
+        toast(`✓ ${d.updated}건 업데이트 완료`);
+        loadSupportMaster();
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
 async function exportTPExcel() {
