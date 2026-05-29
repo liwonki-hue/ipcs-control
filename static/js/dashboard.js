@@ -331,21 +331,26 @@ async function loadMeta() {
 function renderKPI(d, wkData) {
     if (!d || !d.total_plan_di) return;
     document.getElementById("reportDate").textContent = d.report_date || "—";
-    document.getElementById("kpi-overall").textContent     = `${d.overall_pct || 0}%`;
+    // Weighted Overall Progress: Piping 70% + Support 20% + Test 10%
+    const pipingPct  = d.overall_pct   || 0;
+    const supportPct = d.support_pct   || 0;
+    const testPct    = d.testpkg_pct   || 0;
+    const weightedPct = Math.round(pipingPct * 0.7 + supportPct * 0.2 + testPct * 0.1);
+    document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
     document.getElementById("kpi-overall-sub").textContent = `${fmtNum(d.completed_di,0)} / ${fmtNum(d.total_plan_di,0)} DI · ${d.completed_joints?.toLocaleString() || "0"} joints`;
-    document.getElementById("kpi-bar").style.width = `${Math.min(d.overall_pct || 0, 100)}%`;
+    document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
 
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
     if (totalEl)    totalEl.textContent    = fmtNum(d.total_plan_di, 0);
-    if (totalSubEl) totalSubEl.textContent = `${d.overall_pct || 0}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
+    if (totalSubEl) totalSubEl.textContent = `${weightedPct}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
 
     const completedEl    = document.getElementById("kpi-completed");
     const completedSubEl = document.getElementById("kpi-completed-sub");
     if (completedEl)    completedEl.textContent    = fmtNum(d.completed_di, 0);
     if (completedSubEl) completedSubEl.textContent = `Fab ${fmtNum(d.fab_di,0)} · Erect ${fmtNum(d.erect_di,0)}`;
     document.getElementById("kpi-remain").textContent     = fmtNum(d.remaining_di, 0);
-    document.getElementById("kpi-remain-sub").textContent = `${(100 - (d.overall_pct || 0)).toFixed(1)}% remaining`;
+    document.getElementById("kpi-remain-sub").textContent = `${(100 - weightedPct).toFixed(1)}% remaining`;
 
     const actWks = (wkData || []).filter(w => w.completed_di > 0);
     const kpiWeekVal = document.getElementById("kpi-week");

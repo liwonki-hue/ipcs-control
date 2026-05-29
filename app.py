@@ -343,7 +343,7 @@ def _build():
                 row      = cr.data[0]
                 built_at = datetime.fromisoformat(row["built_at"].replace("Z", "+00:00"))
                 age      = (datetime.now(timezone.utc) - built_at).total_seconds()
-                if age < 600:  # 10분 이내 → 신선
+                if age < 7200:  # 2시간 이내 → 신선 (Render cold-start 대비 넉넉히)
                     combined = row["data"]
                     d17_raw  = combined.get("v17") or {}
                     d2_raw   = combined.get("v2")  or {}
@@ -384,38 +384,44 @@ def _build():
             def _fetch_v2():  return sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
             def _fetch_ep():  return sb.rpc("get_ep_aggregates", {}).execute()
 
-            with ThreadPoolExecutor(max_workers=3) as ex:
+            # ── non-blocking executor: shutdown(wait=False) prevents hanging
+            #    when a slow RPC exceeds timeout but the thread keeps running ──
+            ex = ThreadPoolExecutor(max_workers=3)
+            try:
                 fut_v17 = ex.submit(_fetch_v17)
                 fut_v2  = ex.submit(_fetch_v2)
                 fut_ep  = ex.submit(_fetch_ep)
 
-                # v17 (필수)
+                # v17 (필수) — 90s hard limit
                 try:
                     res = fut_v17.result(timeout=90)
                     d17 = res.data; del res
                     if not _extract_d17(d17, raw): raise ValueError("v17 returned empty")
                     del d17
-                    print(f"[cache] v17 parallel OK")
+                    print("[cache] v17 parallel OK")
                 except Exception as e:
                     raise Exception("Primary RPC (v17) failed. Aborting.") from e
 
-                # v2 (보완)
+                # v2 (보완) — 45s
                 try:
                     res2 = fut_v2.result(timeout=45)
                     d2 = res2.data; del res2
                     _extract_d2(d2, raw, sb); del d2
-                    print(f"[cache] v2 parallel OK")
+                    print("[cache] v2 parallel OK")
                 except Exception as e2:
                     print(f"[cache] v2 RPC error (non-critical): {e2}")
 
-                # EP aggregates (보완)
+                # EP aggregates (보완) — 45s
                 try:
                     res_ep = fut_ep.result(timeout=45)
                     ep_data = res_ep.data; del res_ep
                     _extract_ep(ep_data, raw); del ep_data
-                    print(f"[cache] EP parallel OK")
+                    print("[cache] EP parallel OK")
                 except Exception as ep_e:
                     print(f"[cache] EP RPC error (non-critical): {ep_e}")
+            finally:
+                # 느린 RPC 스레드가 남아있어도 _build() 블로킹 방지
+                ex.shutdown(wait=False, cancel_futures=True)
 
         # ── Week schedule fallback ──────────────────────────────────────
         if not raw.get("weeks"):
@@ -1500,8 +1506,7 @@ def api_testpkg_import():
         sb = get_sb()
         inserted = 0
         for i in range(0, len(records), 500):
-            sb.table("test_package_master").upsert(records[i:i+500]).execute()
-            inserted += len(records[i:i+500])
+            sb.table("test_package_master")
         with _lock: _cache.clear()
         return jsonify({"ok": True, "imported": inserted, "skipped": skipped})
     except Exception as e:
