@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import io
 import gc
@@ -322,7 +323,7 @@ def _extract_ep(ep_data, raw):
 
 
 def _build():
-    global _building, _build_fail
+    global _building, _build_fail, _build_fail_time
     try:
         from concurrent.futures import ThreadPoolExecutor, as_completed
         from datetime import timezone
@@ -369,7 +370,7 @@ def _build():
                             if raw.get("weekly"):
                                 raw["weekly"].sort(key=lambda x: int(x.get("week_no") or 0))
                         cache_hit = True
-                        print(f"[cache] DB cache HIT (age={age:.0f}s) — skipping RPCs")
+                        print(f"[cache] DB cache HIT (age={age:.0f}s) - skipping RPCs")
         except Exception as ce:
             print(f"[cache] DB cache miss: {ce}")
 
@@ -378,7 +379,7 @@ def _build():
         # ThreadPoolExecutor → v17, v2, EP 동시 실행 → 최장 RPC만 기다림
         # ═══════════════════════════════════════════════════════════════
         if not cache_hit:
-            print("[cache] DB cache MISS — running parallel RPCs...")
+            print("[cache] DB cache MISS - running parallel RPCs...")
             def _fetch_v17(): return sb.rpc("get_dashboard_summary_v17", {}).execute()
             def _fetch_v2():  return sb.rpc("get_dashboard_aggregates_control_v2", {}).execute()
             def _fetch_ep():  return sb.rpc("get_ep_aggregates", {}).execute()
@@ -617,15 +618,21 @@ def api_weekly_actuals():
 def api_refresh_db_cache():
     """Supabase dashboard_cache 갱신 후 Flask 캐시 재빌드 트리거.
     GitHub Actions keep-alive에서 호출 → pg_cron 대체."""
+    global _build_fail, _building
     try:
         # 1. DB 내부에서 집계 (refresh_dashboard_cache RPC)
         get_sb().rpc("refresh_dashboard_cache", {}).execute()
         # 2. Flask 인메모리 캐시 초기화 → 다음 요청 시 DB cache 읽기 (1~2초)
-        with _lock: _cache.clear()
-        global _build_fail
-        _build_fail = False
-        threading.Thread(target=_build, daemon=True).start()
-        return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started"})
+        with _lock:
+            _cache.clear()
+            _build_fail = False
+            if not _building:
+                _building = True
+                threading.Thread(target=_build, daemon=True).start()
+                rebuild_started = True
+            else:
+                rebuild_started = False
+        return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress"})
     except Exception as e:
         print(f"[refresh-db-cache] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -656,7 +663,8 @@ def api_joints_get():
         if insp:    q = q.eq("inspection",  insp)
         if pkg:     q = q.eq("package",     pkg)
         if welder:  q = q.ilike("welder",   f"%{welder}%")
-        if nde_only == "true": q = q.in_("inspection", ["PT", "MT", "RT"])
+        if nde_only == "true":
+            q = q.or_("pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
@@ -768,21 +776,180 @@ def api_weekly_last_breakdown():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Welder Stats Fallback (direct DB computation) ─────────────────────
+def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
+    """Compute welder stats directly from joint_master when RPC unavailable."""
+    from collections import defaultdict
+    from datetime import datetime
+
+    sb = get_sb()
+    q = (sb.table("joint_master")
+           .select("welder, date_completed, di, system")
+           .not_.is_("date_completed", "null")
+           .not_.is_("welder", "null"))
+    if date_from: q = q.gte("date_completed", date_from)
+    if date_to:   q = q.lte("date_completed", date_to)
+    if system:    q = q.eq("system", system)
+    if welder:    q = q.ilike("welder", f"%{welder}%")
+    rows = q.execute().data or []
+
+    # Per-welder aggregates
+    w_joints = defaultdict(int)
+    w_di     = defaultdict(float)
+    w_dates  = defaultdict(set)
+    # Weekly / monthly totals
+    weekly_jo  = defaultdict(int)
+    weekly_di  = defaultdict(float)
+    weekly_ws  = defaultdict(set)
+    weekly_num = {}          # week_key → numeric sort key
+    monthly_jo = defaultdict(int)
+    monthly_di = defaultdict(float)
+    monthly_ws = defaultdict(set)
+    # Last-week / last-month tracking
+    week_welder_jo = defaultdict(lambda: defaultdict(int))
+    week_welder_di = defaultdict(lambda: defaultdict(float))
+    month_welder_jo = defaultdict(lambda: defaultdict(int))
+    month_welder_di = defaultdict(lambda: defaultdict(float))
+
+    for row in rows:
+        weld_raw = (row.get("welder") or "").strip()
+        date_str = str(row.get("date_completed") or "")[:10]
+        di_val   = float(row.get("di") or 0)
+        if not weld_raw or not date_str:
+            continue
+        welders_list = [w.strip() for w in weld_raw.split("/") if w.strip()]
+        if not welders_list:
+            continue
+        di_each = di_val / len(welders_list)
+        try:
+            dt   = datetime.strptime(date_str, "%Y-%m-%d")
+            iso  = dt.isocalendar()
+            wk   = f"{iso[0]}-W{iso[1]:02d}"
+            mo   = date_str[:7]
+            wk_n = iso[0] * 100 + iso[1]
+        except Exception:
+            continue
+
+        for w in welders_list:
+            w_joints[w] += 1
+            w_di[w]     += di_each
+            w_dates[w].add(date_str)
+            week_welder_jo[wk][w]  += 1
+            week_welder_di[wk][w]  += di_each
+            month_welder_jo[mo][w] += 1
+            month_welder_di[mo][w] += di_each
+
+        weekly_jo[wk]  += 1
+        weekly_di[wk]  += di_val
+        weekly_ws[wk].update(welders_list)
+        weekly_num[wk]  = wk_n
+        monthly_jo[mo] += 1
+        monthly_di[mo] += di_val
+        monthly_ws[mo].update(welders_list)
+
+    # Build ranking
+    ranking = []
+    for w in w_joints:
+        active_days = max(len(w_dates[w]), 1)
+        ranking.append({
+            "welder":         w,
+            "joints":         w_joints[w],
+            "total_di":       round(w_di[w], 1),
+            "avg_di_per_day": round(w_di[w] / active_days, 2),
+            "active_days":    active_days,
+        })
+    ranking.sort(key=lambda x: x["avg_di_per_day"], reverse=True)
+
+    # Build weekly list (sorted chronologically)
+    weekly_list = []
+    for wk in sorted(weekly_num, key=lambda k: weekly_num[k]):
+        wc = len(weekly_ws[wk])
+        weekly_list.append({
+            "week_no":           weekly_num[wk],
+            "week_label":        wk,
+            "joints":            weekly_jo[wk],
+            "total_di":          round(weekly_di[wk], 1),
+            "avg_di_per_welder": round(weekly_di[wk] / wc, 2) if wc else 0,
+        })
+
+    # Build monthly list
+    monthly_list = []
+    for mo in sorted(monthly_jo):
+        wc = len(monthly_ws[mo])
+        monthly_list.append({
+            "month":             mo,
+            "joints":            monthly_jo[mo],
+            "total_di":          round(monthly_di[mo], 1),
+            "avg_di_per_welder": round(monthly_di[mo] / wc, 2) if wc else 0,
+        })
+
+    # Last active week / month per-welder
+    def _per_welder_rows(wk_or_mo, jo_map, di_map, label_key, label_val):
+        rows_out = []
+        for w in jo_map[wk_or_mo]:
+            active = max(len(w_dates[w]), 1)
+            rows_out.append({
+                label_key:        label_val,
+                "welder":         w,
+                "joints":         jo_map[wk_or_mo][w],
+                "total_di":       round(di_map[wk_or_mo][w], 1),
+                "avg_di_per_day": round(w_di[w] / active, 2),
+            })
+        rows_out.sort(key=lambda x: x["avg_di_per_day"], reverse=True)
+        return rows_out
+
+    last_week_rows, last_month_rows = [], []
+    if weekly_list:
+        last_wk = weekly_list[-1]["week_label"]
+        last_week_rows = _per_welder_rows(last_wk, week_welder_jo, week_welder_di,
+                                          "week_label", last_wk)
+    if monthly_list:
+        last_mo = monthly_list[-1]["month"]
+        last_month_rows = _per_welder_rows(last_mo, month_welder_jo, month_welder_di,
+                                           "month", last_mo)
+
+    stats = {
+        "active_welders": len(ranking),
+        "total_joints":   sum(r["joints"] for r in ranking),
+        "total_di":       round(sum(r["total_di"] for r in ranking), 1),
+    }
+    return {
+        "stats":      stats,
+        "ranking":    ranking,
+        "weekly":     weekly_list,
+        "monthly":    monthly_list,
+        "last_week":  last_week_rows,
+        "last_month": last_month_rows,
+    }
+
+
 # ── Welder Summary ────────────────────────────────────────────────────
 @app.route("/api/welder-summary")
 def api_welder_summary():
+    date_from = request.args.get("date_from", "").strip()
+    date_to   = request.args.get("date_to",   "").strip()
+    sys_      = request.args.get("system",    "").strip()
+    wld       = request.args.get("welder",    "").strip()
     try:
         sb  = get_sb()
         res = sb.rpc("get_welder_stats_v4", {
-            "f_date_from": request.args.get("date_from", "").strip(),
-            "f_date_to":   request.args.get("date_to",   "").strip(),
-            "f_system":    request.args.get("system",    "").strip(),
-            "f_welder":    request.args.get("welder",    "").strip()
+            "f_date_from": date_from,
+            "f_date_to":   date_to,
+            "f_system":    sys_,
+            "f_welder":    wld
         }).execute()
-        return jsonify(res.data or {})
-    except Exception as e:
-        print(f"[welder-summary] Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        data = res.data
+        # RPC must return a dict; if it returns something else, fall through
+        if isinstance(data, dict) and data:
+            return jsonify(data)
+        raise ValueError("RPC returned empty or unexpected result")
+    except Exception as rpc_err:
+        print(f"[welder-summary] RPC failed ({rpc_err}), using Python fallback")
+        try:
+            return jsonify(_welder_stats_fallback(date_from, date_to, sys_, wld))
+        except Exception as e:
+            print(f"[welder-summary] Fallback failed: {e}")
+            return jsonify({"error": str(e)}), 500
 
 
 # ── Welder Daily Stats ─────────────────────────────────────────────────
@@ -1218,18 +1385,28 @@ def api_support_sync_phase_package():
         sm_rows = sm_res.data or []
         del sm_res
 
-        updated = 0
+        # Batch upsert — eliminates N individual UPDATE queries
+        upsert_records = []
         for row in sm_rows:
             iso = (row.get("iso_drawing") or "").strip()
             if not iso or iso not in iso_map:
                 continue
             mapped = iso_map[iso]
-            patch = {}
+            patch = {"id": row["id"]}
             if mapped.get("phase")   and not row.get("phase"):   patch["phase"]   = mapped["phase"]
             if mapped.get("package") and not row.get("package"): patch["package"] = mapped["package"]
-            if patch:
-                sb.table("support_master").update(patch).eq("id", row["id"]).execute()
-                updated += 1
+            if len(patch) > 1:  # has more than just "id"
+                upsert_records.append(patch)
+
+        updated = 0
+        for i in range(0, len(upsert_records), 500):
+            chunk = upsert_records[i:i + 500]
+            try:
+                sb.table("support_master").upsert(chunk).execute()
+                updated += len(chunk)
+            except Exception as ue:
+                print(f"[sm-sync] upsert chunk error: {ue}")
+        del upsert_records
 
         with _lock: _cache.clear()
         return jsonify({"ok": True, "updated": updated, "iso_matched": len(iso_map)})
@@ -1293,140 +1470,44 @@ def api_testpkg_import():
         buf  = io.BytesIO(request.files["file"].read())
         df   = pd.read_excel(buf, dtype=str)
         df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        FIELDS   = ["system","sub_area","test_pkg","completed","date_completed","remark"]
+        FIELDS = ["system", "sub_area", "test_pkg", "completed", "date_completed", "remark"]
         records, skipped = [], 0
         for _, row in df.iterrows():
             rec = {}
             for f in FIELDS:
                 v = row.get(f)
-                rec[f] = None if (v is None or (isinstance(v, float) and pd.isna(v))) else str(v).strip() or None
-            if not rec.get("system") and not rec.get("test_pkg"):
-                skipped += 1; continue
+                if v is None or (isinstance(v, float) and pd.isna(v)):
+                    v = None
+                else:
+                    v = str(v).strip() or None
+                rec[f] = v
             dc = rec.get("date_completed")
             if dc:
                 try:
                     rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"]      = True
-                except: rec["date_completed"] = None
+                    rec["completed"] = True
+                except Exception:
+                    rec["date_completed"] = None
+                    rec["completed"] = False
             else:
-                cmp_val = str(rec.get("completed") or "").upper()
-                rec["completed"] = cmp_val in ("TRUE","Y","O","1")
+                rec["completed"] = False
+            if not rec.get("system") and not rec.get("test_pkg"):
+                skipped += 1
+                continue
             records.append(rec)
         if not records:
             return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
         sb = get_sb()
         inserted = 0
         for i in range(0, len(records), 500):
-            sb.table("test_package_master").insert(records[i:i+500]).execute()
+            sb.table("test_package_master").upsert(records[i:i+500]).execute()
             inserted += len(records[i:i+500])
         with _lock: _cache.clear()
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
+        return jsonify({"ok": True, "imported": inserted, "skipped": skipped})
     except Exception as e:
+        print(f"[testpkg-import] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
-
-# ── Welder ID Import (from Welder tracking Excel) ─────────────────────
-@app.route("/api/joints/import-welder", methods=["POST"])
-def api_joints_import_welder():
-    import pandas as pd
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-
-        buf = io.BytesIO(request.files["file"].read())
-        df  = pd.read_excel(buf, dtype=str)
-        # Keep original column names (Chinese/English mix) — match by exact name
-        df.columns = [str(c).strip() for c in df.columns]
-
-        def norm_jno(v):
-            """Normalise joint_no to plain integer string: '1.0' → '1', '01' → '1'."""
-            try:    return str(int(float(str(v).strip())))
-            except: return str(v).strip()
-
-        # Collect (iso_drawing, joint_no, welder) tuples from Excel
-        rows = []
-        for _, row in df.iterrows():
-            iso = str(row.get("ISO Drawing") or "").strip()
-            jno = norm_jno(row.get("Joint") or "")
-            wld = str(row.get("Root/ Hot Welder") or "").strip()
-            if not iso or not jno or not wld or wld.lower() == "nan":
-                continue
-            rows.append((iso, jno, wld))
-
-        if not rows:
-            return jsonify({"ok": False, "error": "No valid welder rows found"}), 400
-
-        # Fetch DB joints for every ISO Drawing referenced in the Excel
-        sb   = get_sb()
-        isos = list({r[0] for r in rows})
-        db_joints = []
-        for i in range(0, len(isos), 200):
-            res = sb.table("joint_master") \
-                    .select("id, iso_drawing, joint_no") \
-                    .in_("iso_drawing", isos[i:i+200]) \
-                    .execute()
-            db_joints.extend(res.data or [])
-
-        # Build lookup: (iso_drawing, normalised_joint_no) → id
-        lookup = {
-            (r["iso_drawing"], norm_jno(r["joint_no"])): r["id"]
-            for r in db_joints
-        }
-
-        # Match Excel rows to DB IDs
-        update_map  = {}   # id → welder
-        not_found   = 0
-        for iso, jno, wld in rows:
-            jid = lookup.get((iso, jno))
-            if jid:
-                update_map[jid] = wld
-            else:
-                not_found += 1
-
-        if not update_map:
-            return jsonify({
-                "ok": False,
-                "error": f"No joints matched ({not_found} rows not found)"
-            }), 400
-
-        # Batch upsert: only update `welder` for matched IDs
-        records = [{"id": jid, "welder": wld} for jid, wld in update_map.items()]
-        for i in range(0, len(records), 500):
-            sb.table("joint_master").upsert(records[i:i+500]).execute()
-
-        with _lock: _cache.clear()
-        return jsonify({
-            "ok":       True,
-            "updated":  len(update_map),
-            "not_found": not_found,
-        })
-    except Exception as e:
-        print(f"[import-welder] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
-# ── Gzip compression for JSON API responses ─────────────────────────────────
-@app.after_request
-def compress_response(response):
-    if (response.status_code == 200
-            and response.content_type.startswith("application/json")
-            and len(response.data) > 2048
-            and "gzip" in request.headers.get("Accept-Encoding", "")):
-        compressed = gzip.compress(response.data, compresslevel=6)
-        if len(compressed) < len(response.data):
-            response.data = compressed
-            response.headers["Content-Encoding"] = "gzip"
-            response.headers["Content-Length"] = len(compressed)
-    return response
-
-# ── Pre-warm cache on startup (works with both python app.py and gunicorn) ──
-threading.Thread(target=_build, daemon=True).start()
-
-@app.route("/debug_path")
-def debug_path():
-    import os
-    return jsonify({"cwd": os.getcwd(), "file": __file__})
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0",
-            port=int(os.environ.get("PORT", 5005)))
+    app.run(host="0.0.0.0", port=5005, debug=False)

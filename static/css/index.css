@@ -340,4 +340,4 @@ select:focus, input:focus { border-color: var(--accent); }
     color: var(--muted);
     opacity: 0.5;
 }
-input.cell-input { box-sizing: border-box !important; text-align: center !important; }
+input.cell-input { box-sizing: border-box !important; text-align: center !important; min-width: 0 !important; }

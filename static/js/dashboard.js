@@ -82,6 +82,7 @@ function _updateLoader(msg) {
 
 document.addEventListener("DOMContentLoaded", async () => {
     showLoader(true);
+    let _loadError = false;
     try {
         // getDashData() 먼저 대기 → 캐시 빌드 완료 후 meta도 즉시 반환됨
         const data = await getDashData();
@@ -89,10 +90,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
+        _loadError = true;
         console.error("[BOP] Init error:", e);
         showLoader(false, "Load failed: " + e.message);
     } finally {
-        showLoader(false);
+        // 에러 화면이 표시 중인 경우에는 loader를 숨기지 않음
+        if (!_loadError) showLoader(false);
     }
     // Background: weekly actuals 보완 (date_completed 기준 정확한 주간 실적)
     setTimeout(() => {
@@ -278,7 +281,15 @@ function toast(msg, type="success") {
 // ================================================================================
 async function loadMeta() {
     try {
-        metaData = await apiFetch("/api/meta");
+        const ts = new Date().getTime();
+        const res = await fetch("/api/meta?_t=" + ts, { cache: "no-store" });
+        if (res.status === 202) {
+            console.log("[BOP] Meta data is building, retrying in 3s...");
+            setTimeout(loadMeta, 3000);
+            return;
+        }
+        if (!res.ok) throw new Error("API error: " + res.status);
+        metaData = await res.json();
         console.log("[BOP] MetaData loaded:", metaData);
         
         // Populate Joint Master filters
@@ -468,7 +479,9 @@ async function renderOverview(kpi, wkData, units, systems) {
         });
 
         const scurveLabels = wkData.map((_, i) => `W${i + 1}`);
-        charts["scurveChart"] = new Chart(document.getElementById("scurveChart").getContext("2d"), {
+        const scurveEl = document.getElementById("scurveChart");
+        if (!scurveEl) { console.warn("[BOP] scurveChart canvas not found"); return; }
+        charts["scurveChart"] = new Chart(scurveEl.getContext("2d"), {
             type: "bar",
             data: { labels: scurveLabels, datasets: [
                 { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:false} },
@@ -491,7 +504,9 @@ async function renderOverview(kpi, wkData, units, systems) {
         else { let s=latestPlanIdx-3; if(s<0)s=0; last4Wks=wkData.slice(s,s+4); }
 
         destroyChart("weeklyBar");
-        charts["weeklyBar"] = new Chart(document.getElementById("weeklyBar").getContext("2d"), {
+        const weeklyBarEl = document.getElementById("weeklyBar");
+        if (!weeklyBarEl) { console.warn("[BOP] weeklyBar canvas not found"); return; }
+        charts["weeklyBar"] = new Chart(weeklyBarEl.getContext("2d"), {
             type:"bar",
             data:{labels:last4Wks.map(w=>w.week_label),datasets:[
                 {label:"Actual Work",type:"line",data:last4Wks.map(w=>w.completed_di||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,1):''}},
@@ -2287,6 +2302,33 @@ async function syncSMPhasePackage() {
         toast(`✓ ${d.updated}건 업데이트 완료`);
         loadSupportMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+async function exportNDEExcel() {
+    if (!ndeData || ndeData.length === 0) { toast("No NDE data to export", "error"); return; }
+    const rows = ndeData.map(r => ({
+        "ISO Drawing": r.iso_drawing || "",
+        "Rev":         r.rev         || "",
+        "Joint No":    r.joint_no    || "",
+        "Welder":      r.welder      || "",
+        "Inspection":  r.inspection  || "",
+        "PT Date":     r.pt_date   ? r.pt_date.substring(0,10)   : "",
+        "PT Result":   r.pt_result  || "",
+        "MT Date":     r.mt_date   ? r.mt_date.substring(0,10)   : "",
+        "MT Result":   r.mt_result  || "",
+        "RT Date":     r.rt_date   ? r.rt_date.substring(0,10)   : "",
+        "RT Result":   r.rt_result  || "",
+        "RT Finding":  r.rt_finding || "",
+        "RT 2nd Date": r.rt_2_date ? r.rt_2_date.substring(0,10) : "",
+        "RT 2nd Res":  r.rt_2_result || "",
+        "PWHT Date":   r.pwht_date ? r.pwht_date.substring(0,10) : "",
+        "PWHT Result": r.pwht_result || ""
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "NDE_PWHT");
+    const ok = await downloadWithPicker(wb, "NDE_PWHT_Export.xlsx");
+    if (ok) toast("✓ NDE & PWHT exported");
 }
 
 async function exportTPExcel() {
