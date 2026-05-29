@@ -613,6 +613,23 @@ def api_weekly_actuals():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/refresh-db-cache")
+def api_refresh_db_cache():
+    """Supabase dashboard_cache 갱신 후 Flask 캐시 재빌드 트리거.
+    GitHub Actions keep-alive에서 호출 → pg_cron 대체."""
+    try:
+        # 1. DB 내부에서 집계 (refresh_dashboard_cache RPC)
+        get_sb().rpc("refresh_dashboard_cache", {}).execute()
+        # 2. Flask 인메모리 캐시 초기화 → 다음 요청 시 DB cache 읽기 (1~2초)
+        with _lock: _cache.clear()
+        global _build_fail
+        _build_fail = False
+        threading.Thread(target=_build, daemon=True).start()
+        return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started"})
+    except Exception as e:
+        print(f"[refresh-db-cache] Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 # ── Joint Master ───────────────────────────────────────────────────────
 @app.route("/api/joints", methods=["GET"])
 def api_joints_get():
