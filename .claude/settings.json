@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \":*)",
+      "Bash(curl -s http://localhost:5001/api/status)",
+      "Bash(curl -s \"http://localhost:5001/api/dashboard\")",
+      "Bash(curl -s \"http://localhost:5001/api/weekly-last-breakdown\")",
+      "Bash(curl -s \"http://localhost:5001/api/welder-summary\")",
+      "Bash(curl -s \"http://localhost:5001/api/meta\")",
+      "Bash(curl -s \"http://localhost:5001/api/joints?limit=5\")",
+      "Bash(curl -s \"http://localhost:5001/api/support-master?limit=3\")",
+      "Bash(curl -s \"http://localhost:5001/api/testpkg-master?limit=3\")"
+    ]
+  }
+}

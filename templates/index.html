@@ -33,6 +33,7 @@
   <div class="nav-section">Link</div>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128196;</span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128230;</span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <a class="nav-btn" href="https://project-schedule.streamlit.app" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128197;</span> Schedule <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <div class="nav-footer">
     <button class="nav-btn refresh-btn" onclick="refreshData()"><span class="nav-icon">&#128260;</span> Refresh</button>
 <div class="nav-version">ICK-DPGU-PIPING v2.0</div>
@@ -53,7 +54,7 @@
   <div id="loading-status" style="display:none;background:rgba(0,200,255,0.08);border-bottom:1px solid rgba(0,200,255,0.2);color:#00c8ff;font-family:'DM Mono',monospace;font-size:12px;text-align:center;padding:7px 16px;letter-spacing:1px;"></div>
 
   <div class="kpi-row" id="kpiRow">
-    <div class="kpi-card accent"><div class="kpi-label">Overall Progress</div><div class="kpi-value" id="kpi-overall">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="kpi-bar" style="width:0%"></div></div><div class="kpi-sub" id="kpi-overall-sub">&mdash;</div><div class="kpi-sub" style="font-size:9px;opacity:0.7;margin-top:2px;">PIPING 70% &middot; SUP 20% &middot; TEST 10%</div></div>
+    <div class="kpi-card accent"><div class="kpi-label">Overall Progress</div><div class="kpi-value" id="kpi-overall">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="kpi-bar" style="width:0%"></div></div><div class="kpi-sub" id="kpi-overall-weight-sub">&mdash;</div></div>
     <div class="kpi-card"><div class="kpi-label">Total DI</div><div class="kpi-value" id="kpi-total-di">&mdash;</div><div class="kpi-sub" id="kpi-total-di-sub">&mdash;</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Completed DI</div><div class="kpi-value cyan" id="kpi-completed">&mdash;</div><div class="kpi-sub" id="kpi-completed-sub">&mdash;</div></div>
     <div class="kpi-card yellow"><div class="kpi-label">Remaining DI</div><div class="kpi-value yellow" id="kpi-remain">&mdash;</div><div class="kpi-sub" id="kpi-remain-sub">&mdash;</div></div>
@@ -62,7 +63,7 @@
   </div>
   <!-- EP-specific KPI row (shown only on Early Power page) -->
   <div class="kpi-row" id="epKpiRow" style="display:none">
-    <div class="kpi-card" style="border-top-color:#7c3aed"><div class="kpi-label">EP Readiness</div><div class="kpi-value" id="ep-kpi-readiness" style="color:#7c3aed">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="ep-kpi-readiness-bar" style="width:0%;background:#7c3aed"></div></div><div class="kpi-sub">PIPING 70% &middot; SUP 20% &middot; TEST 10%</div></div>
+    <div class="kpi-card" style="border-top-color:#7c3aed"><div class="kpi-label">EP Readiness</div><div class="kpi-value" id="ep-kpi-readiness" style="color:#7c3aed">&mdash;</div><div class="kpi-bar-wrap"><div class="kpi-bar-fill" id="ep-kpi-readiness-bar" style="width:0%;background:#7c3aed"></div></div><div class="kpi-sub" id="ep-kpi-readiness-sub">&mdash;</div></div>
     <div class="kpi-card accent"><div class="kpi-label">PIPING (D/I)</div><div class="kpi-value" id="ep-kpi-piping">&mdash;</div><div class="kpi-sub" id="ep-kpi-piping-sub">&mdash;</div></div>
     <div class="kpi-card cyan"><div class="kpi-label">Support</div><div class="kpi-value cyan" id="ep-kpi-support">&mdash;</div><div class="kpi-sub" id="ep-kpi-support-sub">&mdash;</div></div>
     <div class="kpi-card yellow"><div class="kpi-label">Test Package</div><div class="kpi-value yellow" id="ep-kpi-testpkg">&mdash;</div><div class="kpi-sub" id="ep-kpi-testpkg-sub">&mdash;</div></div>
@@ -621,3 +622,9 @@
 <script src="/static/js/dashboard.js?v=4.1"></script>
 </body>
 </html>
+efaults.set('plugins.datalabels', { display: false });
+</script>
+<script src="/static/js/dashboard.js?v=4.2"></script>
+</body>
+</html>
+                                                       

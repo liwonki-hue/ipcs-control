@@ -337,8 +337,9 @@ function renderKPI(d, wkData) {
     const testPct    = d.testpkg_pct   || 0;
     const weightedPct = Math.round(pipingPct * 0.7 + supportPct * 0.2 + testPct * 0.1);
     document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
-    document.getElementById("kpi-overall-sub").textContent = `${fmtNum(d.completed_di,0)} / ${fmtNum(d.total_plan_di,0)} DI · ${d.completed_joints?.toLocaleString() || "0"} joints`;
-    document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
+document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
+    const weightSubEl = document.getElementById("kpi-overall-weight-sub");
+    if (weightSubEl) weightSubEl.textContent = `PIPING ${Math.round(pipingPct)}% · SUP ${Math.round(supportPct)}% · TEST ${Math.round(testPct)}%`;
 
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
@@ -538,8 +539,9 @@ async function loadEarlyPower() {
 async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
     if(!d) return;
     try {
-        const d_total_di = d.total_di || 0;
-        const d_completed_di = d.completed_di || 0;
+        // ep_sys 합산을 우선 사용 → 게이지와 테이블 물량 일치
+        const d_total_di     = systems?.length ? systems.reduce((s,r) => s + (r.total_di     || 0), 0) : (d.total_di     || 0);
+        const d_completed_di = systems?.length ? systems.reduce((s,r) => s + (r.completed_di || 0), 0) : (d.completed_di || 0);
         const pct = d_total_di > 0 ? Math.round((d_completed_di / d_total_di) * 100) : 0;
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
@@ -556,6 +558,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
 
         _setKpi("ep-kpi-readiness", `${readiness_pct}%`);
         _setCol("ep-kpi-readiness", pctColor(readiness_pct));
+        _setKpi("ep-kpi-readiness-sub", `PIPING ${pct}% · SUP ${support_pct}% · TEST ${testpkg_pct}%`);
         const rBar = document.getElementById("ep-kpi-readiness-bar");
         if(rBar) { rBar.style.width = `${Math.min(readiness_pct,100)}%`; rBar.style.background = pctColor(readiness_pct); }
 
@@ -2356,6 +2359,12 @@ async function exportTPExcel() {
         "PWHT Date": r.pwht_date ? r.pwht_date.substring(0,10) : "",
         "PWHT Result": r.pwht_result||"",
         "Status": r.status||""
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
+    const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
+}
+s||""
     }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");

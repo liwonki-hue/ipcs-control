@@ -60,9 +60,13 @@ GRANT EXECUTE ON FUNCTION construction.refresh_dashboard_cache()
     TO anon, authenticated, service_role;
 
 -- ── STEP 4. pg_cron 등록 (5분마다 자동 갱신) ──
-SELECT cron.unschedule(jobname)
-FROM cron.job
-WHERE jobname = 'bop-dashboard-refresh';
+-- 기존 job 있으면 삭제 (없어도 에러 안 남)
+DO $$
+BEGIN
+    PERFORM cron.unschedule('bop-dashboard-refresh');
+EXCEPTION WHEN OTHERS THEN NULL;
+END;
+$$;
 
 SELECT cron.schedule(
     'bop-dashboard-refresh',
