@@ -2364,9 +2364,3 @@ async function exportTPExcel() {
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
     const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
 }
-s||""
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
-    const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
-}

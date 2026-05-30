@@ -1506,12 +1506,27 @@ def api_testpkg_import():
         sb = get_sb()
         inserted = 0
         for i in range(0, len(records), 500):
-            sb.table("test_package_master")
+            res = sb.table("test_package_master").insert(records[i:i+500]).execute()
+            inserted += len(res.data or [])
+            del res
         with _lock: _cache.clear()
         return jsonify({"ok": True, "imported": inserted, "skipped": skipped})
     except Exception as e:
         print(f"[testpkg-import] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.after_request
+def compress_response(resp):
+    if (resp.status_code == 200
+            and resp.content_type.startswith("application/json")
+            and resp.content_length
+            and resp.content_length > 2048
+            and "gzip" in request.headers.get("Accept-Encoding", "")):
+        resp.data = gzip.compress(resp.data, compresslevel=6)
+        resp.headers["Content-Encoding"] = "gzip"
+        resp.headers["Content-Length"]   = len(resp.data)
+    return resp
 
 
 if __name__ == "__main__":

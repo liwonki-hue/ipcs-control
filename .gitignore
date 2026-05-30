@@ -26,8 +26,10 @@ fix_meta.py
 fix_timeout.py
 migrate_add_rt.sql
 nul
+$null
 test_startup.bat
 start_dashboard.bat
+screenshot_*.png
 
 # SQL 작업 파일
 *.sql
