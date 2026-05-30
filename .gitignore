@@ -9,3 +9,22 @@ bop-flask/.env
 bop-flask/__pycache__/
 node_modules/
 .DS_Store
+
+# 로컬 작업 파일 (GitHub 제외)
+scratch/
+Raw File/
+.claude/
+.vscode/
+dash.json
+dash_new.json
+dashboard_res.json
+welder.json
+fix.py
+fix_app.py
+fix_front.py
+fix_meta.py
+fix_timeout.py
+migrate_add_rt.sql
+nul
+test_startup.bat
+start_dashboard.bat
