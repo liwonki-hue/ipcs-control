@@ -28,3 +28,6 @@ migrate_add_rt.sql
 nul
 test_startup.bat
 start_dashboard.bat
+
+# SQL 작업 파일
+*.sql
