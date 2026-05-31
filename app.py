@@ -1231,6 +1231,47 @@ def api_testpkg_joints():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Area별 Field DI / Support EA 집계 ─────────────────────────────────
+@app.route("/api/area-field-quantities")
+def api_area_field_quantities():
+    """sub_area별 Field joints(sf='F') DI 합산 및 Support EA 카운트를 단일 호출로 반환."""
+    TARGET_SUBS = [
+        "PR #3", "PR #4", "PR #5", "PR #6", "PR #7",
+        "MB STR", "HRSG #11 PR", "GT #11", "HRSG #12 PR", "GT #12"
+    ]
+    try:
+        sb = get_sb()
+        # Field DI: sf='F' 인 조인트만 집계 (배치 페이징)
+        di_by_sub = {}
+        batch, offset = 1000, 0
+        while True:
+            res = (sb.table("joint_master")
+                     .select("sub_area, di")
+                     .eq("sf", "F")
+                     .in_("sub_area", TARGET_SUBS)
+                     .range(offset, offset + batch - 1)
+                     .execute())
+            for row in res.data or []:
+                sub = row.get("sub_area", "")
+                di_by_sub[sub] = di_by_sub.get(sub, 0) + (row.get("di") or 0)
+            if not res.data or len(res.data) < batch:
+                break
+            offset += batch
+
+        # Support EA: sub_area별 카운트
+        ea_by_sub = {}
+        for sub in TARGET_SUBS:
+            sr = (sb.table("support_master")
+                    .select("id", count="exact")
+                    .eq("sub_area", sub)
+                    .limit(1)
+                    .execute())
+            ea_by_sub[sub] = sr.count or 0
+
+        return jsonify({"di": di_by_sub, "ea": ea_by_sub})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── Support Master CRUD ───────────────────────────────────────────────
 @app.route("/api/support-master", methods=["GET"])
 def api_support_get():
