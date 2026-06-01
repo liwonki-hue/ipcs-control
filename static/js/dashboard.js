@@ -1284,6 +1284,7 @@ async function saveJointDate(id){
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
     let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
     if(val){if(!/^\d{2,4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format (YY-MM-DD)","error");return;}if(val.length===8)val="20"+val;}
+    if(val && (!inspection || !pwht)){alert("Please enter both Inspection and PWHT before saving.");return;}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
