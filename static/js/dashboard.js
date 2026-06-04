@@ -255,13 +255,11 @@ async function loadMeta() {
         const ts = new Date().getTime();
         const res = await fetch("/api/meta?_t=" + ts, { cache: "no-store" });
         if (res.status === 202) {
-            console.log("[BOP] Meta data is building, retrying in 3s...");
             setTimeout(loadMeta, 3000);
             return;
         }
         if (!res.ok) throw new Error("API error: " + res.status);
         metaData = await res.json();
-        console.log("[BOP] MetaData loaded:", metaData);
         
         // Populate Joint Master filters
         const jmUnit = document.getElementById("jm-unit");
