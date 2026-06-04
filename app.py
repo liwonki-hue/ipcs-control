@@ -143,10 +143,7 @@ def _parse_rpc(raw):
             sd  = w.get("week_start_date") or w.get("start_date")
             ed  = w.get("week_end_date")   or w.get("end_date")
             if wno and sd:
-                dt      = datetime.strptime(str(sd)[:10], "%Y-%m-%d")
-                year_wk = dt.isocalendar()[1]
-                proj_wk = year_wk - 14
-                date_map[wno]      = f"W{proj_wk}"
+                date_map[wno]      = f"W{wno}"
                 week_date_map[wno] = {
                     "week_start": str(sd)[:10],
                     "week_end":   str(ed)[:10] if ed else str(sd)[:10],
@@ -610,15 +607,80 @@ def api_health():
 
 @app.route("/api/weekly-actuals")
 def api_weekly_actuals():
-    """date_completed 기준 주간 실적 집계 — 별도 호출로 캐시 빌드 비블로킹"""
+    """date_completed 기준 주간 실적 집계 — RPC 없을 때 Python fallback"""
+    # RPC 시도 (배포된 경우)
     try:
         res = get_sb().rpc("get_weekly_actuals", {}).execute()
         data = res.data
         if isinstance(data, list) and data and not isinstance(data[0], dict):
             data = data[0]
-        return jsonify(data or [])
+        if data and isinstance(data, list) and data and isinstance(data[0], dict):
+            return jsonify(data)
+    except Exception:
+        pass
+
+    # Python fallback: joint_master + week_schedule 직접 집계
+    try:
+        sb = get_sb()
+        cutoff = (datetime.now() - timedelta(days=90)).strftime("%Y-%m-%d")
+
+        # 최근 90일 완료 조인트
+        j_res = sb.table("joint_master") \
+            .select("date_completed,di,sf") \
+            .gte("date_completed", cutoff) \
+            .not_.is_("date_completed", "null") \
+            .execute()
+        joints = j_res.data or []
+        del j_res
+        if not joints:
+            return jsonify([])
+
+        min_d = min(str(j.get("date_completed") or "")[:10] for j in joints)
+
+        # 해당 기간의 주차 스케줄 조회
+        wk_res = sb.table("week_schedule") \
+            .select("week_no,week_start_date,week_end_date") \
+            .gte("week_end_date", min_d) \
+            .order("week_no").execute()
+        weeks = wk_res.data or []
+        del wk_res
+
+        from collections import defaultdict
+        wk_di    = defaultdict(float)
+        wk_fab   = defaultdict(float)
+        wk_erect = defaultdict(float)
+
+        for j in joints:
+            dc = str(j.get("date_completed") or "")[:10]
+            di = float(j.get("di") or 0)
+            sf = (j.get("sf") or "").upper()
+            for w in weeks:
+                ws  = str(w.get("week_start_date") or "")[:10]
+                we  = str(w.get("week_end_date")   or "")[:10]
+                wno = w.get("week_no")
+                if ws and we and wno and ws <= dc <= we:
+                    wk_di[wno]    += di
+                    if sf in ("S", "SHOP"):
+                        wk_fab[wno]   += di
+                    elif sf in ("F", "FIELD"):
+                        wk_erect[wno] += di
+                    break
+        del joints
+
+        result = [
+            {
+                "week_no":      int(wno),
+                "week_label":   f"W{wno}",
+                "completed_di": round(wk_di[wno], 2),
+                "fab_di":       round(wk_fab.get(wno, 0), 2),
+                "erect_di":     round(wk_erect.get(wno, 0), 2),
+            }
+            for wno in sorted(wk_di)
+        ]
+        return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[weekly-actuals] Fallback error: {e}")
+        return jsonify([]), 500
 
 @app.route("/api/refresh-db-cache")
 def api_refresh_db_cache():
@@ -670,7 +732,7 @@ def api_joints_get():
         if pkg:     q = q.eq("package",     pkg)
         if welder:  q = q.ilike("welder",   f"%{welder}%")
         if nde_only == "true":
-            q = q.or_("pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
+            q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
@@ -789,6 +851,17 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     from datetime import datetime
 
     sb = get_sb()
+
+    # week_schedule: date → project week_no 매핑
+    wk_sched = sb.table("week_schedule").select("week_no,week_start_date,week_end_date").order("week_no").execute().data or []
+    def _project_wkno(date_str):
+        for row in wk_sched:
+            ws = str(row.get("week_start_date") or "")[:10]
+            we = str(row.get("week_end_date")   or "")[:10]
+            if ws and we and ws <= date_str <= we:
+                return row.get("week_no")
+        return None
+
     q = (sb.table("joint_master")
            .select("welder, date_completed, di, system")
            .not_.is_("date_completed", "null")
@@ -806,11 +879,13 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     # Weekly / monthly totals
     weekly_jo  = defaultdict(int)
     weekly_di  = defaultdict(float)
-    weekly_ws  = defaultdict(set)
-    weekly_num = {}          # week_key → numeric sort key
+    weekly_ws    = defaultdict(set)
+    weekly_dates = defaultdict(set)   # 주간 실제 작업일 수 계산용
+    weekly_num   = {}                 # week_key → project week_no (정수)
     monthly_jo = defaultdict(int)
     monthly_di = defaultdict(float)
     monthly_ws = defaultdict(set)
+    monthly_dates = defaultdict(set)
     # Last-week / last-month tracking
     week_welder_jo = defaultdict(lambda: defaultdict(int))
     week_welder_di = defaultdict(lambda: defaultdict(float))
@@ -828,13 +903,23 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
             continue
         di_each = di_val / len(welders_list)
         try:
-            dt   = datetime.strptime(date_str, "%Y-%m-%d")
-            iso  = dt.isocalendar()
-            wk   = f"{iso[0]}-W{iso[1]:02d}"
-            mo   = date_str[:7]
-            wk_n = iso[0] * 100 + iso[1]
+            mo = date_str[:7]
         except Exception:
             continue
+
+        # project week_no로 매핑 (없으면 ISO 폴백)
+        proj_wno = _project_wkno(date_str)
+        if proj_wno is not None:
+            wk   = f"W{proj_wno}"
+            wk_n = proj_wno
+        else:
+            try:
+                dt   = datetime.strptime(date_str, "%Y-%m-%d")
+                iso  = dt.isocalendar()
+                wk   = f"W{iso[1]}"
+                wk_n = iso[1]
+            except Exception:
+                continue
 
         for w in welders_list:
             w_joints[w] += 1
@@ -845,13 +930,15 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
             month_welder_jo[mo][w] += 1
             month_welder_di[mo][w] += di_each
 
-        weekly_jo[wk]  += 1
-        weekly_di[wk]  += di_val
+        weekly_jo[wk]   += 1
+        weekly_di[wk]   += di_val
         weekly_ws[wk].update(welders_list)
-        weekly_num[wk]  = wk_n
-        monthly_jo[mo] += 1
-        monthly_di[mo] += di_val
+        weekly_dates[wk].add(date_str)
+        weekly_num[wk]   = wk_n
+        monthly_jo[mo]  += 1
+        monthly_di[mo]  += di_val
         monthly_ws[mo].update(welders_list)
+        monthly_dates[mo].add(date_str)
 
     # Build ranking
     ranking = []
@@ -869,24 +956,26 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     # Build weekly list (sorted chronologically)
     weekly_list = []
     for wk in sorted(weekly_num, key=lambda k: weekly_num[k]):
-        wc = len(weekly_ws[wk])
+        wc   = max(len(weekly_ws[wk]), 1)
+        wdays= max(len(weekly_dates[wk]), 1)
         weekly_list.append({
             "week_no":           weekly_num[wk],
             "week_label":        wk,
             "joints":            weekly_jo[wk],
             "total_di":          round(weekly_di[wk], 1),
-            "avg_di_per_welder": round(weekly_di[wk] / wc, 2) if wc else 0,
+            "avg_di_per_welder": round(weekly_di[wk] / wc / wdays, 2),  # 일평균/용접사
         })
 
     # Build monthly list
     monthly_list = []
     for mo in sorted(monthly_jo):
-        wc = len(monthly_ws[mo])
+        wc    = max(len(monthly_ws[mo]), 1)
+        wdays = max(len(monthly_dates[mo]), 1)
         monthly_list.append({
             "month":             mo,
             "joints":            monthly_jo[mo],
             "total_di":          round(monthly_di[mo], 1),
-            "avg_di_per_welder": round(monthly_di[mo] / wc, 2) if wc else 0,
+            "avg_di_per_welder": round(monthly_di[mo] / wc / wdays, 2),  # 일평균/용접사
         })
 
     # Last active week / month per-welder
@@ -1164,6 +1253,23 @@ def api_joints_sync_phase_package():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Packages by System ────────────────────────────────────────────────
+@app.route("/api/packages")
+def api_packages():
+    """시스템별 distinct Package 목록 반환 — Test PKG Master 드롭다운용"""
+    system = request.args.get("system", "").strip()
+    try:
+        sb = get_sb()
+        q  = sb.table("joint_master").select("package").not_.is_("package", "null")
+        if system:
+            q = q.eq("system", system)
+        res  = q.execute()
+        pkgs = sorted(set(r["package"] for r in (res.data or []) if r.get("package")))
+        return jsonify(pkgs)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Test Package Joints (joint-level inspection view) ──────────────────
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
@@ -1182,7 +1288,7 @@ def api_testpkg_joints():
             "inspection,mt_date,mt_result,pt_date,pt_result,"
             "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result",
             count="exact"
-        ).not_.is_("package", "null")
+        ).or_("package.not.is.null,inspection.in.(VT,RT)")
 
         if pkg:    q = q.ilike("package",     f"%{pkg}%")
         if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
@@ -1203,25 +1309,39 @@ def api_testpkg_joints():
             pending = True  # default PENDING
 
             if r.get("date_completed"):  # 용접 완료된 경우만 추가 판단
-                has_nde  = any([r.get("mt_date"), r.get("pt_date"),
-                                r.get("rt_date"), r.get("rt_2_date")])
+                insp     = (r.get("inspection") or "").upper()
                 has_pwht = r.get("pwht") == "Y"
+                vt_ok    = bool(r.get("vt_date")) and r.get("vt_result") == "PASS"
 
-                # VT: date + result=PASS 필수
-                vt_ok = bool(r.get("vt_date")) and r.get("vt_result") == "PASS"
-
-                if not has_nde and not has_pwht:
-                    # NDE/PWHT 요건 없음 → VT PASS만으로 Completed
-                    pending = not vt_ok
-                else:
-                    # NDE/PWHT 요건 있음 → VT + NDE + PWHT 모두 PASS
+                if insp == "RT":
+                    # RT 조인트: VT PASS + RT PASS 둘 다 필수
+                    rt_ok = bool(r.get("rt_date")) and r.get("rt_result") == "PASS"
+                    pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
+                    pending = not (vt_ok and rt_ok and pwht_ok)
+                elif insp in ("PT", "MT"):
+                    # PT/MT 조인트: VT PASS + 해당 NDE PASS 필수
                     nde_ok = True
-                    if r.get("mt_date")   and r.get("mt_result")   != "PASS": nde_ok = False
-                    if r.get("pt_date")   and r.get("pt_result")   != "PASS": nde_ok = False
-                    if r.get("rt_date")   and r.get("rt_result")   != "PASS": nde_ok = False
-                    if r.get("rt_2_date") and r.get("rt_2_result") != "PASS": nde_ok = False
+                    if insp == "PT" and (not r.get("pt_date") or r.get("pt_result") != "PASS"):
+                        nde_ok = False
+                    if insp == "MT" and (not r.get("mt_date") or r.get("mt_result") != "PASS"):
+                        nde_ok = False
                     pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
                     pending = not (vt_ok and nde_ok and pwht_ok)
+                else:
+                    # VT 전용 또는 inspection 없음: VT PASS만으로 Completed
+                    has_any_nde = any([r.get("mt_date"), r.get("pt_date"),
+                                       r.get("rt_date"), r.get("rt_2_date")])
+                    if has_any_nde:
+                        nde_ok = True
+                        if r.get("mt_date")   and r.get("mt_result")   != "PASS": nde_ok = False
+                        if r.get("pt_date")   and r.get("pt_result")   != "PASS": nde_ok = False
+                        if r.get("rt_date")   and r.get("rt_result")   != "PASS": nde_ok = False
+                        if r.get("rt_2_date") and r.get("rt_2_result") != "PASS": nde_ok = False
+                        pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
+                        pending = not (vt_ok and nde_ok and pwht_ok)
+                    else:
+                        pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
+                        pending = not (vt_ok and pwht_ok)
 
             r["status"] = "PENDING" if pending else "Completed"
             rows.append(r)
@@ -1559,10 +1679,10 @@ def api_testpkg_import():
 
 @app.after_request
 def compress_response(resp):
+    data_len = resp.content_length or len(resp.data or b"")
     if (resp.status_code == 200
             and resp.content_type.startswith("application/json")
-            and resp.content_length
-            and resp.content_length > 2048
+            and data_len > 2048
             and "gzip" in request.headers.get("Accept-Encoding", "")):
         resp.data = gzip.compress(resp.data, compresslevel=6)
         resp.headers["Content-Encoding"] = "gzip"

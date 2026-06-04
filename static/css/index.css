@@ -341,3 +341,9 @@ select:focus, input:focus { border-color: var(--accent); }
     opacity: 0.5;
 }
 input.cell-input { box-sizing: border-box !important; text-align: center !important; min-width: 0 !important; }
+
+/* date input 빈 값일 때 "연도-월-일" 숨김 */
+input[type="date"].date-empty::-webkit-datetime-edit { color: transparent; }
+input[type="date"].date-empty::-webkit-datetime-edit-fields-wrapper { color: transparent; }
+input[type="date"].date-empty:focus::-webkit-datetime-edit { color: inherit; }
+input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { color: inherit; }

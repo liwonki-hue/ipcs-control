@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=4.1">
+<link rel="stylesheet" href="/static/css/index.css?v=6.3">
 </head>
 <body>
 
@@ -218,7 +218,7 @@
           <select id="jm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
           <select id="jm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
-          <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">RT</option></select>
+          <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <button class="btn-primary" onclick="loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openAddJointModal()">+ Add Joint</button>
 
@@ -234,7 +234,7 @@
         <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
           <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="jm-iso-info" style="color:#ffffff"></span></div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" id="jm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff">
+            <input type="date" id="jm-bulk-date" style="width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff;cursor:pointer">
             <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applyIsoBulkDate()">Apply to All</button>
             <button class="btn-clear-row" style="padding:8px 16px" onclick="clearIsoBulkDate()">Clear All</button>
           </div>
@@ -266,11 +266,7 @@
         </div>
         <div class="de-pagination">
           <div id="jm-count">0 rows loaded</div>
-          <div style="display:flex;gap:12px;align-items:center">
-            <button class="btn-nav" id="jm-prev-btn" onclick="jmPage(-1)">Prev</button>
-            <span id="jm-page-info">Page 1</span>
-            <button class="btn-nav" id="jm-next-btn" onclick="jmPage(1)">Next</button>
-          </div>
+          <div id="jm-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -419,11 +415,7 @@
         </div>
         <div class="de-pagination">
           <div id="sm-count">0 rows loaded</div>
-          <div style="display:flex;gap:12px;align-items:center">
-            <button class="btn-nav" id="sm-prev-btn" onclick="smPage(-1)">Prev</button>
-            <span id="sm-page-info">Page 1</span>
-            <button class="btn-nav" id="sm-next-btn" onclick="smPage(1)">Next</button>
-          </div>
+          <div id="sm-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -441,7 +433,7 @@
             <option value="">Inspection</option>
             <option value="PT">PT</option>
             <option value="MT">MT</option>
-            <option value="RT">RT</option>
+            <option value="RT">VT/RT</option>
           </select>
           <input id="nde-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="ndeCurrentPage=0;loadNdePwht()" style="width:120px;">
           <button class="btn-primary" onclick="ndeCurrentPage=0;loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
@@ -452,12 +444,12 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1620px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1700px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th rowspan="2" style="width:250px">ISO Drawing No</th>
-                <th rowspan="2" style="width:60px">Rev</th>
-                <th rowspan="2" style="width:60px">Jnt</th>
+                <th rowspan="2" style="width:200px">ISO Drawing No</th>
+                <th rowspan="2" style="width:45px">Rev</th>
+                <th rowspan="2" style="width:45px">Jnt</th>
                 <th rowspan="2" style="width:160px">Welder</th>
                 <th rowspan="2" style="width:85px">Inspec</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">PT</th>
@@ -468,12 +460,12 @@
                 <th rowspan="2" style="width:80px">Action</th>
               </tr>
               <tr>
-                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
-                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
-                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none;border-right:none">Result</th>
-                <th style="width:80px;font-size:9px;border-right:none;border-left:none">Finding</th>
-                <th style="width:115px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:50px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
-                <th style="width:115px;font-size:9px;border-right:none">Date</th><th style="width:50px;font-size:9px;border-left:none">Result</th>
+                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
+                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
+                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none;border-right:none">Result</th>
+                <th style="width:490px;font-size:9px;border-right:none;border-left:none">Finding</th>
+                <th style="width:100px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:15px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
+                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
               </tr>
             </thead>
             <tbody id="ndeBody"></tbody>
@@ -481,9 +473,7 @@
         </div>
         <div class="de-pagination">
           <div id="nde-count">0 rows loaded</div>
-          <button class="btn-nav" id="nde-prev-btn" onclick="ndePage(-1)">Prev</button>
-          <span id="nde-page-info">Page 1</span>
-          <button class="btn-nav" id="nde-next-btn" onclick="ndePage(1)">Next</button>
+          <div id="nde-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -495,8 +485,8 @@
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:160px;">
-          <select id="tp-system"  class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
-          <input id="tp-package" class="filter-sel" type="text" placeholder="Package" oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:130px;">
+          <select id="tp-system" class="filter-sel" style="min-width:100px;" onchange="tpCurrentPage=0;loadSystemPackages();loadTestPkgMaster()"><option value="">System</option></select>
+          <select id="tp-package" class="filter-sel" style="min-width:130px;" onchange="tpCurrentPage=0;loadTestPkgMaster()"><option value="">All Packages</option></select>
           <select id="tp-status"  class="filter-sel" style="min-width:100px;">
             <option value="">All Status</option>
             <option value="completed">Completed</option>
@@ -513,20 +503,21 @@
             <thead>
               <tr>
                 <th style="width:4%">Sys</th>
-                <th style="width:8%">Package</th>
-                <th style="width:13%">ISO Drawing No</th>
-                <th style="width:3.5%">Jnt</th>
-                <th style="width:5.5%">Weld Date</th>
-                <th style="width:5.5%">VT Date</th>
-                <th style="width:4.5%">VT Res</th>
-                <th style="width:5.5%">MT Date</th>
-                <th style="width:4.5%">MT Res</th>
-                <th style="width:5.5%">PT Date</th>
-                <th style="width:4.5%">PT Res</th>
-                <th style="width:5.5%">RT Date</th>
-                <th style="width:4.5%">RT Res</th>
-                <th style="width:5.5%">PWHT Date</th>
-                <th style="width:4.5%">PWHT Res</th>
+                <th style="width:7%">Package</th>
+                <th style="width:11%">ISO Drawing No</th>
+                <th style="width:3%">Jnt</th>
+                <th style="width:5%">Weld Date</th>
+                <th style="width:4%">Insp</th>
+                <th style="width:5%">VT Date</th>
+                <th style="width:4%">VT Res</th>
+                <th style="width:5%">MT Date</th>
+                <th style="width:4%">MT Res</th>
+                <th style="width:5%">PT Date</th>
+                <th style="width:4%">PT Res</th>
+                <th style="width:5%">RT Date</th>
+                <th style="width:4%">RT Res</th>
+                <th style="width:5%">PWHT Date</th>
+                <th style="width:4%">PWHT Res</th>
                 <th style="width:5.5%">STATUS</th>
                 <th style="width:4%">Save</th>
               </tr>
@@ -536,11 +527,7 @@
         </div>
         <div class="de-pagination">
           <div id="tp-count">0 rows loaded</div>
-          <div style="display:flex;gap:12px;align-items:center;">
-            <button class="btn-nav" id="tp-prev-btn" onclick="tpPage(-1)">Prev</button>
-            <span id="tp-page-info">Page 1</span>
-            <button class="btn-nav" id="tp-next-btn" onclick="tpPage(1)">Next</button>
-          </div>
+          <div id="tp-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -619,6 +606,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=4.2"></script>
+<script src="/static/js/dashboard.js?v=6.7"></script>
 </body>
 </html>

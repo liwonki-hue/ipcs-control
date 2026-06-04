@@ -4,7 +4,7 @@ const API = "";  // Flask runs on same origin
 let charts = {};
 let jmData = [];
 let jmCurrentPage = 0;
-const JM_PAGE_SIZE = 50;
+const JM_PAGE_SIZE = 30;
 let weekData = [];
 let metaData = { units: [], systems: [] };
 
@@ -87,6 +87,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         // getDashData() 먼저 대기 → 캐시 빌드 완료 후 meta도 즉시 반환됨
         const data = await getDashData();
         await loadMeta();
+        // Overview 페이지를 visible로 전환 후 렌더링 (Chart.js는 hidden 캔버스에서 크기 0으로 그림)
+        document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === "overview"));
+        document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
+        document.getElementById("page-overview")?.classList.remove("hidden");
+        document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "grid");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
@@ -98,30 +103,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (!_loadError) showLoader(false);
     }
     // Background: weekly actuals 보완 (date_completed 기준 정확한 주간 실적)
-    setTimeout(() => {
-        fetch("/api/weekly-actuals").then(r => r.json()).then(wa => {
-            if (!Array.isArray(wa) || !wa.length) return;
-            const waMap = {};
-            wa.forEach(w => { if (w.week_no) waMap[w.week_no] = w; });
-            if (!_dashData) return;
-            (_dashData.weekly || []).forEach(w => {
-                const m = waMap[w.week_no];
-                if (m) {
-                    w.completed_di = m.completed_di || w.completed_di;
-                    w.fab_di       = m.fab_di       || w.fab_di;
-                    w.erect_di     = m.erect_di     || w.erect_di;
-                }
-            });
-            // v17에 없는 주차 추가
-            const existing = new Set((_dashData.weekly||[]).map(w=>w.week_no));
-            wa.forEach(w => {
-                if (!existing.has(w.week_no)) _dashData.weekly.push(w);
-            });
-            _dashData.weekly.sort((a,b)=>a.week_no-b.week_no);
-            renderKPI(_dashData.kpi, _dashData.weekly);
-            renderOverview(_dashData.kpi, _dashData.weekly, _dashData.units, _dashData.systems);
-        }).catch(() => {});
-    }, 1500);
+    setTimeout(() => _applyWeeklyActuals(), 500);
 
     // Background: fetch welder summary after initial render (non-blocking, delayed)
     setTimeout(() => {
@@ -141,17 +123,6 @@ function _updateWelderKpiBar(wd) {
     ["kpi-welder-perf",  "ep-kpi-welder"]    .forEach(id => { const el=document.getElementById(id); if(el) el.textContent = avgTxt; });
     ["kpi-welder-sub",   "ep-kpi-welder-sub"].forEach(id => { const el=document.getElementById(id); if(el) el.textContent = subTxt; });
 
-    // 메인 KPI 바의 Overall Week Actual을 웰더 주간 데이터로 갱신
-    const wklyAll = (wd.weekly || []).filter(w => (w.total_di || 0) > 0);
-    const lastWk  = wklyAll[wklyAll.length - 1];
-    if (lastWk) {
-        const kpiWeekEl    = document.getElementById("kpi-week");
-        const kpiWeekSubEl = document.getElementById("kpi-week-sub");
-        if (kpiWeekEl)    kpiWeekEl.textContent    = fmtNum(lastWk.total_di, 0);
-        if (kpiWeekSubEl) kpiWeekSubEl.textContent = `Current Week Progress (${lastWk.week_label})`;
-        const card = document.getElementById("kpi-week-card");
-        if (card) card.style.borderTopColor = "var(--accent)";
-    }
 }
 
 function showLoader(show, msg) {
@@ -358,7 +329,6 @@ document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%
     const kpiWeekSub = document.getElementById("kpi-week-sub");
     if (actWks.length) {
         const lw  = actWks[actWks.length - 1];
-        const card = document.getElementById("kpi-week-card");
         if (kpiWeekVal) {
             kpiWeekVal.textContent = fmtNum(lw.completed_di, 0);
             kpiWeekVal.style.color = "var(--accent)";
@@ -484,7 +454,7 @@ async function renderOverview(kpi, wkData, units, systems) {
             return Math.round(totalPlanDI * (3*t*t - 2*t*t*t));  // cubic smoothstep S-curve
         });
 
-        const scurveLabels = wkData.map((_, i) => `W${i + 1}`);
+        const scurveLabels = wkData.map(w => w.week_label);
         const scurveEl = document.getElementById("scurveChart");
         if (!scurveEl) { console.warn("[BOP] scurveChart canvas not found"); return; }
         charts["scurveChart"] = new Chart(scurveEl.getContext("2d"), {
@@ -979,14 +949,8 @@ async function loadJointMaster() {
         if(insp)params.set("inspection",insp);
         const res=await apiFetch(`/api/joints?${params}`);
         jmData=res.data;
-        document.getElementById("jm-count").textContent=`${res.count.toLocaleString()} rows loaded (page ${jmCurrentPage+1})`;
-        document.getElementById("jm-page-info").textContent=`Page ${jmCurrentPage+1}`;
-        
-        // Update navigation buttons
-        const prevBtn = document.getElementById("jm-prev-btn");
-        const nextBtn = document.getElementById("jm-next-btn");
-        if (prevBtn) prevBtn.disabled = (jmCurrentPage === 0);
-        if (nextBtn) nextBtn.disabled = (res.data.length < JM_PAGE_SIZE);
+        document.getElementById("jm-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
+        _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, JM_PAGE_SIZE, "jmGoto");
 
         renderJMTable(jmData); updateIsoBulkPanel(isoVal,jmData);
     } catch(e) { console.error("JM load failed",e); }
@@ -1006,9 +970,7 @@ async function applyIsoBulkDate(){
     const isoVal=document.getElementById("jm-iso")?.value?.trim();
     let dateVal=document.getElementById("jm-bulk-date")?.value?.trim();
     if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
-    if(!dateVal){toast("Please enter date (YY-MM-DD)","error");return;}
-    if(!/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)){toast("Invalid date format (YY-MM-DD)","error");return;}
-    if(dateVal.length===8)dateVal="20"+dateVal;
+    if(!dateVal){toast("날짜를 선택하세요","error");return;}
     const targets=jmData.filter(r=>r.iso_drawing===isoVal);
     if(targets.length===0){toast("No joints found for this ISO","error");return;}
     const btn=document.getElementById("jm-bulk-apply-btn");
@@ -1043,7 +1005,8 @@ async function clearIsoBulkDate(){
     }catch(e){toast(`✗ Bulk clear failed: ${e.message}`,"error");}
 }
 
-function jmPage(dir){jmCurrentPage=Math.max(0,jmCurrentPage+dir);loadJointMaster();}
+function jmGoto(page){jmCurrentPage=Math.max(0,page);loadJointMaster();}
+function jmPage(dir){jmGoto(jmCurrentPage+dir);}
 
 function renderJMTable(rows){
     const tbody=document.getElementById("jmBody");
@@ -1065,14 +1028,14 @@ function renderJMTable(rows){
             <td style="text-align:center">${r.sf||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
             <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
-            <td style="padding:2px;text-align:center"><input class="cell-input" id="date-${r.id}" type="text" value="${dStr}" placeholder="YY-MM-DD" style="width:100%;text-align:center;padding:2px 4px"></td>
+            <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="date" value="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onchange="this.classList.toggle('date-empty',!this.value)"></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
                     <option value="">-</option>
                     <option value="VT" ${r.inspection==='VT'?'selected':''}>VT</option>
                     <option value="MT" ${r.inspection==='MT'?'selected':''}>MT</option>
                     <option value="PT" ${r.inspection==='PT'?'selected':''}>PT</option>
-                    <option value="RT" ${r.inspection==='RT'?'selected':''}>RT</option>
+                    <option value="RT" ${r.inspection==='RT'||r.inspection==='VT/RT'?'selected':''}>VT/RT</option>
                 </select>
             </td>
             <td>
@@ -1083,9 +1046,9 @@ function renderJMTable(rows){
                 </select>
             </td>
             <td style="white-space:nowrap">
-                <button class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button>
-                <button class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
-                <button class="btn-del-row" onclick="deleteJoint(${r.id})" title="Delete">DEL</button>
+                <button type="button" class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button>
+                <button type="button" class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
+                <button type="button" class="btn-del-row" onclick="deleteJoint(${r.id})" title="Delete">DEL</button>
             </td>
         </tr>`;
     }).join("");
@@ -1099,7 +1062,7 @@ function closeAddJointModal(){document.getElementById("addJointModal").style.dis
 //  NDE & PWHT
 // ================================================================================
 let ndeCurrentPage=0;
-const NDE_PAGE_SIZE=50;
+const NDE_PAGE_SIZE=30;
 let ndeData=[];
 
 async function loadNdePwht() {
@@ -1116,19 +1079,15 @@ async function loadNdePwht() {
         if(welderVal)params.set("welder",welderVal);
         const res=await apiFetch(`/api/joints?${params}`);
         ndeData=res.data;
-        document.getElementById("nde-count").textContent=`${res.count.toLocaleString()} rows loaded (page ${ndeCurrentPage+1})`;
-        document.getElementById("nde-page-info").textContent=`Page ${ndeCurrentPage+1}`;
-        
-        const prevBtn = document.getElementById("nde-prev-btn");
-        const nextBtn = document.getElementById("nde-next-btn");
-        if (prevBtn) prevBtn.disabled = (ndeCurrentPage === 0);
-        if (nextBtn) nextBtn.disabled = (res.data.length < NDE_PAGE_SIZE);
+        document.getElementById("nde-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
+        _renderPageNums("nde-page-nav", ndeCurrentPage, res.count||0, NDE_PAGE_SIZE, "ndeGoto");
 
         renderNdeTable(ndeData);
     } catch(e) { console.error("NDE load failed",e); }
 }
 
-function ndePage(dir){ndeCurrentPage=Math.max(0,ndeCurrentPage+dir);loadNdePwht();}
+function ndeGoto(page){ndeCurrentPage=Math.max(0,page);loadNdePwht();}
+function ndePage(dir){ndeGoto(ndeCurrentPage+dir);}
 
 function renderNdeTable(rows){
     const tbody=document.getElementById("ndeBody");
@@ -1257,22 +1216,38 @@ async function deleteJoint(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"DELETE"});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        await fetch("/api/cache/clear").catch(()=>{});
+        fetch("/api/cache/clear").catch(()=>{});
         toast(`✓ Joint ID ${id} deleted`);
         loadJointMaster();
-        loadNdePwht(); // Sync NDE tab
     }catch(e){toast("✗ Failed to delete","error");}
 }
 
 async function clearJointDate(id){
-    const el=document.getElementById(`date-${id}`);if(el)el.value='';
     try{
-        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
+        const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({date_completed:null, welder:null, inspection:null, pwht:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        // Removed cache/clear: simple date deletion lets the background cache expire naturally
-        toast(`✓ ID ${id} date cleared!`);
-        _dashData = null; // Invalidate in-memory cache only
-        _autoRefreshKpi();
+        // 화면 초기화
+        const dateEl=document.getElementById(`date-${id}`);       if(dateEl){dateEl.value='';dateEl.classList.add('date-empty');}
+        const weldEl=document.getElementById(`welder-${id}`);     if(weldEl)weldEl.value='';
+        const inspEl=document.getElementById(`inspection-${id}`); if(inspEl)inspEl.value='';
+        const pwhtEl=document.getElementById(`pwht-${id}`);       if(pwhtEl)pwhtEl.value='';
+        toast(`✓ ID ${id} cleared`);
+        const joint=jmData.find(j=>j.id===id);
+        if(joint){
+            if(_dashData?.kpi&&joint.date_completed){
+                const di=parseFloat(joint.di||0);
+                if(di>0){
+                    _dashData.kpi.completed_di=Math.max(0,(_dashData.kpi.completed_di||0)-di);
+                    _dashData.kpi.remaining_di=(_dashData.kpi.remaining_di||0)+di;
+                    const total=_dashData.kpi.total_plan_di||0;
+                    if(total>0)_dashData.kpi.overall_pct=Math.round(_dashData.kpi.completed_di/total*10000)/100;
+                    renderKPI(_dashData.kpi,_dashData.weekly);
+                }
+            }
+            joint.date_completed=null; joint.welder=null; joint.inspection=null; joint.pwht=null;
+        }
+        _refreshAfterSave();  // 서버 캐시 재빌드 + 전체 KPI/차트 갱신
     }catch(e){toast(`✗ Clear failed: ${e.message}`,"error");}
 }
 
@@ -1283,28 +1258,37 @@ async function saveJointDate(id){
     let pkg=document.getElementById(`pkg-${id}`)?.value?.trim()||'';
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
     let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
-    if(val){if(!/^\d{2,4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format (YY-MM-DD)","error");return;}if(val.length===8)val="20"+val;}
-    if(val && (!inspection || !pwht)){alert("Please enter both Inspection and PWHT before saving.");return;}
+    if(val && !/^\d{4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format","error");return;}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
-        // Removed cache/clear + loadNdePwht(): rebuilding cache on every single row save is too expensive
-        // Setting _dashData=null ensures auto-refresh on next navigate
-        _dashData = null;
         toast(`✓ ID ${id} saved!`);
-        _autoRefreshKpi();
+        // jmData 전체 필드 동기화 (re-render 시 stale 방지)
+        const joint = jmData.find(j => j.id === id);
+        if (joint) {
+            const wasCompleted = !!joint.date_completed;
+            const nowCompleted  = !!val;
+            joint.date_completed = val || null;
+            joint.welder     = welder     || null;
+            joint.inspection = inspection || null;
+            joint.pwht       = pwht       || null;
+            joint.phase      = phase      || null;
+            joint.package    = pkg        || null;
+            // KPI optimistic update (즉각 반영)
+            if (_dashData?.kpi) {
+                const di = parseFloat(joint.di || 0);
+                if (di > 0 && wasCompleted !== nowCompleted) {
+                    const sign = nowCompleted ? 1 : -1;
+                    _dashData.kpi.completed_di  = Math.max(0, (_dashData.kpi.completed_di  || 0) + sign * di);
+                    _dashData.kpi.remaining_di  = Math.max(0, (_dashData.kpi.remaining_di  || 0) - sign * di);
+                    const total = _dashData.kpi.total_plan_di || 0;
+                    if (total > 0) _dashData.kpi.overall_pct = Math.round(_dashData.kpi.completed_di / total * 10000) / 100;
+                    renderKPI(_dashData.kpi, _dashData.weekly);
+                }
+            }
+        }
+        _refreshAfterSave();  // 서버 캐시 재빌드 + 전체 KPI/차트 갱신
     }catch(e){toast(`✗ Save failed: ${e.message}`,"error");}
-}
-
-async function refreshWeeklySummary(){
-    try{
-        await fetch("/api/cache/clear").catch(()=>{});_dashData=null;
-        const fresh=await getDashData(true);if(!fresh)return;
-        weekData=fresh.weekly||[];
-        renderKPI(fresh.kpi,fresh.weekly);
-        const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
-        if(visPage==="overview")renderOverview(fresh.kpi,fresh.weekly,fresh.units,fresh.systems);
-    }catch(e){console.warn("Weekly summary refresh failed:",e);}
 }
 
 // ================================================================================
@@ -1320,31 +1304,99 @@ async function refreshData(){
     }catch(e){toast("Refresh failed: "+e.message,"error");}
 }
 
-// Auto-refresh KPI in background after save operations
-// Reduced polling from 20 to 8 iterations to lower server load (cache TTL=1200s is sufficient)
-async function _autoRefreshKpi(){
-    fetch("/api/cache/clear").catch(()=>{});
-    await new Promise(r=>setTimeout(r,2000));
-    for(let i=0;i<8;i++){
-        await new Promise(r=>setTimeout(r,2000));
-        try{
-            const res=await fetch("/api/dashboard");
-            if(res.status===200){
-                _dashData=await res.json();
-                renderKPI(_dashData.kpi,_dashData.weekly);
-                const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
-                if(visPage==="unitarea")loadUnitArea();
-                else if(visPage==="overview")loadOverview();
-                toast("✓ KPI updated");
-                return;
+// weekly-actuals 병합: DOMContentLoaded 초기 로드 + 저장 후 갱신 시 공통 사용
+async function _applyWeeklyActuals() {
+    if (!_dashData) return;
+    try {
+        const wa = await fetch("/api/weekly-actuals", {cache:"no-store"}).then(r => r.json());
+        if (!Array.isArray(wa) || !wa.length) return;
+        const waMap = {};
+        wa.forEach(w => { if (w.week_no) waMap[w.week_no] = w; });
+        (_dashData.weekly || []).forEach(w => {
+            const m = waMap[w.week_no];
+            if (m) {
+                w.completed_di = m.completed_di || w.completed_di;
+                w.fab_di       = m.fab_di       || w.fab_di;
+                w.erect_di     = m.erect_di     || w.erect_di;
             }
-        }catch(e){}
-    }
+        });
+        // v17에 없는 주차 추가
+        const existing = new Set((_dashData.weekly||[]).map(w=>w.week_no));
+        wa.forEach(w => {
+            if (!w.week_label) w.week_label = 'W' + w.week_no;
+            if (!existing.has(w.week_no)) _dashData.weekly.push(w);
+        });
+        _dashData.weekly.sort((a,b)=>a.week_no-b.week_no);
+        // cumul_actual 재계산
+        let _cum = 0;
+        _dashData.weekly.forEach(w => {
+            _cum += (w.completed_di || 0);
+            w.cumul_actual = Math.round(_cum * 100) / 100;
+        });
+        renderKPI(_dashData.kpi, _dashData.weekly);
+        const _visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
+        if (_visPage === "overview" || !_visPage) renderOverview(_dashData.kpi, _dashData.weekly, _dashData.units, _dashData.systems);
+        else if (_visPage === "weekly")      loadWeekly();
+        else if (_visPage === "early_power") loadEarlyPower();
+    } catch(e) { console.warn("[weekly-actuals]", e); }
 }
+
+let _refreshPending = false;
+
+async function _refreshAfterSave() {
+    if (_refreshPending) return;
+    _refreshPending = true;
+    try {
+        await fetch("/api/cache/clear").catch(() => {});
+        const fresh = await getDashData(true);   // 서버 캐시 재빌드 후 신선 데이터
+        _dashData = fresh;
+        // weekly-actuals 병합 후 KPI + 현재 페이지 렌더링
+        await _applyWeeklyActuals();
+        // _applyWeeklyActuals가 overview/weekly를 이미 처리하므로
+        // 그 외 페이지만 추가 처리
+        const visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-", "");
+        if (visPage === "unitarea") loadUnitArea();
+        else if (visPage === "systems") { loadSystems(); loadSubArea(); }
+    } catch(e) { console.warn("[refresh-after-save]", e); }
+    finally { _refreshPending = false; }
+}
+
+// 하위 호환 alias
+function _autoRefreshKpi() { _refreshAfterSave(); }
 
 // ================================================================================
 //  CHART HELPERS
 // ================================================================================
+// ================================================================================
+//  PAGINATION HELPER
+// ================================================================================
+function _renderPageNums(containerId, curPage, totalRows, pageSize, gotoFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!totalRows || totalRows <= pageSize) { el.innerHTML = ""; return; }
+    const totalPages = Math.ceil(totalRows / pageSize);
+    const cur1 = curPage + 1;  // 1-based current page
+
+    // Build visible page set: always include 1, last, and cur±2
+    const pageSet = new Set([1, totalPages]);
+    for (let p = Math.max(1, cur1 - 2); p <= Math.min(totalPages, cur1 + 2); p++) pageSet.add(p);
+    const sorted = [...pageSet].sort((a, b) => a - b);
+
+    const btnStyle = (active) => active
+        ? "background:var(--accent);color:#fff;font-weight:700;min-width:28px;padding:3px 7px;border-radius:5px;border:none;cursor:pointer;font-size:12px"
+        : "background:rgba(255,255,255,0.06);color:var(--text-dim);min-width:28px;padding:3px 7px;border-radius:5px;border:1px solid var(--border);cursor:pointer;font-size:12px";
+
+    let html = `<button style="${btnStyle(false)}" ${cur1===1?'disabled':''} onclick="${gotoFn}(${curPage-1})">&#8249;</button>`;
+    let prev = 0;
+    for (const p of sorted) {
+        if (p - prev > 1) html += `<span style="color:var(--text-dim);padding:0 2px;font-size:12px">…</span>`;
+        html += `<button style="${btnStyle(p===cur1)}" onclick="${gotoFn}(${p-1})">${p}</button>`;
+        prev = p;
+    }
+    html += `<button style="${btnStyle(false)}" ${cur1===totalPages?'disabled':''} onclick="${gotoFn}(${curPage+1})">&#8250;</button>`;
+    el.innerHTML = html;
+}
+
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
 function chartOpts(yLabel){
@@ -1601,15 +1653,15 @@ function renderWelder(data, dashData) {
         _renderSplitWelderTable(sortedRanking, "welderRankBodyA", "welderRankBodyB", "var(--accent)");
     }
 
-    // ── Weekly chart: fixed 6-week frame ending at last active week ─────────────
+    // ── Weekly chart: 마지막 활성 주차 기준 6주 프레임 ──────────────────────────
     destroyChart("welderTrendChart");
     const trendEl = document.getElementById("welderTrendChart");
-    const weeklyAll = data.weekly || [];
-    const maxWkNo = weeklyAll.length ? Math.max(...weeklyAll.map(w => w.week_no)) : 6;
-    const wkNos = Array.from({length: 6}, (_, i) => maxWkNo - 5 + i);
-    const wkMap = {};
-    weeklyAll.forEach(w => wkMap[w.week_no] = w);
-    const wkSlice = wkNos.map(n => wkMap[n] || { week_label: "W" + n, total_di: null, avg_di_per_welder: null });
+    const weeklyAll = (data.weekly || []).filter(w => w.week_no > 0 && w.week_no < 1000);
+    weeklyAll.sort((a, b) => a.week_no - b.week_no);
+    const wkSlice = weeklyAll.slice(-6).map(w => ({
+        ...w,
+        week_label: /^\d{4}-W/.test(w.week_label) ? ("W" + w.week_no) : (w.week_label || "W" + w.week_no)
+    }));
     if (trendEl) {
         charts["welderTrendChart"] = new Chart(trendEl.getContext("2d"), {
             type: "bar",
@@ -1919,7 +1971,7 @@ async function exportWelderExcel() {
 //  SUPPORT MASTER
 // ================================================================================
 let smData = [], smCurrentPage = 0;
-const SM_PAGE_SIZE = 50;
+const SM_PAGE_SIZE = 30;
 let _smPhaseSynced = false;
 
 async function loadSupportMaster() {
@@ -1952,13 +2004,8 @@ async function loadSupportMaster() {
         
         const res = await apiFetch(`/api/support-master?${params}`);
         smData = res.data;
-        document.getElementById("sm-count").textContent = `${(res.count||0).toLocaleString()} rows loaded`;
-        document.getElementById("sm-page-info").textContent = `Page ${smCurrentPage+1}`;
-        
-        const prevBtn = document.getElementById("sm-prev-btn");
-        const nextBtn = document.getElementById("sm-next-btn");
-        if (prevBtn) prevBtn.disabled = (smCurrentPage === 0);
-        if (nextBtn) nextBtn.disabled = (res.data.length < SM_PAGE_SIZE);
+        document.getElementById("sm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
+        _renderPageNums("sm-page-nav", smCurrentPage, res.count||0, SM_PAGE_SIZE, "smGoto");
 
         renderSMTable(smData);
         updateSmIsoBulkPanel(iso, smData);
@@ -2047,7 +2094,8 @@ async function clearSmBulkDate() {
     } catch(e) { toast(`✗ Bulk clear failed: ${e.message}`, "error"); }
 }
 
-function smPage(dir) { smCurrentPage = Math.max(0, smCurrentPage + dir); loadSupportMaster(); }
+function smGoto(page) { smCurrentPage = Math.max(0, page); loadSupportMaster(); }
+function smPage(dir) { smGoto(smCurrentPage + dir); }
 
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
@@ -2192,7 +2240,7 @@ async function exportSMExcel() {
 //  TEST PACKAGE MASTER
 // ================================================================================
 let tpData = [], tpCurrentPage = 0;
-const TP_PAGE = 100;
+const TP_PAGE = 30;
 
 async function loadTestPkgMaster() {
     const iso    = document.getElementById("tp-iso")?.value?.trim() || "";
@@ -2211,17 +2259,28 @@ async function loadTestPkgMaster() {
         if (status) params.set("status",  status);
         const res = await apiFetch(`/api/testpkg-joints?${params}`);
         tpData = res.data;
-        document.getElementById("tp-count").textContent = `${(res.count||0).toLocaleString()} rows (page ${tpCurrentPage+1})`;
-        document.getElementById("tp-page-info").textContent = `Page ${tpCurrentPage+1}`;
-        const prevBtn = document.getElementById("tp-prev-btn");
-        const nextBtn = document.getElementById("tp-next-btn");
-        if (prevBtn) prevBtn.disabled = (tpCurrentPage === 0);
-        if (nextBtn) nextBtn.disabled = (res.data.length < TP_PAGE);
+        document.getElementById("tp-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
+        _renderPageNums("tp-page-nav", tpCurrentPage, res.count||0, TP_PAGE, "tpGoto");
         renderTPTable(tpData);
     } catch(e) { console.error("Test Pkg Master load failed", e); }
 }
 
-function tpPage(dir) { tpCurrentPage = Math.max(0, tpCurrentPage + dir); loadTestPkgMaster(); }
+function tpGoto(page) { tpCurrentPage = Math.max(0, page); loadTestPkgMaster(); }
+function tpPage(dir) { tpGoto(tpCurrentPage + dir); }
+
+async function loadSystemPackages() {
+    const system = document.getElementById("tp-system")?.value || "";
+    const pkgSel = document.getElementById("tp-package");
+    if (!pkgSel) return;
+    pkgSel.innerHTML = '<option value="">All Packages</option>';
+    if (!system) return;
+    try {
+        const pkgs = await apiFetch(`/api/packages?system=${encodeURIComponent(system)}`);
+        if (Array.isArray(pkgs)) {
+            pkgs.forEach(p => pkgSel.add(new Option(p, p)));
+        }
+    } catch(e) { console.warn("Package list load failed", e); }
+}
 
 function _tpResultBadge(result) {
     if (!result) return '<span style="color:var(--text-dim)">-</span>';
@@ -2244,12 +2303,16 @@ function renderTPTable(rows) {
         const pwhtDate = r.pwht_date ? r.pwht_date.substring(0,10) : "";
         const statusColor = r.status === "Completed" ? "var(--green)" : "var(--orange)";
         const statusIcon  = r.status === "Completed" ? "&#10003;" : "&#9679;";
+        const insp = r.inspection || "";
+        const inspColor = insp === "RT" ? "var(--orange)" : insp === "VT" ? "var(--accent)" : "var(--text-dim)";
+        const inspLabel = insp === "RT" ? "VT/RT" : insp || "-";
         return `<tr id="tprow-${r.id}">
           <td style="text-align:center">${r.system||""}</td>
           <td style="font-weight:600;color:var(--indigo)">${r.package||""}</td>
           <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td style="text-align:center">${r.joint_no||""}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate||"-"}</td>
+          <td style="text-align:center;font-weight:700;font-size:11px;color:${inspColor}">${inspLabel}</td>
           <td style="padding:2px;text-align:center"><input type="text" class="cell-input" id="tp-vt-date-${r.id}" value="${vtDate}" placeholder="YY-MM-DD" style="padding:3px 4px;text-align:center"></td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:pointer">
@@ -2262,8 +2325,8 @@ function renderTPTable(rows) {
           <td style="text-align:center">${_tpResultBadge(r.mt_result)}</td>
           <td style="text-align:center;font-size:11px">${ptDate||"-"}</td>
           <td style="text-align:center">${_tpResultBadge(r.pt_result)}</td>
-          <td style="text-align:center;font-size:11px">${rtDate||"-"}</td>
-          <td style="text-align:center">${_tpResultBadge(r.rt_result)}</td>
+          <td style="text-align:center;font-size:11px;${insp==="RT"?"background:rgba(249,115,22,0.07)":""}">${rtDate||"-"}</td>
+          <td style="text-align:center;${insp==="RT"?"background:rgba(249,115,22,0.07)":""}">${_tpResultBadge(r.rt_result)}</td>
           <td style="text-align:center;font-size:11px">${pwhtDate||"-"}</td>
           <td style="text-align:center">${_tpResultBadge(r.pwht_result)}</td>
           <td style="text-align:center;font-weight:700;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
