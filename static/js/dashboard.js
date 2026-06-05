@@ -300,11 +300,10 @@ async function loadMeta() {
 function renderKPI(d, wkData) {
     if (!d || !d.total_plan_di) return;
     document.getElementById("reportDate").textContent = d.report_date || "—";
-    // Weighted Overall Progress: Piping 70% + Support 20% + Test 10%
     const pipingPct  = d.overall_pct   || 0;
     const supportPct = d.support_pct   || 0;
     const testPct    = d.testpkg_pct   || 0;
-    const weightedPct = Math.round(pipingPct * 0.7 + supportPct * 0.2 + testPct * 0.1);
+    const weightedPct = Math.round(pipingPct);
     document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
 document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
     const weightSubEl = document.getElementById("kpi-overall-weight-sub");
@@ -969,6 +968,7 @@ async function applyIsoBulkDate(){
     let dateVal=document.getElementById("jm-bulk-date")?.value?.trim();
     if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
     if(!dateVal){toast("날짜를 선택하세요","error");return;}
+    {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     const targets=jmData.filter(r=>r.iso_drawing===isoVal);
     if(targets.length===0){toast("No joints found for this ISO","error");return;}
     const btn=document.getElementById("jm-bulk-apply-btn");
@@ -1257,6 +1257,7 @@ async function saveJointDate(id){
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
     let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
     if(val && !/^\d{4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format","error");return;}
+    if(val){const _today=new Date().toISOString().slice(0,10);if(val>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
@@ -1578,13 +1579,15 @@ function renderWelderDaily(daily, weekly) {
     </table>`;
 }
 
-// Helper: render one half of a welder table (No / Welder ID / Joint / Total DI / Avg DI/Day)
+// Helper: render one half of a welder table (No / Welder ID / Joint / Fab DI / Erect DI / Total DI / Avg DI/Day)
 function _welderHalfRows(rows, startIdx, accentColor) {
     if (!rows.length) return "";
     return rows.map((r, i) => `<tr>
         <td style="text-align:center;color:var(--text-dim)">${startIdx + i + 1}</td>
         <td style="color:${accentColor}">${r.welder}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.joints, 1)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;color:#94a3b8">${r.fab_di != null ? fmtNum(r.fab_di, 1) : "—"}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;color:#94a3b8">${r.erect_di != null ? fmtNum(r.erect_di, 1) : "—"}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.total_di, 1)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--green)">${fmtNum(r.avg_di_per_day, 2)}</td>
     </tr>`).join("");
@@ -1597,7 +1600,7 @@ function _renderSplitWelderTable(rows, bodyIdA, bodyIdB, accentColor) {
     const half2 = rows.slice(mid);
     const bA = document.getElementById(bodyIdA);
     const bB = document.getElementById(bodyIdB);
-    const empty = `<tr><td colspan="5" style="text-align:center;color:var(--text-dim);padding:16px">No data</td></tr>`;
+    const empty = `<tr><td colspan="7" style="text-align:center;color:var(--text-dim);padding:16px">No data</td></tr>`;
     if (bA) bA.innerHTML = half1.length ? _welderHalfRows(half1, 0, accentColor) : empty;
     if (bB) bB.innerHTML = half2.length ? _welderHalfRows(half2, mid, accentColor) : "";
 }
@@ -1608,6 +1611,8 @@ function _welderSubTable(rows, startIdx, accentColor) {
         <thead><tr>
           <th style="min-width:42px;width:42px">No</th><th>Welder ID</th>
           <th style="text-align:right">Joint</th>
+          <th style="text-align:right">Fab DI</th>
+          <th style="text-align:right">Erect DI</th>
           <th style="text-align:right">Total DI</th>
           <th style="text-align:right">Avg DI/Day</th>
         </tr></thead>
@@ -1617,10 +1622,14 @@ function _welderSubTable(rows, startIdx, accentColor) {
 
 function renderWelder(data, dashData) {
     const s = data.stats || {};
-    document.getElementById("welder-active").textContent       = s.active_welders || 0;
-    document.getElementById("welder-total-joints").textContent = (s.total_joints || 0).toLocaleString();
-    document.getElementById("welder-total-di").textContent     = fmtNum(s.total_di, 0);
     const ranking = data.ranking || [];
+    const totalFab   = ranking.reduce((sum, r) => sum + (r.fab_di   || 0), 0);
+    const totalErect = ranking.reduce((sum, r) => sum + (r.erect_di || 0), 0);
+    const _setW = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    _setW("welder-active",   s.active_welders || 0);
+    _setW("welder-fab-di",   fmtNum(totalFab,   0));
+    _setW("welder-erect-di", fmtNum(totalErect, 0));
+    _setW("welder-total-di", fmtNum(s.total_di, 0));
     const avgDiDay = ranking.length
         ? ranking.reduce((sum, r) => sum + (r.avg_di_per_day || 0), 0) / ranking.length
         : 0;
@@ -1673,6 +1682,7 @@ function renderWelder(data, dashData) {
                         backgroundColor: "rgba(34,211,161,0.45)",
                         borderColor: "#22d3a1",
                         borderWidth: 1,
+                        barPercentage: 0.6,
                         yAxisID: "y",
                         datalabels: { display: false }
                     },
@@ -1752,6 +1762,7 @@ function renderWelder(data, dashData) {
                         backgroundColor: "rgba(99,102,241,0.45)",
                         borderColor: "#6366f1",
                         borderWidth: 1,
+                        barPercentage: 0.6,
                         yAxisID: "y",
                         datalabels: { display: false }
                     },
@@ -2035,8 +2046,9 @@ async function applySmBulkDate() {
     if (!dateVal) { toast("Please enter date (YY-MM-DD)", "error"); return; }
     if (!/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)) { toast("Invalid date format (YY-MM-DD)", "error"); return; }
     if (dateVal.length === 8) dateVal = "20" + dateVal;
-    
-    const targets = smData.filter(r => 
+    {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
+
+    const targets = smData.filter(r =>
         (r.support_drawing && r.support_drawing.toLowerCase().includes(isoVal.toLowerCase())) || 
         (r.iso_drawing && r.iso_drawing.toLowerCase().includes(isoVal.toLowerCase()))
     );
@@ -2133,6 +2145,7 @@ async function saveSMRow(id) {
 
     if (dateVal && !/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
     if (dateVal && dateVal.length === 8) dateVal = "20" + dateVal;
+    if (dateVal) { const _today=new Date().toISOString().slice(0,10); if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;} }
 
     try {
         const r = await fetch(`/api/support-master/${id}`, {

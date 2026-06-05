@@ -244,8 +244,8 @@
             <thead>
               <tr>
                 <th style="width:0;padding:0;display:none">ID</th>
-                <th style="width:80px;text-align:center">Phase</th>
-                <th style="width:100px">Package</th>
+                <th style="width:50px;text-align:center">Phase</th>
+                <th style="width:70px">Package</th>
                 <th style="width:55px">Sys</th>
                 <th style="width:85px">Sub Area</th>
                 <th style="width:200px">ISO No</th>
@@ -277,9 +277,10 @@
 
       <!-- KPI Cards -->
       <div class="panel" style="margin-bottom:10px">
-        <div class="grid-5" id="welderKpi">
+        <div class="grid-6" id="welderKpi">
           <div class="kpi-card"><div class="kpi-label">Active Welders</div><div class="kpi-value" id="welder-active" style="color:var(--accent)">0</div></div>
-          <div class="kpi-card"><div class="kpi-label">Total Joints Completed</div><div class="kpi-value" id="welder-total-joints" style="color:var(--green)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">FAB DI</div><div class="kpi-value" id="welder-fab-di" style="color:var(--green)">0</div></div>
+          <div class="kpi-card"><div class="kpi-label">ERECT DI</div><div class="kpi-value" id="welder-erect-di" style="color:var(--cyan)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Total Welded DI</div><div class="kpi-value" id="welder-total-di" style="color:var(--indigo)">0</div></div>
           <div class="kpi-card"><div class="kpi-label">Overall Week Actual</div><div class="kpi-value" id="welder-week-di" style="color:var(--yellow)">—</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">Last Week DI</div></div>
           <div class="kpi-card"><div class="kpi-label">Avg Welder Performance</div><div class="kpi-value" id="welder-avg-di" style="color:var(--orange)">0</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">AVG DI / Day</div></div>
@@ -310,13 +311,13 @@
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div class="table-wrap">
             <table class="data-table" style="font-size:11px;width:100%">
-              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
+              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Fab DI</th><th style="text-align:right">Erect DI</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
               <tbody id="welderRankBodyA"></tbody>
             </table>
           </div>
           <div class="table-wrap">
             <table class="data-table" style="font-size:11px;width:100%">
-              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
+              <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Fab DI</th><th style="text-align:right">Erect DI</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
               <tbody id="welderRankBodyB"></tbody>
             </table>
           </div>
@@ -606,6 +607,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=6.7"></script>
+<script src="/static/js/dashboard.js?v=7.2"></script>
 </body>
 </html>

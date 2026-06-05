@@ -301,8 +301,13 @@ def _extract_d2(d2, raw, sb):
                     if lbl.startswith("W") and lbl[1:].isdigit(): wk = int(lbl[1:])
                 if wk: v2_item = v2_wk_map.get(int(wk))
             if v2_item:
-                if not float(item.get("fab_di") or 0):   item["fab_di"]   = v2_item.get("fab_di") or 0
-                if not float(item.get("erect_di") or 0): item["erect_di"] = v2_item.get("erect_di") or 0
+                v2_fab   = float(v2_item.get("fab_di")   or 0)
+                v2_erect = float(v2_item.get("erect_di") or 0)
+                comp     = float(item.get("completed_di") or 0)
+                # v2 plan data contaminates future weeks — only apply if plausible
+                if comp > 0 and (v2_fab + v2_erect) <= comp * 2.0:
+                    if not float(item.get("fab_di") or 0):   item["fab_di"]   = v2_fab
+                    if not float(item.get("erect_di") or 0): item["erect_di"] = v2_erect
 
 
 def _extract_ep(ep_data, raw):
@@ -433,21 +438,21 @@ def _build():
 
         # ── Support & TestPkg aggregates → inject into kpi (supplements fields not in v17 RPC) ──
         try:
-            # support_master: completed = True or date_completed present
-            sr = sb.table("support_master").select("completed, date_completed").execute()
-            s_rows = sr.data or []
-            del sr
-            s_total = len(s_rows)
-            s_comp  = sum(1 for x in s_rows if x.get("completed") == True or x.get("date_completed"))
-            del s_rows
+            # support_master: count queries bypass Supabase row-return limit
+            sr_tot  = sb.table("support_master").select("id", count="exact").limit(1).execute()
+            s_total = sr_tot.count or 0
+            sr_comp = sb.table("support_master").select("id", count="exact") \
+                        .or_("completed.eq.true,date_completed.not.is.null").limit(1).execute()
+            s_comp  = sr_comp.count or 0
+            del sr_tot, sr_comp
 
-            # test_package_master — status 컬럼 없음, completed/date_completed으로 판단
-            tr = sb.table("test_package_master").select("completed, date_completed").execute()
-            t_rows = tr.data or []
-            del tr
-            t_total = len(t_rows)
-            t_comp  = sum(1 for x in t_rows if x.get("completed") == True or x.get("date_completed"))
-            del t_rows
+            # test_package_master
+            tr_tot  = sb.table("test_package_master").select("id", count="exact").limit(1).execute()
+            t_total = tr_tot.count or 0
+            tr_comp = sb.table("test_package_master").select("id", count="exact") \
+                        .or_("completed.eq.true,date_completed.not.is.null").limit(1).execute()
+            t_comp  = tr_comp.count or 0
+            del tr_tot, tr_comp
 
             # Inject into the first item of the kpi list
             kpi_list = raw.get("kpi")
@@ -464,6 +469,66 @@ def _build():
             print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}")
         except Exception as sp_e:
             print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
+
+        # ── KPI + weekly override: 직접 joint_master에서 집계 ──
+        # v17 RPC가 completed 필드 불일치로 실적을 과소 집계하는 문제 보정.
+        # date_completed IS NOT NULL 기준으로 직접 페이지네이션 집계.
+        try:
+            from collections import defaultdict as _dd
+            wk_di_m = _dd(float); wk_fab_m = _dd(float); wk_erect_m = _dd(float)
+
+            wk_sched = raw.get("weeks") or []
+            def _wkno_for(d):
+                for w in wk_sched:
+                    ws = str(w.get("week_start_date") or w.get("week_start") or "")[:10]
+                    we = str(w.get("week_end_date")   or w.get("week_end")   or "")[:10]
+                    if ws and we and ws <= d <= we:
+                        return w.get("week_no")
+                return None
+
+            c_di = c_fab = c_erect = 0.0
+            c_joints = 0
+            off, bsz = 0, 1000
+            while True:
+                r = sb.table("joint_master").select("di,sf,date_completed") \
+                      .not_.is_("date_completed", "null") \
+                      .order("id").range(off, off + bsz - 1).execute()
+                rows = r.data or []; del r
+                for row in rows:
+                    di  = float(row.get("di") or 0)
+                    sf  = (row.get("sf") or "").upper()
+                    dc  = str(row.get("date_completed") or "")[:10]
+                    wno = _wkno_for(dc)
+                    c_di += di
+                    if   sf in ("S", "SHOP"):  c_fab   += di
+                    elif sf in ("F", "FIELD"): c_erect += di
+                    if wno:
+                        wk_di_m[wno]    += di
+                        if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
+                        elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
+                c_joints += len(rows)
+                if len(rows) < bsz: break
+                off += bsz
+
+            if c_di > 0:
+                kpi_list = raw.get("kpi")
+                if isinstance(kpi_list, list) and kpi_list:
+                    kpi_list[0]["completed_di"]       = c_di
+                    kpi_list[0]["completed_joints"]   = c_joints
+                    kpi_list[0]["fab_completed_di"]   = c_fab
+                    kpi_list[0]["erect_completed_di"] = c_erect
+
+                if wk_di_m and raw.get("weekly"):
+                    for item in raw["weekly"]:
+                        wno = int(item.get("week_no") or 0)
+                        if wno in wk_di_m:
+                            item["completed_di"] = round(wk_di_m[wno], 2)
+                            item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
+                            item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
+
+            print(f"[cache] KPI override: DI={c_di:.1f}, fab={c_fab:.1f}, erect={c_erect:.1f}, joints={c_joints}")
+        except Exception as _kpi_e:
+            print(f"[cache] KPI override error (non-critical): {_kpi_e}")
 
         data = _parse_rpc(raw)
 
@@ -607,18 +672,7 @@ def api_health():
 
 @app.route("/api/weekly-actuals")
 def api_weekly_actuals():
-    """date_completed 기준 주간 실적 집계 — RPC 없을 때 Python fallback"""
-    # RPC 시도 (배포된 경우)
-    try:
-        res = get_sb().rpc("get_weekly_actuals", {}).execute()
-        data = res.data
-        if isinstance(data, list) and data and not isinstance(data[0], dict):
-            data = data[0]
-        if data and isinstance(data, list) and data and isinstance(data[0], dict):
-            return jsonify(data)
-    except Exception:
-        pass
-
+    """date_completed 기준 주간 실적 집계 — Python 직접 집계 (RPC erect=0 버그 우회)"""
     # Python fallback: joint_master + week_schedule 직접 집계
     try:
         sb = get_sb()
@@ -1025,6 +1079,42 @@ def api_welder_summary():
     date_to   = request.args.get("date_to",   "").strip()
     sys_      = request.args.get("system",    "").strip()
     wld       = request.args.get("welder",    "").strip()
+    def _add_fab_erect(data):
+        """ranking 항목에 fab_di / erect_di 추가 (joint_master 직접 집계)."""
+        try:
+            sb2 = get_sb()
+            q = sb2.table("joint_master").select("welder,sf,di") \
+                   .not_.is_("date_completed", "null") \
+                   .not_.is_("welder", "null")
+            if date_from: q = q.gte("date_completed", date_from)
+            if date_to:   q = q.lte("date_completed", date_to)
+            if sys_:      q = q.eq("system", sys_)
+            fab_map = {}; erect_map = {}
+            off, bsz = 0, 1000
+            while True:
+                rows = q.order("id").range(off, off + bsz - 1).execute().data or []
+                for row in rows:
+                    wraw = (row.get("welder") or "").strip()
+                    if not wraw: continue
+                    di_val = float(row.get("di") or 0)
+                    sf     = (row.get("sf") or "").upper()
+                    wlist  = [w.strip() for w in wraw.split("/") if w.strip()]
+                    di_each = di_val / len(wlist)
+                    for w in wlist:
+                        if sf in ("S", "SHOP"):
+                            fab_map[w]   = fab_map.get(w, 0.0)   + di_each
+                        elif sf in ("F", "FIELD"):
+                            erect_map[w] = erect_map.get(w, 0.0) + di_each
+                if len(rows) < bsz: break
+                off += bsz
+            for r in data.get("ranking", []):
+                w = r.get("welder", "")
+                r["fab_di"]   = round(fab_map.get(w, 0.0), 1)
+                r["erect_di"] = round(erect_map.get(w, 0.0), 1)
+        except Exception as e:
+            print(f"[welder-summary] fab/erect merge failed: {e}")
+        return data
+
     try:
         sb  = get_sb()
         res = sb.rpc("get_welder_stats_v4", {
@@ -1034,14 +1124,13 @@ def api_welder_summary():
             "f_welder":    wld
         }).execute()
         data = res.data
-        # RPC must return a dict; if it returns something else, fall through
         if isinstance(data, dict) and data:
-            return jsonify(data)
+            return jsonify(_add_fab_erect(data))
         raise ValueError("RPC returned empty or unexpected result")
     except Exception as rpc_err:
         print(f"[welder-summary] RPC failed ({rpc_err}), using Python fallback")
         try:
-            return jsonify(_welder_stats_fallback(date_from, date_to, sys_, wld))
+            return jsonify(_add_fab_erect(_welder_stats_fallback(date_from, date_to, sys_, wld)))
         except Exception as e:
             print(f"[welder-summary] Fallback failed: {e}")
             return jsonify({"error": str(e)}), 500
