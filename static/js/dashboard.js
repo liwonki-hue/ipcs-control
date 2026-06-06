@@ -1,4 +1,4 @@
-// dashboard.js Full frontend logic  v18.8
+// dashboard.js Full frontend logic  v7.16
 
 const API = "";  // Flask runs on same origin
 let charts = {};
@@ -102,9 +102,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         // 에러 화면이 표시 중인 경우에는 loader를 숨기지 않음
         if (!_loadError) showLoader(false);
     }
-    // Background: weekly actuals 보완 (date_completed 기준 정확한 주간 실적)
-    setTimeout(() => _applyWeeklyActuals(), 500);
-
     // Background: fetch welder summary after initial render (non-blocking, delayed)
     setTimeout(() => {
         fetch("/api/welder-summary").then(r => r.json()).then(wd => {
@@ -189,7 +186,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "welder"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
@@ -211,6 +208,7 @@ function navigate(page) {
         case "support_master": loadSupportMaster(); break;
         case "nde_pwht":    loadNdePwht();      break;
         case "testpkg_master": loadTestPkgMaster(); break;
+        case "test_master":    loadTestMaster();    break;
 
     }
 }
@@ -433,7 +431,7 @@ async function renderOverview(kpi, wkData, units, systems) {
                     const totPct  = parseFloat((s.unified_readiness || (pipPct*0.7 + supPct*0.2 + tstPct*0.1)).toFixed(2));
                     const _dash   = v => v > 0 ? v : "—";
                     return `<tr>
-                        <td style="text-align:center;font-weight:600">${s.system||"—"}</td>
+                        <td style="text-align:center">${s.system||"—"}</td>
                         <td style="text-align:center">${fmtNum(pipPlan,0)}</td>
                         <td style="text-align:center">${_dash(supTot)}</td>
                         <td style="text-align:center">${_dash(tstTot)}</td>
@@ -536,10 +534,10 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
         const support_pct  = kpi ? Math.round(kpi.support_pct  || 0) : 0;
         const testpkg_pct  = kpi ? Math.round(kpi.testpkg_pct  || 0) : 0;
-        const support_comp = kpi ? (kpi.completed_supports || 0) : 0;
-        const support_tot  = kpi ? (kpi.total_supports    || 0) : 0;
-        const test_comp    = kpi ? (kpi.completed_testpkg  || 0) : 0;
-        const test_tot     = kpi ? (kpi.total_testpkg      || 0) : 0;
+        const support_comp = kpi ? (kpi.support_comp  || 0) : 0;
+        const support_tot  = kpi ? (kpi.support_total || 0) : 0;
+        const test_comp    = kpi ? (kpi.testpkg_comp  || 0) : 0;
+        const test_tot     = kpi ? (kpi.testpkg_total || 0) : 0;
         const readiness_pct = Math.round(pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1);
 
         const _setKpi = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
@@ -759,7 +757,43 @@ async function loadSubArea() {
 // ================================================================================
 //  WEEKLY
 // ================================================================================
+async function loadDailyTrend() {
+    try {
+        const res = await apiFetch("/api/daily-actuals");
+        const data = res.data || [];
+        const weekNo = res.week_no;
+        const wkStart = res.week_start, wkEnd = res.week_end;
+
+        const titleEl = document.getElementById("dailyTrendTitle");
+        if (titleEl) {
+            const label = weekNo ? `W${weekNo} Daily Trend` : "Daily Trend";
+            const range = wkStart && wkEnd ? ` (${wkStart.slice(5)} ~ ${wkEnd.slice(5)})` : "";
+            titleEl.textContent = label + range;
+        }
+
+        destroyChart("dailyTrend");
+        if (!data.length) return;
+
+        const labels = data.map(d => d.date.slice(5));
+        charts["dailyTrend"] = new Chart(document.getElementById("dailyTrend").getContext("2d"), {
+            type: "line",
+            data: { labels, datasets: [
+                { label: "Actual DI", data: data.map(d => d.completed_di),
+                  borderColor: "#2563eb", borderWidth: 2.5, pointRadius: 6,
+                  pointBackgroundColor: "#22d3a1", pointBorderColor: "#fff", pointBorderWidth: 2,
+                  tension: 0.2,
+                  datalabels: { display: true, align: "top", offset: 5, color: "#60a5fa",
+                    font: { size: 10, weight: "700", family: "DM Mono, monospace" },
+                    formatter: v => v > 0 ? fmtNum(v, 0) : "" }
+                }
+            ]},
+            options: { ...chartOpts("DI"), plugins: { ...chartOpts("DI").plugins, legend: { display: false } } }
+        });
+    } catch(e) { console.warn("Daily trend failed", e); }
+}
+
 async function loadWeekly() {
+    loadDailyTrend();
     try {
         const dash=await getDashData(), data=dash.weekly;
         const actWks=data.filter(w=>w.completed_di>0);
@@ -784,14 +818,14 @@ async function loadWeekly() {
                 <td style="font-size:11px;color:var(--text-dim)">${dateStr}</td>
                 <td>${fmtNum(fab,0)}</td>
                 <td>${fmtNum(erect,0)}</td>
-                <td>${fmtNum(comp,0)}</td>
+                <td style="color:var(--accent)">${fmtNum(comp,0)}</td>
             </tr>`;
         }).join("");
-        html+=`<tr style="background:rgba(37,99,235,0.05);border-top:1px solid var(--border)">
-            <td style="color:var(--accent)">Total</td><td></td>
-            <td>${fmtNum(totalFab,0)}</td>
-            <td>${fmtNum(totalErect,0)}</td>
-            <td>${fmtNum(totalComp,0)}</td>
+        html+=`<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+            <td style="font-weight:700;color:var(--accent)">Total</td><td></td>
+            <td style="font-weight:700">${fmtNum(totalFab,0)}</td>
+            <td style="font-weight:700">${fmtNum(totalErect,0)}</td>
+            <td style="font-weight:700;color:var(--accent)">${fmtNum(totalComp,0)}</td>
         </tr>`;
         tbody.innerHTML=html;
 
@@ -1369,15 +1403,11 @@ async function _refreshAfterSave() {
     _refreshPending = true;
     try {
         await fetch("/api/cache/clear").catch(() => {});
-        const fresh = await getDashData(true);   // 서버 캐시 재빌드 후 신선 데이터
+        const fresh = await getDashData(true);
         _dashData = fresh;
-        // weekly-actuals 병합 후 KPI + 현재 페이지 렌더링
-        await _applyWeeklyActuals();
-        // _applyWeeklyActuals가 overview/weekly를 이미 처리하므로
-        // 그 외 페이지만 추가 처리
+        renderKPI(fresh.kpi, fresh.weekly);
         const visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-", "");
-        if (visPage === "unitarea") loadUnitArea();
-        else if (visPage === "systems") { loadSystems(); loadSubArea(); }
+        if (visPage) navigate(visPage);
     } catch(e) { console.warn("[refresh-after-save]", e); }
     finally { _refreshPending = false; }
 }
@@ -1386,10 +1416,7 @@ async function _refreshAfterSave() {
 function _autoRefreshKpi() { _refreshAfterSave(); }
 
 // ================================================================================
-//  CHART HELPERS
-// ================================================================================
-// ================================================================================
-//  PAGINATION HELPER
+//  CHART HELPERS / PAGINATION
 // ================================================================================
 function _renderPageNums(containerId, curPage, totalRows, pageSize, gotoFn) {
     const el = document.getElementById(containerId);
@@ -2485,4 +2512,226 @@ async function exportTPExcel() {
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
     const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
+}
+
+// ================================================================================
+//  TEST MASTER
+// ================================================================================
+let tmData = [], tmCurrentPage = 0;
+const TM_PAGE = 50;
+
+// 전체 패키지 목록 캐시 (System 필터용)
+let _tmAllData = [];
+
+async function loadTestMaster() {
+    const system  = document.getElementById("tm-system")?.value  || "";
+    const pkg     = document.getElementById("tm-package")?.value || "";
+    const status  = document.getElementById("tm-status")?.value  || "";
+    const offset  = tmCurrentPage * TM_PAGE;
+    try {
+        let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
+        if (system) url += `&system=${encodeURIComponent(system)}`;
+        if (pkg)    url += `&test_pkg_no=${encodeURIComponent(pkg)}`;
+        if (status) url += `&status=${encodeURIComponent(status)}`;
+        const res = await apiFetch(url);
+        tmData = res.data || [];
+        document.getElementById("tm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
+        _renderTMPagination(tmCurrentPage, res.count || 0);
+        renderTMTable(tmData);
+        if (!_tmAllData.length) await _loadTMAllForFilters();
+    } catch(e) { toast("Load failed: "+e.message, "error"); }
+}
+
+function _renderTMPagination(curPage, totalRows) {
+    const el = document.getElementById("tm-page-nav");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!totalRows || totalRows <= TM_PAGE) return;
+    const totalPages = Math.ceil(totalRows / TM_PAGE);
+    const cur1 = curPage + 1;
+    const pageSet = new Set([1, totalPages]);
+    for (let p = Math.max(1, cur1 - 2); p <= Math.min(totalPages, cur1 + 2); p++) pageSet.add(p);
+    const sorted = [...pageSet].sort((a, b) => a - b);
+    const s  = "min-width:28px;padding:3px 7px;border-radius:5px;cursor:pointer;font-size:12px;";
+    const sa = s + "background:var(--accent);color:#fff;font-weight:700;border:none;";
+    const si = s + "background:rgba(255,255,255,0.06);color:var(--text-dim);border:1px solid var(--border);";
+    const mk = (html, page, disabled, active) => {
+        const b = document.createElement("button");
+        b.innerHTML = html;
+        b.style.cssText = active ? sa : si;
+        if (disabled) { b.disabled = true; b.style.opacity = "0.3"; }
+        else b.addEventListener("click", () => { tmCurrentPage = page; loadTestMaster(); });
+        return b;
+    };
+    el.appendChild(mk("&#8249;", curPage - 1, cur1 === 1, false));
+    let prev = 0;
+    for (const p of sorted) {
+        if (p - prev > 1) {
+            const sp = document.createElement("span");
+            sp.innerHTML = "…"; sp.style.cssText = "color:var(--text-dim);padding:0 2px;font-size:12px;";
+            el.appendChild(sp);
+        }
+        el.appendChild(mk(String(p), p - 1, false, p === cur1));
+        prev = p;
+    }
+    el.appendChild(mk("&#8250;", curPage + 1, cur1 === totalPages, false));
+}
+
+async function _loadTMAllForFilters() {
+    try {
+        const res = await apiFetch("/api/testpkg-master?limit=2000&offset=0");
+        _tmAllData = res.data || [];
+        _populateTMSystemFilter();
+    } catch(e) {}
+}
+
+function tmGoto(p) { tmCurrentPage = p; loadTestMaster(); }
+window.tmGoto = tmGoto;
+
+function _populateTMSystemFilter() {
+    const sel = document.getElementById("tm-system");
+    if (!sel) return;
+    const cur = sel.value;
+    const systems = [...new Set(_tmAllData.map(r => r.system||"").filter(Boolean))].sort();
+    sel.innerHTML = `<option value="">All Systems</option>` +
+        systems.map(s => `<option value="${s}"${s===cur?" selected":""}>${s}</option>`).join("");
+}
+
+function tmOnSystemChange() {
+    const system = document.getElementById("tm-system")?.value || "";
+    const pkgSel = document.getElementById("tm-package");
+    if (!pkgSel) return;
+    const pkgs = [...new Set(
+        _tmAllData
+            .filter(r => !system || r.system === system)
+            .map(r => r.test_pkg_no||"")
+            .filter(Boolean)
+    )].sort();
+    pkgSel.innerHTML = `<option value="">All Packages</option>` +
+        pkgs.map(p => `<option value="${p}">${p}</option>`).join("");
+    tmCurrentPage = 0;
+    loadTestMaster();
+}
+
+function renderTMTable(data) {
+    const tbody = document.getElementById("tmBody");
+    if (!tbody) return;
+    if (!data.length) {
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">데이터가 없습니다. "Sync from Pkg" 버튼으로 Pkg Master의 패키지를 불러오세요.</td></tr>`;
+        return;
+    }
+    const iopt = v => v ? ` selected` : "";
+    const cin  = "width:92%;text-align:center;color:#000;background:#fff";
+    tbody.innerHTML = data.map((r, i) => {
+        const dc  = r.date_completed ? r.date_completed.substring(0,10) : "";
+        const res = r.completed ? "PASS" : (dc ? "FAIL" : "");
+        const isReady = r.readiness === "Ready";
+        const readinessBadge = isReady
+            ? `<span style="color:#22d3a1;font-weight:700">Ready</span>`
+            : `<span style="color:#f59e0b">Pending</span>`;
+        const dateColor = dc ? "#000" : "transparent";
+        return `<tr>
+            <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
+            <td style="text-align:center">${r.system||"—"}</td>
+            <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
+            <td style="text-align:center">${readinessBadge}</td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${r.test_pressure||""}" style="${cin}"></td>
+            <td style="text-align:center">
+                <select class="cell-input" id="tm-method-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff">
+                    <option value="" color="#000">-</option>
+                    <option value="Pneumatic"  ${r.method==="Pneumatic" ?" selected":""} color="#000">Pneumatic</option>
+                    <option value="Hydro"      ${r.method==="Hydro"     ?" selected":""} color="#000">Hydro</option>
+                    <option value="In Service" ${r.method==="In Service"?" selected":""} color="#000">In Service</option>
+                </select>
+            </td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-media-${r.id}" value="${r.media||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="date" class="cell-input" id="tm-date-${r.id}" value="${dc}"
+                style="width:100%;text-align:center;color:${dateColor};background:#fff"
+                oninput="this.style.color=this.value?'#000':'transparent'"
+                onchange="this.style.color=this.value?'#000':'transparent'"></td>
+            <td style="text-align:center">
+                <select class="cell-input" id="tm-result-${r.id}" style="width:90%;text-align:center;color:#000;background:#fff">
+                    <option value=""${iopt(!res)} color="#000">-</option>
+                    <option value="PASS"${iopt(res==="PASS")} color="#000">PASS</option>
+                    <option value="FAIL"${iopt(res==="FAIL")} color="#000">FAIL</option>
+                </select>
+            </td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-remark-${r.id}" value="${r.remark||""}" style="${cin}"></td>
+            <td style="text-align:center;white-space:nowrap">
+                <button class="btn-save-row" onclick="saveTMRow(${r.id})">Save</button>
+                <button class="btn-del-row"  onclick="deleteTMRow(${r.id})">Del</button>
+            </td>
+        </tr>`;
+    }).join("");
+}
+
+async function saveTMRow(id) {
+    const resultVal = document.getElementById(`tm-result-${id}`)?.value || "";
+    const dateVal   = document.getElementById(`tm-date-${id}`)?.value   || "";
+    const completed = resultVal === "PASS";
+    const payload = {
+        design_pressure: document.getElementById(`tm-dp-${id}`)?.value?.trim()     || null,
+        test_pressure:   document.getElementById(`tm-tp-${id}`)?.value?.trim()     || null,
+        method:          document.getElementById(`tm-method-${id}`)?.value          || null,
+        media:           document.getElementById(`tm-media-${id}`)?.value?.trim()  || null,
+        holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
+        date_completed:  dateVal || null,
+        completed:       completed,
+        remark:          document.getElementById(`tm-remark-${id}`)?.value?.trim() || null
+    };
+    try {
+        const res = await fetch(`/api/testpkg-master/${id}`, {
+            method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
+        toast("저장 완료");
+        loadTestMaster();
+    } catch(e) { toast(e.message, "error"); }
+}
+
+async function deleteTMRow(id) {
+    if (!confirm("이 Test Package를 삭제하시겠습니까?")) return;
+    try {
+        const res = await fetch(`/api/testpkg-master/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Delete failed");
+        toast("삭제 완료");
+        loadTestMaster();
+    } catch(e) { toast(e.message, "error"); }
+}
+
+async function syncTestMaster() {
+    if (!confirm("Pkg Master의 패키지 목록을 Test Master에 자동 등록합니다.\n이미 등록된 패키지는 건너뜁니다. 계속하시겠습니까?")) return;
+    try {
+        const res  = await fetch("/api/testpkg-master/sync", { method: "POST" });
+        const data = await res.json();
+        if (!res.ok || !data.ok) throw new Error(data.error || "Sync failed");
+        toast(`Sync 완료: ${data.inserted}건 신규 등록 (전체 ${data.total}건)`);
+        loadTestMaster();
+    } catch(e) { toast(e.message, "error"); }
+}
+
+async function exportTMExcel() {
+    if (!tmData?.length) { toast("No data", "error"); return; }
+    const rows = tmData.map((r,i) => ({
+        "No":               i+1,
+        "System":           r.system           || "",
+        "PACKAGE":          r.test_pkg_no      || "",
+        "Design Pressure":  r.design_pressure  || "",
+        "Test Pressure":    r.test_pressure    || "",
+        "Method":           r.method           || "",
+        "Media":            r.media            || "",
+        "Holding Time":     r.holding_time     || "",
+        "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
+        "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
+        "Remark":           r.remark           || ""
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TestMaster");
+    const ok = await downloadWithPicker(wb, "Test_Master_Export.xlsx");
+    if (ok) toast("✓ Exported");
 }

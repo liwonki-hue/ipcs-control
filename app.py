@@ -3,9 +3,12 @@ import os
 import io
 import gc
 import gzip
+import bisect
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request
 from supabase import create_client, Client
 
@@ -327,9 +330,6 @@ def _extract_ep(ep_data, raw):
 def _build():
     global _building, _build_fail, _build_fail_time
     try:
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        from datetime import timezone
-
         sb  = get_sb()
         raw = {}
         print("[cache] Background build started...")
@@ -436,25 +436,48 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
-        # ── Support & TestPkg aggregates → inject into kpi (supplements fields not in v17 RPC) ──
+        # ── Support & TestPkg: per-system 병렬 집계 + KPI 총계 동시 계산 ──
+        # 4개 별도 count 쿼리 대신 per-system 루프에서 합산하여 DB 왕복 4회 절약
         try:
-            # support_master: count queries bypass Supabase row-return limit
-            sr_tot  = sb.table("support_master").select("id", count="exact").limit(1).execute()
-            s_total = sr_tot.count or 0
-            sr_comp = sb.table("support_master").select("id", count="exact") \
-                        .not_.is_("date_completed", "null").limit(1).execute()
-            s_comp  = sr_comp.count or 0
-            del sr_tot, sr_comp
+            def _fetch_support_breakdown():
+                tot = defaultdict(int); done = defaultdict(int)
+                off = 0
+                while True:
+                    r = sb.table("support_master").select("system,date_completed") \
+                          .range(off, off + 999).execute()
+                    for row in (r.data or []):
+                        s = row.get("system") or ""
+                        tot[s] += 1
+                        if row.get("date_completed"): done[s] += 1
+                    if len(r.data or []) < 1000: break
+                    off += 1000
+                return tot, done
 
-            # test_package_master
-            tr_tot  = sb.table("test_package_master").select("id", count="exact").limit(1).execute()
-            t_total = tr_tot.count or 0
-            tr_comp = sb.table("test_package_master").select("id", count="exact") \
-                        .not_.is_("date_completed", "null").limit(1).execute()
-            t_comp  = tr_comp.count or 0
-            del tr_tot, tr_comp
+            def _fetch_test_breakdown():
+                tot = defaultdict(int); done = defaultdict(int)
+                off = 0
+                while True:
+                    r = sb.table("test_package_master").select("system,completed") \
+                          .range(off, off + 999).execute()
+                    for row in (r.data or []):
+                        s = row.get("system") or ""
+                        tot[s] += 1
+                        if row.get("completed"): done[s] += 1
+                    if len(r.data or []) < 1000: break
+                    off += 1000
+                return tot, done
 
-            # Inject into the first item of the kpi list
+            with ThreadPoolExecutor(max_workers=2) as _ex:
+                _fut_sup = _ex.submit(_fetch_support_breakdown)
+                _fut_tst = _ex.submit(_fetch_test_breakdown)
+                _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
+                _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+
+            s_total = sum(_sup_s_tot.values())
+            s_comp  = sum(_sup_s_done.values())
+            t_total = sum(_tst_s_tot.values())
+            t_comp  = sum(_tst_s_done.values())
+
             kpi_list = raw.get("kpi")
             if isinstance(kpi_list, list) and kpi_list:
                 kpi_list[0]["support_total"] = s_total
@@ -466,47 +489,6 @@ def _build():
                 kpi_list["support_comp"]  = s_comp
                 kpi_list["testpkg_total"] = t_total
                 kpi_list["testpkg_comp"]  = t_comp
-            print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}")
-        except Exception as sp_e:
-            print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
-
-        # ── Per-system Support/Test breakdown ─────────────────────────
-        try:
-            from collections import defaultdict as _ddc
-            _sup_s_tot = _ddc(int); _sup_s_done = _ddc(int)
-            _off = 0
-            while True:
-                _r = sb.table("support_master").select("system,date_completed") \
-                        .range(_off, _off + 999).execute()
-                for _row in (_r.data or []):
-                    _s = _row.get("system") or ""
-                    _sup_s_tot[_s] += 1
-                    if _row.get("date_completed"): _sup_s_done[_s] += 1
-                if len(_r.data or []) < 1000: break
-                _off += 1000
-            del _r
-
-            # Test: distinct packages per system (package done = all joints completed)
-            _tst_s_tot = _ddc(int); _tst_s_done = _ddc(int)
-            _pkg_joints: dict = {}   # (system, package) → list[bool]
-            _off = 0
-            while True:
-                _r = sb.table("joint_master").select("system,package,date_completed") \
-                        .not_.is_("package", "null") \
-                        .range(_off, _off + 999).execute()
-                for _row in (_r.data or []):
-                    _s   = _row.get("system")  or ""
-                    _pkg = _row.get("package") or ""
-                    _key = (_s, _pkg)
-                    if _key not in _pkg_joints: _pkg_joints[_key] = []
-                    _pkg_joints[_key].append(bool(_row.get("date_completed")))
-                if len(_r.data or []) < 1000: break
-                _off += 1000
-            del _r
-            for (_s, _pkg), _completions in _pkg_joints.items():
-                _tst_s_tot[_s] += 1
-                if all(_completions): _tst_s_done[_s] += 1
-            del _pkg_joints
 
             for _item in (raw.get("systems") or []):
                 _s = _item.get("system") or ""
@@ -514,24 +496,32 @@ def _build():
                 _item["support_comp"]  = _sup_s_done.get(_s, 0)
                 _item["testpkg_total"] = _tst_s_tot.get(_s, 0)
                 _item["testpkg_comp"]  = _tst_s_done.get(_s, 0)
-            print(f"[cache] Per-system breakdown: {len(raw.get('systems', []))} systems")
-        except Exception as _sbe:
-            print(f"[cache] Per-system breakdown error (non-critical): {_sbe}")
+            print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}, systems={len(raw.get('systems', []))}")
+        except Exception as sp_e:
+            print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
 
         # ── KPI + weekly override: 직접 joint_master에서 집계 ──
         # v17 RPC가 completed 필드 불일치로 실적을 과소 집계하는 문제 보정.
         # date_completed IS NOT NULL 기준으로 직접 페이지네이션 집계.
         try:
-            from collections import defaultdict as _dd
-            wk_di_m = _dd(float); wk_fab_m = _dd(float); wk_erect_m = _dd(float)
+            wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
 
-            wk_sched = raw.get("weeks") or []
+            # bisect 기반 O(log n) 주차 검색 (linear scan 대비 ~10x 빠름)
+            _wk_raw = raw.get("weeks") or []
+            _wk_sorted = sorted(
+                [(str(w.get("week_start_date") or w.get("week_start") or "")[:10],
+                  str(w.get("week_end_date")   or w.get("week_end")   or "")[:10],
+                  w.get("week_no"))
+                 for w in _wk_raw
+                 if (w.get("week_start_date") or w.get("week_start"))],
+                key=lambda x: x[0]
+            )
+            _wk_starts = [x[0] for x in _wk_sorted]
+
             def _wkno_for(d):
-                for w in wk_sched:
-                    ws = str(w.get("week_start_date") or w.get("week_start") or "")[:10]
-                    we = str(w.get("week_end_date")   or w.get("week_end")   or "")[:10]
-                    if ws and we and ws <= d <= we:
-                        return w.get("week_no")
+                idx = bisect.bisect_right(_wk_starts, d) - 1
+                if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
+                    return _wk_sorted[idx][2]
                 return None
 
             c_di = c_fab = c_erect = 0.0
@@ -749,8 +739,6 @@ def api_weekly_actuals():
         weeks = wk_res.data or []
         del wk_res
 
-        import bisect
-        from collections import defaultdict
         wk_di    = defaultdict(float)
         wk_fab   = defaultdict(float)
         wk_erect = defaultdict(float)
@@ -796,6 +784,80 @@ def api_weekly_actuals():
     except Exception as e:
         print(f"[weekly-actuals] Fallback error: {e}")
         return jsonify([]), 500
+
+@app.route("/api/daily-actuals")
+def api_daily_actuals():
+    """현재 작업주 기간의 일별 DI 실적 집계"""
+    try:
+        sb = get_sb()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # 현재 주차 범위 조회
+        wk_res = sb.table("week_schedule") \
+            .select("week_no,week_start_date,week_end_date") \
+            .lte("week_start_date", today) \
+            .gte("week_end_date", today) \
+            .limit(1).execute()
+        weeks = wk_res.data or []
+        del wk_res
+
+        if not weeks:
+            # 현재 날짜가 week_schedule에 없으면 가장 최근 주차 사용
+            wk_res2 = sb.table("week_schedule") \
+                .select("week_no,week_start_date,week_end_date") \
+                .lte("week_start_date", today) \
+                .order("week_start_date", desc=True) \
+                .limit(1).execute()
+            weeks = wk_res2.data or []
+            del wk_res2
+
+        if not weeks:
+            return jsonify([])
+
+        w = weeks[0]
+        wk_start = str(w["week_start_date"])[:10]
+        wk_end   = str(w["week_end_date"])[:10]
+        week_no  = w["week_no"]
+
+        j_res = sb.table("joint_master") \
+            .select("date_completed,di,sf") \
+            .gte("date_completed", wk_start) \
+            .lte("date_completed", wk_end) \
+            .not_.is_("date_completed", "null") \
+            .execute()
+        joints = j_res.data or []
+        del j_res
+
+        day_di    = defaultdict(float)
+        day_fab   = defaultdict(float)
+        day_erect = defaultdict(float)
+
+        for j in joints:
+            dc = str(j.get("date_completed") or "")[:10]
+            di = float(j.get("di") or 0)
+            sf = (j.get("sf") or "").upper()
+            day_di[dc] += di
+            if sf in ("S", "SHOP"):
+                day_fab[dc] += di
+            elif sf in ("F", "FIELD"):
+                day_erect[dc] += di
+        del joints
+
+        result = [
+            {
+                "date":         dc,
+                "completed_di": round(day_di[dc], 2),
+                "fab_di":       round(day_fab.get(dc, 0), 2),
+                "erect_di":     round(day_erect.get(dc, 0), 2),
+                "week_no":      int(week_no),
+            }
+            for dc in sorted(day_di)
+        ]
+        return jsonify({"week_no": int(week_no), "week_start": wk_start, "week_end": wk_end, "data": result})
+    except Exception as e:
+        print(f"[daily-actuals] Error: {e}")
+        return jsonify({"week_no": None, "week_start": None, "week_end": None, "data": []}), 500
+
 
 @app.route("/api/refresh-db-cache")
 def api_refresh_db_cache():
@@ -937,6 +999,11 @@ def api_weekly_last_breakdown():
                 if is_fab:   mapping[key]["fab_di"]   += di
                 elif is_erect: mapping[key]["erect_di"] += di
 
+        # 항상 표시할 재질 — 실적 없어도 0으로 포함
+        for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
+            if always_mat not in mat_map:
+                mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+
         def to_list(mapping, key_field):
             return sorted(
                 [{key_field: k, "fab_di": round(v["fab_di"],1),
@@ -962,9 +1029,6 @@ def api_weekly_last_breakdown():
 # ── Welder Stats Fallback (direct DB computation) ─────────────────────
 def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     """Compute welder stats directly from joint_master when RPC unavailable."""
-    from collections import defaultdict
-    from datetime import datetime
-
     sb = get_sb()
 
     # week_schedule: date → project week_no 매핑
@@ -1207,8 +1271,7 @@ def api_welder_summary():
 @app.route("/api/welder-daily")
 def api_welder_daily():
     try:
-        from datetime import date as _date, timedelta
-        from collections import defaultdict
+        from datetime import date as _date
         sb  = get_sb()
         cutoff = (_date.today() - timedelta(days=120)).isoformat()
         res = sb.table("joint_master") \
@@ -1749,16 +1812,41 @@ def api_testpkg_get():
         sb      = get_sb()
         limit   = int(request.args.get("limit",  100))
         offset  = int(request.args.get("offset",   0))
-        system  = request.args.get("system",  "").strip()
-        subarea = request.args.get("sub_area","").strip()
-        status  = request.args.get("status",  "").strip()
+        system   = request.args.get("system",      "").strip()
+        subarea  = request.args.get("sub_area",    "").strip()
+        pkg_no   = request.args.get("test_pkg_no", "").strip()
+        status   = request.args.get("status",      "").strip()
         q = sb.table("test_package_master").select("*", count="exact")
-        if system:  q = q.eq("system",   system)
-        if subarea: q = q.eq("sub_area", subarea)
-        if status == "completed": q = q.not_.is_("date_completed", "null")
-        if status == "pending":   q = q.is_("date_completed",      "null")
+        if system:  q = q.eq("system",      system)
+        if subarea: q = q.eq("sub_area",    subarea)
+        if pkg_no:  q = q.eq("test_pkg_no", pkg_no)
+        if status == "pass":    q = q.eq("completed", True)
+        if status == "pending": q = q.eq("completed", False)
         res = q.order("id").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": res.data, "count": res.count})
+        rows = res.data or []
+
+        # Readiness: 패키지 내 모든 Joint가 완료(date_completed IS NOT NULL)이면 Ready
+        pkg_nos = [r["test_pkg_no"] for r in rows if r.get("test_pkg_no")]
+        if pkg_nos:
+            jr = sb.table("joint_master").select("package,date_completed") \
+                    .in_("package", pkg_nos).execute()
+            pkg_stats: dict = {}
+            for j in (jr.data or []):
+                p = j.get("package") or ""
+                if p not in pkg_stats:
+                    pkg_stats[p] = [0, 0]   # [total, completed]
+                pkg_stats[p][0] += 1
+                if j.get("date_completed"):
+                    pkg_stats[p][1] += 1
+            del jr
+            for row in rows:
+                s = pkg_stats.get(row.get("test_pkg_no") or "", [0, 0])
+                row["readiness"] = "Ready" if s[0] > 0 and s[0] == s[1] else "Pending"
+        else:
+            for row in rows:
+                row["readiness"] = "Pending"
+
+        return jsonify({"data": rows, "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1797,7 +1885,7 @@ def api_testpkg_import():
         buf  = io.BytesIO(request.files["file"].read())
         df   = pd.read_excel(buf, dtype=str)
         df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        FIELDS = ["system", "sub_area", "test_pkg", "completed", "date_completed", "remark"]
+        FIELDS = ["system", "sub_area", "test_pkg_no", "completed", "date_completed", "remark"]
         records, skipped = [], 0
         for _, row in df.iterrows():
             rec = {}
@@ -1818,7 +1906,7 @@ def api_testpkg_import():
                     rec["completed"] = False
             else:
                 rec["completed"] = False
-            if not rec.get("system") and not rec.get("test_pkg"):
+            if not rec.get("system") and not rec.get("test_pkg_no"):
                 skipped += 1
                 continue
             records.append(rec)
@@ -1834,6 +1922,48 @@ def api_testpkg_import():
         return jsonify({"ok": True, "imported": inserted, "skipped": skipped})
     except Exception as e:
         print(f"[testpkg-import] Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route("/api/testpkg-master/sync", methods=["POST"])
+def api_testpkg_sync():
+    """joint_master의 distinct package를 test_package_master에 자동 등록 (중복 제외)"""
+    try:
+        sb = get_sb()
+        existing = sb.table("test_package_master").select("system,test_pkg_no").execute().data or []
+        existing_set = {(r.get("system") or "", r.get("test_pkg_no") or "") for r in existing}
+
+        pkgs, off = [], 0
+        while True:
+            r = sb.table("joint_master").select("system,sub_area,package") \
+                    .not_.is_("package", "null").range(off, off + 999).execute()
+            pkgs.extend(r.data or [])
+            if len(r.data or []) < 1000: break
+            off += 1000
+        del r
+
+        seen: dict = {}
+        for row in pkgs:
+            key = (row.get("system") or "", row.get("package") or "")
+            if key[1] and key not in seen:
+                seen[key] = row.get("sub_area") or ""
+        del pkgs
+
+        to_insert = [
+            {"system": sys, "sub_area": sub, "test_pkg_no": pkg, "completed": False}
+            for (sys, pkg), sub in seen.items()
+            if (sys, pkg) not in existing_set
+        ]
+
+        inserted = 0
+        for i in range(0, len(to_insert), 500):
+            res = sb.table("test_package_master").insert(to_insert[i:i+500]).execute()
+            inserted += len(res.data or [])
+        del to_insert
+
+        with _lock: _cache.clear()
+        return jsonify({"ok": True, "inserted": inserted, "total": len(seen)})
+    except Exception as e:
+        print(f"[testpkg-sync] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 

@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=6.3">
+<link rel="stylesheet" href="/static/css/index.css?v=6.4">
 </head>
 <body>
 
@@ -29,7 +29,8 @@
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
   <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
-  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Master</button>
+  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Pkg Master</button>
+  <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Master</button>
   <div class="nav-section">Link</div>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128196;</span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128230;</span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
@@ -205,20 +206,36 @@
 
     <div class="page hidden" id="page-weekly">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Productivity</div></div>
-      <div class="grid-3" style="grid-template-columns: 2fr 1.2fr; gap:14px">
-        <div class="panel"><div class="panel-title">Overall Weekly Trend</div><div style="position:relative;height:250px"><canvas id="weeklyTrend"></canvas></div></div>
-        <div class="panel"><div class="panel-title">Overall Productivity Log</div><div class="table-wrap"><table class="data-table" id="weeklyTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:18%"><col style="width:30%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th>Week</th><th>Date</th><th>Fab</th><th>Erect</th><th>Completed</th></tr></thead><tbody></tbody></table></div></div>
+
+      <!-- Row 1: Daily Trend (left) + Weekly Trend (right) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="panel">
+          <div class="panel-title" id="dailyTrendTitle">Daily Trend</div>
+          <div style="position:relative;height:250px"><canvas id="dailyTrend"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Overall Weekly Trend</div>
+          <div style="position:relative;height:250px"><canvas id="weeklyTrend"></canvas></div>
+        </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;align-items:start" id="weeklyBreakdownGrid">
-        <div style="display:flex; flex-direction:column; gap:14px;">
-          <div class="panel" id="weeklySystemPanel">
-            <div class="panel-title" id="weeklySystemTitle">Breakdown &mdash; By System</div>
-            <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>System</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
-          </div>
-          <div class="panel" id="weeklyMaterialPanel">
-            <div class="panel-title" id="weeklyMaterialTitle">Breakdown &mdash; By Material</div>
-            <div class="table-wrap"><table class="data-table" id="weeklyMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Material</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
-          </div>
+
+      <!-- Row 2: Productivity Log (left) + By Material (right) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+        <div class="panel">
+          <div class="panel-title">Overall Productivity Log</div>
+          <div class="table-wrap"><table class="data-table" id="weeklyTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:18%"><col style="width:30%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th>Week</th><th>Date</th><th>Fab</th><th>Erect</th><th>Completed</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel" id="weeklyMaterialPanel">
+          <div class="panel-title" id="weeklyMaterialTitle">Breakdown &mdash; By Material</div>
+          <div class="table-wrap"><table class="data-table" id="weeklyMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Material</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Row 3: By System + By Sub Area (1) + By Sub Area (2) -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;align-items:start">
+        <div class="panel" id="weeklySystemPanel">
+          <div class="panel-title" id="weeklySystemTitle">Breakdown &mdash; By System</div>
+          <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>System</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="panel" id="weeklySubareaPanel">
           <div class="panel-title" id="weeklySubareaTitle">Breakdown &mdash; By Sub Area (1)</div>
@@ -515,7 +532,7 @@
 
     <!-- ═══════════ TEST PACKAGE MASTER ═══════════ -->
     <div class="page hidden" id="page-testpkg_master">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Master</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Pkg Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:160px;">
@@ -562,6 +579,53 @@
         <div class="de-pagination">
           <div id="tp-count">0 rows loaded</div>
           <div id="tp-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ TEST MASTER ═══════════ -->
+    <div class="page hidden" id="page-test_master">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Master</div></div>
+      <div class="panel">
+        <div class="jm-top-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;height:auto;">
+          <select id="tm-system" class="filter-sel" style="min-width:110px;" onchange="tmCurrentPage=0;tmOnSystemChange()"><option value="">All Systems</option></select>
+          <select id="tm-package" class="filter-sel" style="min-width:150px;" onchange="tmCurrentPage=0;loadTestMaster()"><option value="">All Packages</option></select>
+          <select id="tm-status" class="filter-sel" style="min-width:100px;" onchange="tmCurrentPage=0;loadTestMaster()">
+            <option value="">All Status</option>
+            <option value="pass">PASS</option>
+            <option value="pending">Pending</option>
+          </select>
+          <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
+            <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>
+            <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export</button>
+          </div>
+        </div>
+        <div class="table-wrap" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 230px);scrollbar-gutter:stable;">
+          <table class="data-table" id="tmTable" style="width:100%;min-width:1350px;table-layout:fixed;">
+            <thead>
+              <tr>
+                <th style="width:3%;text-align:center">No</th>
+                <th style="width:6%;text-align:center">System</th>
+                <th style="width:11%;text-align:center">PACKAGE</th>
+                <th style="width:6%;text-align:center">Readiness</th>
+                <th style="width:7%;text-align:center">Design<br>Pressure</th>
+                <th style="width:7%;text-align:center">Test<br>Pressure</th>
+                <th style="width:8%;text-align:center">Method</th>
+                <th style="width:7%;text-align:center">Media</th>
+                <th style="width:7%;text-align:center">Holding<br>Time</th>
+                <th style="width:7%;text-align:center">Date</th>
+                <th style="width:6%;text-align:center">Result</th>
+                <th style="width:11%;text-align:center">Remark</th>
+                <th style="width:7%;text-align:center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="tmBody"></tbody>
+          </table>
+        </div>
+        <div class="de-pagination">
+          <div id="tm-count">0 rows loaded</div>
+          <div id="tm-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div>
         </div>
       </div>
     </div>
@@ -640,6 +704,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=7.6"></script>
+<script src="/static/js/dashboard.js?v=7.16"></script>
 </body>
 </html>
