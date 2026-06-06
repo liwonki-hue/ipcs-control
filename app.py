@@ -442,7 +442,7 @@ def _build():
             sr_tot  = sb.table("support_master").select("id", count="exact").limit(1).execute()
             s_total = sr_tot.count or 0
             sr_comp = sb.table("support_master").select("id", count="exact") \
-                        .or_("completed.eq.true,date_completed.not.is.null").limit(1).execute()
+                        .not_.is_("date_completed", "null").limit(1).execute()
             s_comp  = sr_comp.count or 0
             del sr_tot, sr_comp
 
@@ -450,7 +450,7 @@ def _build():
             tr_tot  = sb.table("test_package_master").select("id", count="exact").limit(1).execute()
             t_total = tr_tot.count or 0
             tr_comp = sb.table("test_package_master").select("id", count="exact") \
-                        .or_("completed.eq.true,date_completed.not.is.null").limit(1).execute()
+                        .not_.is_("date_completed", "null").limit(1).execute()
             t_comp  = tr_comp.count or 0
             del tr_tot, tr_comp
 
@@ -599,9 +599,11 @@ _meta_cache = {"time": 0, "data": None}
 
 @app.route("/api/cache/clear")
 def api_cache_clear():
-    global _meta_cache, _building
-    with _lock: _cache.clear()
-    _meta_cache = {"time": 0, "data": None}
+    global _building
+    with _lock:
+        _cache.clear()
+        _meta_cache["time"] = 0
+        _meta_cache["data"] = None
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -699,26 +701,37 @@ def api_weekly_actuals():
         weeks = wk_res.data or []
         del wk_res
 
+        import bisect
         from collections import defaultdict
         wk_di    = defaultdict(float)
         wk_fab   = defaultdict(float)
         wk_erect = defaultdict(float)
 
+        # O(log m) week lookup: sorted list of (start_date, end_date, week_no)
+        wk_sorted = sorted(
+            [(str(w["week_start_date"])[:10], str(w["week_end_date"])[:10], w["week_no"])
+             for w in weeks if w.get("week_start_date") and w.get("week_end_date") and w.get("week_no")],
+            key=lambda x: x[0]
+        )
+        wk_starts = [x[0] for x in wk_sorted]
+
+        def _find_week(dc):
+            idx = bisect.bisect_right(wk_starts, dc) - 1
+            if idx >= 0 and wk_sorted[idx][0] <= dc <= wk_sorted[idx][1]:
+                return wk_sorted[idx][2]
+            return None
+
         for j in joints:
             dc = str(j.get("date_completed") or "")[:10]
             di = float(j.get("di") or 0)
             sf = (j.get("sf") or "").upper()
-            for w in weeks:
-                ws  = str(w.get("week_start_date") or "")[:10]
-                we  = str(w.get("week_end_date")   or "")[:10]
-                wno = w.get("week_no")
-                if ws and we and wno and ws <= dc <= we:
-                    wk_di[wno]    += di
-                    if sf in ("S", "SHOP"):
-                        wk_fab[wno]   += di
-                    elif sf in ("F", "FIELD"):
-                        wk_erect[wno] += di
-                    break
+            wno = _find_week(dc)
+            if wno:
+                wk_di[wno] += di
+                if sf in ("S", "SHOP"):
+                    wk_fab[wno] += di
+                elif sf in ("F", "FIELD"):
+                    wk_erect[wno] += di
         del joints
 
         result = [
@@ -786,7 +799,7 @@ def api_joints_get():
         if pkg:     q = q.eq("package",     pkg)
         if welder:  q = q.ilike("welder",   f"%{welder}%")
         if nde_only == "true":
-            q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
+            q = q.or_("inspection.in.(PT,MT,RT),not.pt_date.is.null,not.mt_date.is.null,not.rt_date.is.null,not.pwht_date.is.null")
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
@@ -924,7 +937,13 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     if date_to:   q = q.lte("date_completed", date_to)
     if system:    q = q.eq("system", system)
     if welder:    q = q.ilike("welder", f"%{welder}%")
-    rows = q.execute().data or []
+    rows, off, bsz = [], 0, 1000
+    while True:
+        page = q.order("id").range(off, off + bsz - 1).execute().data or []
+        rows.extend(page)
+        if len(page) < bsz:
+            break
+        off += bsz
 
     # Per-welder aggregates
     w_joints = defaultdict(int)
@@ -1467,15 +1486,19 @@ def api_area_field_quantities():
                 break
             offset += batch
 
-        # Support EA: sub_area별 카운트
-        ea_by_sub = {}
-        for sub in TARGET_SUBS:
-            sr = (sb.table("support_master")
-                    .select("id", count="exact")
-                    .eq("sub_area", sub)
-                    .limit(1)
-                    .execute())
-            ea_by_sub[sub] = sr.count or 0
+        # Support EA: 단일 쿼리로 sub_area 필터 후 Python에서 집계 (N+1 제거)
+        from collections import Counter as _Counter
+        ea_rows, ea_off = [], 0
+        while True:
+            r = (sb.table("support_master")
+                   .select("sub_area")
+                   .in_("sub_area", TARGET_SUBS)
+                   .range(ea_off, ea_off + 999).execute())
+            ea_rows.extend(r.data or [])
+            if len(r.data or []) < 1000:
+                break
+            ea_off += 1000
+        ea_by_sub = dict(_Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
 
         return jsonify({"di": di_by_sub, "ea": ea_by_sub})
     except Exception as e:

@@ -303,16 +303,16 @@ function renderKPI(d, wkData) {
     const pipingPct  = d.overall_pct   || 0;
     const supportPct = d.support_pct   || 0;
     const testPct    = d.testpkg_pct   || 0;
-    const weightedPct = Math.round(pipingPct);
+    const weightedPct = parseFloat((d.unified_readiness || (pipingPct * 0.7 + supportPct * 0.2 + testPct * 0.1)).toFixed(2));
     document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
-document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
+    document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
     const weightSubEl = document.getElementById("kpi-overall-weight-sub");
     if (weightSubEl) weightSubEl.textContent = `PIPING ${Math.round(pipingPct)}% · SUP ${Math.round(supportPct)}% · TEST ${Math.round(testPct)}%`;
 
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
     if (totalEl)    totalEl.textContent    = fmtNum(d.total_plan_di, 0);
-    if (totalSubEl) totalSubEl.textContent = `${weightedPct}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
+    if (totalSubEl) totalSubEl.textContent = `${Math.round(pipingPct)}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
 
     const completedEl    = document.getElementById("kpi-completed");
     const completedSubEl = document.getElementById("kpi-completed-sub");
@@ -2110,7 +2110,7 @@ function smPage(dir) { smGoto(smCurrentPage + dir); }
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
