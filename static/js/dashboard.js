@@ -833,7 +833,11 @@ async function loadWeekly() {
         try {
             const _now = Date.now();
             if (!loadWeekly._bdCache || (_now - loadWeekly._bdCacheTime > 300000)) {
-                loadWeekly._bdCache = await fetch("/api/weekly-last-breakdown").then(r=>r.json());
+                const _bdRes = await fetch("/api/weekly-last-breakdown");
+                if (!_bdRes.ok) throw new Error(`HTTP ${_bdRes.status}`);
+                const _bdJson = await _bdRes.json();
+                if (_bdJson.error) throw new Error(_bdJson.error);
+                loadWeekly._bdCache = _bdJson;
                 loadWeekly._bdCacheTime = _now;
             }
             const bd = loadWeekly._bdCache;
@@ -1544,9 +1548,6 @@ async function importJMExcel() {
         toast("Please select an Excel file first", "error"); return;
     }
     const file = fileInput.files[0];
-    const statusEl = document.getElementById("jm-import-status");
-    if (statusEl) statusEl.textContent = "Uploading...";
-
     const formData = new FormData();
     formData.append("file", file);
     try {
@@ -1554,16 +1555,12 @@ async function importJMExcel() {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error);
         const msg = `✓ Imported ${data.inserted} rows${data.skipped > 0 ? ` (${data.skipped} skipped)` : ""}`;
-        if (statusEl) statusEl.textContent = msg;
         toast(msg);
         fileInput.value = "";
-        // Trigger KPI refresh
         _autoRefreshKpi();
         setTimeout(() => loadJointMaster(), 2000);
     } catch(e) {
-        const msg = `✗ Import failed: ${e.message}`;
-        if (statusEl) statusEl.textContent = msg;
-        toast(msg, "error");
+        toast(`✗ Import failed: ${e.message}`, "error");
     }
 }
 

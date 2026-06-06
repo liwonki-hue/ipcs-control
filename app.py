@@ -500,11 +500,17 @@ def _build():
         except Exception as sp_e:
             print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
 
-        # ── KPI + weekly override: 직접 joint_master에서 집계 ──
-        # v17 RPC가 completed 필드 불일치로 실적을 과소 집계하는 문제 보정.
+        # ── KPI + weekly + breakdown override: 직접 joint_master에서 집계 ──
+        # v17 RPC/dashboard_cache의 과소 집계를 보정.
         # date_completed IS NOT NULL 기준으로 직접 페이지네이션 집계.
+        # system/unit/area/sub_area 별 completed_di도 함께 덮어씌워
+        # Overview·Systems·Unit/Area 탭 수치를 Weekly 탭과 일치시킨다.
         try:
-            wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
+            wk_di_m    = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
+            sys_di_m   = defaultdict(float)  # per-system completed DI
+            unit_di_m  = defaultdict(float)  # per-unit completed DI
+            area_di_m  = defaultdict(float)  # per-area (MB #1 등) completed DI
+            sub_di_m   = defaultdict(float)  # per-sub_area (CCWPH #1 등) completed DI
 
             # bisect 기반 O(log n) 주차 검색 (linear scan 대비 ~10x 빠름)
             _wk_raw = raw.get("weeks") or []
@@ -528,7 +534,7 @@ def _build():
             c_joints = 0
             off, bsz = 0, 1000
             while True:
-                r = sb.table("joint_master").select("di,sf,date_completed") \
+                r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
                       .not_.is_("date_completed", "null") \
                       .order("id").range(off, off + bsz - 1).execute()
                 rows = r.data or []; del r
@@ -540,6 +546,10 @@ def _build():
                     c_di += di
                     if   sf in ("S", "SHOP"):  c_fab   += di
                     elif sf in ("F", "FIELD"): c_erect += di
+                    sys_di_m[row.get("system")   or ""] += di
+                    unit_di_m[row.get("unit")    or ""] += di
+                    area_di_m[row.get("area")    or ""] += di
+                    sub_di_m[row.get("sub_area") or ""] += di
                     if wno:
                         wk_di_m[wno]    += di
                         if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
@@ -548,7 +558,7 @@ def _build():
                 if len(rows) < bsz: break
                 off += bsz
 
-            if c_di > 0:
+            if c_joints > 0:
                 kpi_list = raw.get("kpi")
                 if isinstance(kpi_list, list) and kpi_list:
                     kpi_list[0]["completed_di"]       = c_di
@@ -564,7 +574,30 @@ def _build():
                             item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
                             item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
 
-            print(f"[cache] KPI override: DI={c_di:.1f}, fab={c_fab:.1f}, erect={c_erect:.1f}, joints={c_joints}")
+                # 시스템별 completed_di 덮어쓰기 — Overview·Systems 탭 일치
+                for item in (raw.get("systems") or []):
+                    s = item.get("system") or ""
+                    if s in sys_di_m:
+                        item["completed_di"] = round(sys_di_m[s], 2)
+
+                # 유닛별 completed_di 덮어쓰기 — Unit/Area 탭 일치
+                for item in (raw.get("units") or []):
+                    u = item.get("unit") or ""
+                    if u in unit_di_m:
+                        item["completed_di"] = round(unit_di_m[u], 2)
+
+                # 에리어·서브에리어별 completed_di 덮어쓰기
+                for item in (raw.get("areas") or []):
+                    a = item.get("area") or ""
+                    if a in area_di_m:
+                        item["completed_di"] = round(area_di_m[a], 2)
+                for item in (raw.get("subareas") or []):
+                    s = item.get("sub_area") or item.get("area") or ""
+                    if s in sub_di_m:
+                        item["completed_di"] = round(sub_di_m[s], 2)
+
+            print(f"[cache] KPI override: DI={c_di:.1f}, fab={c_fab:.1f}, erect={c_erect:.1f}, joints={c_joints}, "
+                  f"systems={len(sys_di_m)}, units={len(unit_di_m)}, subareas={len(sub_di_m)}")
         except Exception as _kpi_e:
             print(f"[cache] KPI override error (non-critical): {_kpi_e}")
 
@@ -595,16 +628,19 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             
-        _build_fail = False
+        with _lock:
+            _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
     except Exception as e:
-        _build_fail = True
-        _build_fail_time = time.time()
+        with _lock:
+            _build_fail = True
+            _build_fail_time = time.time()
         print(f"[cache] CRITICAL BUILD ERROR: {e}")
         import traceback; traceback.print_exc()
     finally:
-        _building = False
+        with _lock:
+            _building = False
 
 
 def get_cache(force=False):
@@ -955,16 +991,12 @@ def api_weekly_last_breakdown():
             return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": "", "week_end": ""})
         last_date = str(last_row[0]["date_completed"])[:10]
 
-        # 2. Find which week contains that date
-        weeks = sb.table("week_schedule").select("week_no,week_start_date,week_end_date") \
-                  .order("week_no", desc=True).execute().data or []
-        last_week = None
-        for w in weeks:
-            ws = str(w.get("week_start_date") or "")[:10]
-            we = str(w.get("week_end_date")   or "")[:10]
-            if ws and we and ws <= last_date <= we:
-                last_week = w
-                break
+        # 2. Find which week contains that date (single filtered query, no Python scan)
+        wk_rows = sb.table("week_schedule").select("week_no,week_start_date,week_end_date") \
+                    .lte("week_start_date", last_date) \
+                    .gte("week_end_date",   last_date) \
+                    .limit(1).execute().data or []
+        last_week = wk_rows[0] if wk_rows else None
         if not last_week:
             return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": last_date, "week_end": last_date})
 
@@ -972,13 +1004,19 @@ def api_weekly_last_breakdown():
         we_date = str(last_week["week_end_date"])[:10]
         week_no = last_week["week_no"]
 
-        # 3. Query joints completed in this week
-        joints = sb.table("joint_master") \
-                   .select("system,sub_area,sf,size_inch,mat") \
-                   .gte("date_completed", ws_date) \
-                   .lte("date_completed", we_date) \
-                   .not_.is_("date_completed", "null") \
-                   .execute().data or []
+        # 3. Query joints completed in this week (paginate to avoid 1000-row truncation)
+        joints = []
+        _q = sb.table("joint_master") \
+               .select("system,sub_area,sf,size_inch,mat") \
+               .gte("date_completed", ws_date) \
+               .lte("date_completed", we_date) \
+               .not_.is_("date_completed", "null")
+        _off = 0
+        while True:
+            _page = _q.range(_off, _off + 999).execute().data or []
+            joints.extend(_page)
+            if len(_page) < 1000: break
+            _off += 1000
 
         # 4. Aggregate by system and sub_area and mat
         sys_map = {}
@@ -1031,14 +1069,20 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     """Compute welder stats directly from joint_master when RPC unavailable."""
     sb = get_sb()
 
-    # week_schedule: date → project week_no 매핑
+    # week_schedule: bisect 기반 O(log n) 주차 탐색 (기존 선형 O(n) 교체)
     wk_sched = sb.table("week_schedule").select("week_no,week_start_date,week_end_date").order("week_no").execute().data or []
+    _wk_sorted = sorted(
+        [(str(w.get("week_start_date") or "")[:10],
+          str(w.get("week_end_date")   or "")[:10],
+          w.get("week_no"))
+         for w in wk_sched if w.get("week_start_date")],
+        key=lambda x: x[0]
+    )
+    _wk_starts = [x[0] for x in _wk_sorted]
     def _project_wkno(date_str):
-        for row in wk_sched:
-            ws = str(row.get("week_start_date") or "")[:10]
-            we = str(row.get("week_end_date")   or "")[:10]
-            if ws and we and ws <= date_str <= we:
-                return row.get("week_no")
+        idx = bisect.bisect_right(_wk_starts, date_str) - 1
+        if idx >= 0 and _wk_sorted[idx][0] <= date_str <= _wk_sorted[idx][1]:
+            return _wk_sorted[idx][2]
         return None
 
     q = (sb.table("joint_master")
@@ -1482,9 +1526,17 @@ def api_packages():
         q  = sb.table("joint_master").select("package").not_.is_("package", "null")
         if system:
             q = q.eq("system", system)
-        res  = q.execute()
-        pkgs = sorted(set(r["package"] for r in (res.data or []) if r.get("package")))
-        return jsonify(pkgs)
+        pkgs = set()
+        off = 0
+        while True:
+            r = q.order("package").range(off, off + 999).execute()
+            for row in (r.data or []):
+                if row.get("package"):
+                    pkgs.add(row["package"])
+            if len(r.data or []) < 1000:
+                break
+            off += 1000
+        return jsonify(sorted(pkgs))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -1749,31 +1801,39 @@ def api_support_sync_phase_package():
     """joint_master의 iso_drawing으로 phase/package를 매칭해 support_master에 업데이트."""
     try:
         sb = get_sb()
-        # 1. joint_master에서 iso_drawing별 phase/package 수집 (SELECT DISTINCT)
-        jm_res = sb.table("joint_master").select("iso_drawing, phase, package") \
-            .not_.is_("iso_drawing", "null").execute()
+        # 1. joint_master에서 iso_drawing별 phase/package 수집 (페이지네이션)
         iso_map = {}
-        for row in (jm_res.data or []):
-            iso = (row.get("iso_drawing") or "").strip()
-            ph  = (row.get("phase")   or "").strip() or None
-            pkg = (row.get("package") or "").strip() or None
-            if iso and (ph or pkg):
-                # 먼저 나온 값 우선
-                if iso not in iso_map:
-                    iso_map[iso] = {"phase": ph, "package": pkg}
-                else:
-                    if ph  and not iso_map[iso]["phase"]:   iso_map[iso]["phase"]   = ph
-                    if pkg and not iso_map[iso]["package"]: iso_map[iso]["package"] = pkg
-        del jm_res
+        _joff = 0
+        while True:
+            jm_res = sb.table("joint_master").select("iso_drawing, phase, package") \
+                .not_.is_("iso_drawing", "null").range(_joff, _joff + 999).execute()
+            for row in (jm_res.data or []):
+                iso = (row.get("iso_drawing") or "").strip()
+                ph  = (row.get("phase")   or "").strip() or None
+                pkg = (row.get("package") or "").strip() or None
+                if iso and (ph or pkg):
+                    if iso not in iso_map:
+                        iso_map[iso] = {"phase": ph, "package": pkg}
+                    else:
+                        if ph  and not iso_map[iso]["phase"]:   iso_map[iso]["phase"]   = ph
+                        if pkg and not iso_map[iso]["package"]: iso_map[iso]["package"] = pkg
+            if len(jm_res.data or []) < 1000: del jm_res; break
+            del jm_res
+            _joff += 1000
 
         if not iso_map:
             return jsonify({"ok": False, "error": "joint_master에 phase/package 데이터 없음"}), 404
 
-        # 2. support_master에서 iso_drawing이 있는 행 조회
-        sm_res = sb.table("support_master").select("id, iso_drawing, phase, package") \
-            .not_.is_("iso_drawing", "null").execute()
-        sm_rows = sm_res.data or []
-        del sm_res
+        # 2. support_master에서 iso_drawing이 있는 행 조회 (페이지네이션)
+        sm_rows = []
+        _soff = 0
+        while True:
+            sm_res = sb.table("support_master").select("id, iso_drawing, phase, package") \
+                .not_.is_("iso_drawing", "null").range(_soff, _soff + 999).execute()
+            sm_rows.extend(sm_res.data or [])
+            if len(sm_res.data or []) < 1000: del sm_res; break
+            del sm_res
+            _soff += 1000
 
         # Batch upsert — eliminates N individual UPDATE queries
         upsert_records = []
@@ -1828,17 +1888,22 @@ def api_testpkg_get():
         # Readiness: 패키지 내 모든 Joint가 완료(date_completed IS NOT NULL)이면 Ready
         pkg_nos = [r["test_pkg_no"] for r in rows if r.get("test_pkg_no")]
         if pkg_nos:
-            jr = sb.table("joint_master").select("package,date_completed") \
-                    .in_("package", pkg_nos).execute()
             pkg_stats: dict = {}
-            for j in (jr.data or []):
-                p = j.get("package") or ""
-                if p not in pkg_stats:
-                    pkg_stats[p] = [0, 0]   # [total, completed]
-                pkg_stats[p][0] += 1
-                if j.get("date_completed"):
-                    pkg_stats[p][1] += 1
-            del jr
+            off2 = 0
+            while True:
+                jr = sb.table("joint_master").select("package,date_completed") \
+                        .in_("package", pkg_nos).range(off2, off2 + 999).execute()
+                for j in (jr.data or []):
+                    p = j.get("package") or ""
+                    if p not in pkg_stats:
+                        pkg_stats[p] = [0, 0]   # [total, completed]
+                    pkg_stats[p][0] += 1
+                    if j.get("date_completed"):
+                        pkg_stats[p][1] += 1
+                if len(jr.data or []) < 1000:
+                    del jr; break
+                del jr
+                off2 += 1000
             for row in rows:
                 s = pkg_stats.get(row.get("test_pkg_no") or "", [0, 0])
                 row["readiness"] = "Ready" if s[0] > 0 and s[0] == s[1] else "Pending"
