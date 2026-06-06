@@ -486,20 +486,27 @@ def _build():
                 _off += 1000
             del _r
 
-            # Test: joint_master where package IS NOT NULL (test_package_master is unused)
+            # Test: distinct packages per system (package done = all joints completed)
             _tst_s_tot = _ddc(int); _tst_s_done = _ddc(int)
+            _pkg_joints: dict = {}   # (system, package) → list[bool]
             _off = 0
             while True:
-                _r = sb.table("joint_master").select("system,date_completed") \
+                _r = sb.table("joint_master").select("system,package,date_completed") \
                         .not_.is_("package", "null") \
                         .range(_off, _off + 999).execute()
                 for _row in (_r.data or []):
-                    _s = _row.get("system") or ""
-                    _tst_s_tot[_s] += 1
-                    if _row.get("date_completed"): _tst_s_done[_s] += 1
+                    _s   = _row.get("system")  or ""
+                    _pkg = _row.get("package") or ""
+                    _key = (_s, _pkg)
+                    if _key not in _pkg_joints: _pkg_joints[_key] = []
+                    _pkg_joints[_key].append(bool(_row.get("date_completed")))
                 if len(_r.data or []) < 1000: break
                 _off += 1000
             del _r
+            for (_s, _pkg), _completions in _pkg_joints.items():
+                _tst_s_tot[_s] += 1
+                if all(_completions): _tst_s_done[_s] += 1
+            del _pkg_joints
 
             for _item in (raw.get("systems") or []):
                 _s = _item.get("system") or ""
