@@ -551,7 +551,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
 
         _setKpi("ep-kpi-piping", `${pct}%`);
         _setCol("ep-kpi-piping", pctColor(pct));
-        _setKpi("ep-kpi-piping-sub", `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)} DI · ${(d.completed_joints||0).toLocaleString()} joints`);
+        _setKpi("ep-kpi-piping-sub", `${fmtNum(d_completed_di,2)} / ${fmtNum(d_total_di,2)} DI · ${(d.completed_joints||0).toLocaleString()} joints`);
 
         _setKpi("ep-kpi-support", `${support_pct}%`);
         _setCol("ep-kpi-support", pctColor(support_pct));
@@ -565,7 +565,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const actEpWks = (weekly || []).filter(w => w.completed_di > 0);
         const lastEpWk = actEpWks.length ? actEpWks[actEpWks.length - 1] : null;
         if(lastEpWk) {
-            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 0));
+            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 2));
             _setKpi("ep-kpi-week-sub", `W${lastEpWk.week_no} · EP Piping D/I`);
         }
         // Avg Welder Performance is kept in sync by _updateWelderKpiBar (runs on startup + loadWelder)
@@ -583,7 +583,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const stats = document.getElementById("epStats");
         if(stats) {
             stats.innerHTML = [
-                ["EP PIPING",       `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)}`],
+                ["EP PIPING",       `${fmtNum(d_completed_di,2)} / ${fmtNum(d_total_di,2)}`],
                 ["EP Support",      `${fmtNum(support_comp,0)} / ${fmtNum(support_tot,0)}`],
                 ["EP Test Package", `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}`]
             ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
@@ -601,9 +601,9 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
                 const p=tot>0?Math.round(comp/tot*100):0, c=pctColor(p);
                 return `<tr>
                     <td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${row[nameKey]||""}</td>
-                    <td style="${td}">${fmtNum(tot,0)}</td>
-                    <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
-                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
+                    <td style="${td}">${fmtNum(tot,2)}</td>
+                    <td style="${td};color:var(--green)">${fmtNum(comp,2)}</td>
+                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,2)}</td>
                     <td style="${td};color:${c}">${p}%</td>
                 </tr>`;
             }).join("");
@@ -611,9 +611,9 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
             return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
-                <td style="${td}">${fmtNum(sumT,0)}</td>
-                <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
-                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
+                <td style="${td}">${fmtNum(sumT,2)}</td>
+                <td style="${td};color:var(--green)">${fmtNum(sumC,2)}</td>
+                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,2)}</td>
                 <td style="${td};color:${totC}">${totP}%</td>
             </tr>`;
         }
