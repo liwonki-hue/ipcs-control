@@ -529,35 +529,35 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         // ep_sys 합산을 우선 사용 → 게이지와 테이블 물량 일치
         const d_total_di     = systems?.length ? systems.reduce((s,r) => s + (r.total_di     || 0), 0) : (d.total_di     || 0);
         const d_completed_di = systems?.length ? systems.reduce((s,r) => s + (r.completed_di || 0), 0) : (d.completed_di || 0);
-        const pct = d_total_di > 0 ? Math.round((d_completed_di / d_total_di) * 100) : 0;
+        const pct = d_total_di > 0 ? parseFloat((d_completed_di / d_total_di * 100).toFixed(2)) : 0;
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
-        const support_pct  = kpi ? Math.round(kpi.support_pct  || 0) : 0;
-        const testpkg_pct  = kpi ? Math.round(kpi.testpkg_pct  || 0) : 0;
+        const support_pct  = kpi ? parseFloat((kpi.support_pct  || 0).toFixed(2)) : 0;
+        const testpkg_pct  = kpi ? parseFloat((kpi.testpkg_pct  || 0).toFixed(2)) : 0;
         const support_comp = kpi ? (kpi.support_comp  || 0) : 0;
         const support_tot  = kpi ? (kpi.support_total || 0) : 0;
         const test_comp    = kpi ? (kpi.testpkg_comp  || 0) : 0;
         const test_tot     = kpi ? (kpi.testpkg_total || 0) : 0;
-        const readiness_pct = Math.round(pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1);
+        const readiness_pct = parseFloat((pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1).toFixed(2));
 
         const _setKpi = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
         const _setCol = (id, col) => { const el=document.getElementById(id); if(el) el.style.color=col; };
 
-        _setKpi("ep-kpi-readiness", `${readiness_pct}%`);
+        _setKpi("ep-kpi-readiness", `${readiness_pct.toFixed(2)}%`);
         _setCol("ep-kpi-readiness", pctColor(readiness_pct));
-        _setKpi("ep-kpi-readiness-sub", `PIPING ${pct}% · SUP ${support_pct}% · TEST ${testpkg_pct}%`);
+        _setKpi("ep-kpi-readiness-sub", `PIPING ${pct.toFixed(2)}% · SUP ${support_pct.toFixed(2)}% · TEST ${testpkg_pct.toFixed(2)}%`);
         const rBar = document.getElementById("ep-kpi-readiness-bar");
         if(rBar) { rBar.style.width = `${Math.min(readiness_pct,100)}%`; rBar.style.background = pctColor(readiness_pct); }
 
-        _setKpi("ep-kpi-piping", `${pct}%`);
+        _setKpi("ep-kpi-piping", `${pct.toFixed(2)}%`);
         _setCol("ep-kpi-piping", pctColor(pct));
-        _setKpi("ep-kpi-piping-sub", `${fmtNum(d_completed_di,2)} / ${fmtNum(d_total_di,2)} DI · ${(d.completed_joints||0).toLocaleString()} joints`);
+        _setKpi("ep-kpi-piping-sub", `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)} DI · ${(d.completed_joints||0).toLocaleString()} joints`);
 
-        _setKpi("ep-kpi-support", `${support_pct}%`);
+        _setKpi("ep-kpi-support", `${support_pct.toFixed(2)}%`);
         _setCol("ep-kpi-support", pctColor(support_pct));
         _setKpi("ep-kpi-support-sub", support_tot > 0 ? `${fmtNum(support_comp,0)} / ${fmtNum(support_tot,0)}` : "—");
 
-        _setKpi("ep-kpi-testpkg", `${testpkg_pct}%`);
+        _setKpi("ep-kpi-testpkg", `${testpkg_pct.toFixed(2)}%`);
         _setCol("ep-kpi-testpkg", pctColor(testpkg_pct));
         _setKpi("ep-kpi-testpkg-sub", test_tot > 0 ? `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}` : "—");
 
@@ -565,7 +565,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const actEpWks = (weekly || []).filter(w => w.completed_di > 0);
         const lastEpWk = actEpWks.length ? actEpWks[actEpWks.length - 1] : null;
         if(lastEpWk) {
-            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 2));
+            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 0));
             _setKpi("ep-kpi-week-sub", `W${lastEpWk.week_no} · EP Piping D/I`);
         }
         // Avg Welder Performance is kept in sync by _updateWelderKpiBar (runs on startup + loadWelder)
@@ -578,12 +578,12 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const gp = document.getElementById("epGaugePath");
         if(gp) { gp.style.stroke = gc; gp.style.strokeDashoffset = offset; }
         const gt = document.getElementById("epGaugeText");
-        if(gt) { gt.textContent = `${pct}%`; gt.style.fill = gc; }
+        if(gt) { gt.textContent = `${pct.toFixed(2)}%`; gt.style.fill = gc; }
 
         const stats = document.getElementById("epStats");
         if(stats) {
             stats.innerHTML = [
-                ["EP PIPING",       `${fmtNum(d_completed_di,2)} / ${fmtNum(d_total_di,2)}`],
+                ["EP PIPING",       `${fmtNum(d_completed_di,0)} / ${fmtNum(d_total_di,0)}`],
                 ["EP Support",      `${fmtNum(support_comp,0)} / ${fmtNum(support_tot,0)}`],
                 ["EP Test Package", `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}`]
             ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
@@ -601,9 +601,9 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
                 const p=tot>0?Math.round(comp/tot*100):0, c=pctColor(p);
                 return `<tr>
                     <td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${row[nameKey]||""}</td>
-                    <td style="${td}">${fmtNum(tot,2)}</td>
-                    <td style="${td};color:var(--green)">${fmtNum(comp,2)}</td>
-                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,2)}</td>
+                    <td style="${td}">${fmtNum(tot,0)}</td>
+                    <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
+                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
                     <td style="${td};color:${c}">${p}%</td>
                 </tr>`;
             }).join("");
@@ -611,9 +611,9 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
             return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
-                <td style="${td}">${fmtNum(sumT,2)}</td>
-                <td style="${td};color:var(--green)">${fmtNum(sumC,2)}</td>
-                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,2)}</td>
+                <td style="${td}">${fmtNum(sumT,0)}</td>
+                <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
+                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
                 <td style="${td};color:${totC}">${totP}%</td>
             </tr>`;
         }
