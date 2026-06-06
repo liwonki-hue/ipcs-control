@@ -433,20 +433,20 @@ async function renderOverview(kpi, wkData, units, systems) {
                     const totPct  = parseFloat((s.unified_readiness || (pipPct*0.7 + supPct*0.2 + tstPct*0.1)).toFixed(2));
                     const _dash   = v => v > 0 ? v : "—";
                     return `<tr>
-                        <td style="text-align:left;font-weight:600">${s.system||"—"}</td>
-                        <td style="text-align:right">${fmtNum(pipPlan,0)}</td>
-                        <td style="text-align:right">${_dash(supTot)}</td>
-                        <td style="text-align:right">${_dash(tstTot)}</td>
-                        <td style="text-align:right;color:var(--green)">${fmtNum(pipDone,0)}</td>
-                        <td style="text-align:right;color:var(--green)">${_dash(supDone)}</td>
-                        <td style="text-align:right;color:var(--green)">${_dash(tstDone)}</td>
-                        <td style="text-align:right;color:var(--orange)">${fmtNum(pipRem,0)}</td>
-                        <td style="text-align:right;color:var(--orange)">${_dash(supRem)}</td>
-                        <td style="text-align:right;color:var(--orange)">${_dash(tstRem)}</td>
-                        <td style="text-align:right;color:${pctColor(pipPct)}">${pipPct}%</td>
-                        <td style="text-align:right;color:${pctColor(supPct)}">${supPct > 0 ? supPct+"%" : "—"}</td>
-                        <td style="text-align:right;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct+"%" : "—"}</td>
-                        <td style="text-align:right;font-weight:700;color:${pctColor(totPct)}">${totPct.toFixed(2)}%</td>
+                        <td style="text-align:center;font-weight:600">${s.system||"—"}</td>
+                        <td style="text-align:center">${fmtNum(pipPlan,0)}</td>
+                        <td style="text-align:center">${_dash(supTot)}</td>
+                        <td style="text-align:center">${_dash(tstTot)}</td>
+                        <td style="text-align:center;color:var(--green)">${fmtNum(pipDone,0)}</td>
+                        <td style="text-align:center;color:var(--green)">${_dash(supDone)}</td>
+                        <td style="text-align:center;color:var(--green)">${_dash(tstDone)}</td>
+                        <td style="text-align:center;color:var(--orange)">${fmtNum(pipRem,0)}</td>
+                        <td style="text-align:center;color:var(--orange)">${_dash(supRem)}</td>
+                        <td style="text-align:center;color:var(--orange)">${_dash(tstRem)}</td>
+                        <td style="text-align:center;color:${pctColor(pipPct)}">${pipPct}%</td>
+                        <td style="text-align:center;color:${pctColor(supPct)}">${supPct > 0 ? supPct+"%" : "—"}</td>
+                        <td style="text-align:center;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct+"%" : "—"}</td>
+                        <td style="text-align:center;font-weight:700;color:${pctColor(totPct)}">${totPct.toFixed(2)}%</td>
                     </tr>`;
                 }).join("");
             }
