@@ -410,25 +410,47 @@ async function renderOverview(kpi, wkData, units, systems) {
             ]);
         }
 
-        // ── By System: split 23 systems across two tables ──────────────
+        // ── By System: single merged-header table ──────────────────────
         const sysList = (systems || []).slice().sort((a, b) => (b.progress_pct||0) - (a.progress_pct||0));
-        const mid = Math.ceil(sysList.length / 2);
-        const mkSysRows = arr => arr.map(s => {
-            const p = s.progress_pct || 0, c = pctColor(p);
-            const rem = Math.max(0, (s.total_di||s.plan_di||0) - (s.completed_di||0));
-            return `<tr>
-                <td style="text-align:left">${s.system||"—"}</td>
-                <td style="text-align:right">${fmtNum(s.total_di||s.plan_di||0,0)}</td>
-                <td style="text-align:right">${fmtNum(s.completed_di||0,0)}</td>
-                <td style="text-align:right;color:var(--orange)">${fmtNum(rem,0)}</td>
-                <td style="text-align:right;color:${c}">${p}%</td>
-            </tr>`;
-        }).join("");
-        const sysThead = `<thead><tr><th style="text-align:left">System</th><th style="text-align:right">Plan DI</th><th style="text-align:right">Done DI</th><th style="text-align:right">Remaining</th><th>Progress</th></tr></thead>`;
-        const t1 = document.getElementById("overviewSysTable1");
-        const t2 = document.getElementById("overviewSysTable2");
-        if (t1) t1.innerHTML = `<table class="data-table" style="width:100%">${sysThead}<tbody>${mkSysRows(sysList.slice(0,mid))}</tbody></table>`;
-        if (t2) t2.innerHTML = `<table class="data-table" style="width:100%">${sysThead}<tbody>${mkSysRows(sysList.slice(mid))}</tbody></table>`;
+        const sysBody = document.getElementById("sysBreakdownBody");
+        if (sysBody) {
+            if (!sysList.length) {
+                sysBody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:16px">No system data</td></tr>`;
+            } else {
+                sysBody.innerHTML = sysList.map(s => {
+                    const pipPlan = s.total_di || s.plan_di || 0;
+                    const pipDone = s.completed_di || 0;
+                    const pipRem  = Math.max(0, pipPlan - pipDone);
+                    const pipPct  = s.progress_pct || 0;
+                    const supTot  = s.support_total || 0;
+                    const supDone = s.support_comp  || 0;
+                    const supRem  = Math.max(0, supTot - supDone);
+                    const supPct  = s.support_pct   || 0;
+                    const tstTot  = s.testpkg_total || 0;
+                    const tstDone = s.testpkg_comp  || 0;
+                    const tstRem  = Math.max(0, tstTot - tstDone);
+                    const tstPct  = s.testpkg_pct   || 0;
+                    const totPct  = parseFloat((s.unified_readiness || (pipPct*0.7 + supPct*0.2 + tstPct*0.1)).toFixed(2));
+                    const _dash   = v => v > 0 ? v : "—";
+                    return `<tr>
+                        <td style="text-align:left;font-weight:600">${s.system||"—"}</td>
+                        <td style="text-align:right">${fmtNum(pipPlan,0)}</td>
+                        <td style="text-align:right">${_dash(supTot)}</td>
+                        <td style="text-align:right">${_dash(tstTot)}</td>
+                        <td style="text-align:right;color:var(--green)">${fmtNum(pipDone,0)}</td>
+                        <td style="text-align:right;color:var(--green)">${_dash(supDone)}</td>
+                        <td style="text-align:right;color:var(--green)">${_dash(tstDone)}</td>
+                        <td style="text-align:right;color:var(--orange)">${fmtNum(pipRem,0)}</td>
+                        <td style="text-align:right;color:var(--orange)">${_dash(supRem)}</td>
+                        <td style="text-align:right;color:var(--orange)">${_dash(tstRem)}</td>
+                        <td style="text-align:right;color:${pctColor(pipPct)}">${pipPct}%</td>
+                        <td style="text-align:right;color:${pctColor(supPct)}">${supPct > 0 ? supPct+"%" : "—"}</td>
+                        <td style="text-align:right;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct+"%" : "—"}</td>
+                        <td style="text-align:right;font-weight:700;color:${pctColor(totPct)}">${totPct.toFixed(2)}%</td>
+                    </tr>`;
+                }).join("");
+            }
+        }
 
         const indMap = {};
         const actWks = wkData.filter(w => w.completed_di > 0);
@@ -1410,6 +1432,31 @@ async function downloadWithPicker(wb,name){
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'}),blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     if('showSaveFilePicker'in window){try{const handle=await window.showSaveFilePicker({suggestedName:name,types:[{description:'Excel File',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]});const writable=await handle.createWritable();await writable.write(blob);await writable.close();return true;}catch(e){if(e.name==='AbortError')return false;console.warn("Picker failed, falling back",e);}}
     const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);return true;
+}
+
+async function exportSystemBreakdown() {
+    if (!_dashData?.systems?.length) { toast("No system data", "error"); return; }
+    const rows = _dashData.systems.map(s => {
+        const pipPlan = s.total_di || s.plan_di || 0;
+        const pipDone = s.completed_di || 0;
+        const supTot  = s.support_total || 0;
+        const supDone = s.support_comp  || 0;
+        const tstTot  = s.testpkg_total || 0;
+        const tstDone = s.testpkg_comp  || 0;
+        const totPct  = parseFloat((s.unified_readiness || ((s.progress_pct||0)*0.7 + (s.support_pct||0)*0.2 + (s.testpkg_pct||0)*0.1)).toFixed(2));
+        return {
+            "System": s.system || "",
+            "Plan - Piping": pipPlan, "Plan - Support": supTot, "Plan - Test": tstTot,
+            "Done - Piping": pipDone, "Done - Support": supDone, "Done - Test": tstDone,
+            "Remaining - Piping": Math.max(0, pipPlan-pipDone), "Remaining - Support": Math.max(0, supTot-supDone), "Remaining - Test": Math.max(0, tstTot-tstDone),
+            "Progress - Piping %": s.progress_pct||0, "Progress - Support %": s.support_pct||0, "Progress - Test %": s.testpkg_pct||0,
+            "Total Progress %": totPct
+        };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "SystemBreakdown");
+    const ok = await downloadWithPicker(wb, "System_Breakdown_Export.xlsx");
+    if (ok) toast("✓ System breakdown exported");
 }
 
 async function exportSystemsExcel(type){

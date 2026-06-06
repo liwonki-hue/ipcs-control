@@ -88,10 +88,43 @@
           <div class="panel" style="margin-top:8px"><div class="panel-title">Test Package Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="testpkgGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="testpkgGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">TEST PKG PROGRESS</text></svg></div><div class="stat-list" id="testpkgStats"></div></div>
         </div>
       </div>
-      <!-- By System: two tables below the 3-col grid -->
-      <div class="grid-2" style="margin-top:0">
-        <div class="panel"><div class="panel-title">By System (1)</div><div class="table-wrap" id="overviewSysTable1"></div></div>
-        <div class="panel"><div class="panel-title">By System (2)</div><div class="table-wrap" id="overviewSysTable2"></div></div>
+      <!-- By System: single merged-header table -->
+      <div style="margin-top:0">
+        <div class="panel">
+          <div class="panel-title" style="display:flex;align-items:center;gap:10px">
+            By System Progress
+            <button class="btn-de btn-de-export" style="margin-left:auto;padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export</button>
+          </div>
+          <div class="table-wrap" style="overflow-x:auto">
+            <table class="data-table" id="sysBreakdownTable" style="width:100%;min-width:960px;table-layout:fixed">
+              <colgroup>
+                <col style="width:7%">
+                <col style="width:6.5%"><col style="width:6%"><col style="width:6%">
+                <col style="width:6.5%"><col style="width:6%"><col style="width:6%">
+                <col style="width:6.5%"><col style="width:6%"><col style="width:6%">
+                <col style="width:6.5%"><col style="width:6%"><col style="width:6%">
+                <col style="width:7.5%">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th rowspan="2" style="text-align:left;vertical-align:middle">System</th>
+                  <th colspan="3" style="text-align:center;color:var(--accent);border-bottom:1px solid var(--border)">Plan</th>
+                  <th colspan="3" style="text-align:center;color:var(--green);border-bottom:1px solid var(--border)">Done</th>
+                  <th colspan="3" style="text-align:center;color:var(--orange);border-bottom:1px solid var(--border)">Remaining</th>
+                  <th colspan="3" style="text-align:center;color:var(--indigo);border-bottom:1px solid var(--border)">Progress</th>
+                  <th rowspan="2" style="text-align:right;vertical-align:middle;color:var(--accent)">Total<br>Progress</th>
+                </tr>
+                <tr>
+                  <th style="text-align:right;font-size:10px">Piping</th><th style="text-align:right;font-size:10px">Support</th><th style="text-align:right;font-size:10px">Test</th>
+                  <th style="text-align:right;font-size:10px">Piping</th><th style="text-align:right;font-size:10px">Support</th><th style="text-align:right;font-size:10px">Test</th>
+                  <th style="text-align:right;font-size:10px">Piping</th><th style="text-align:right;font-size:10px">Support</th><th style="text-align:right;font-size:10px">Test</th>
+                  <th style="text-align:right;font-size:10px">Piping</th><th style="text-align:right;font-size:10px">Support</th><th style="text-align:right;font-size:10px">Test</th>
+                </tr>
+              </thead>
+              <tbody id="sysBreakdownBody"></tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -607,6 +640,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=7.4"></script>
+<script src="/static/js/dashboard.js?v=7.5"></script>
 </body>
 </html>

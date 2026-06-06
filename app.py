@@ -470,6 +470,47 @@ def _build():
         except Exception as sp_e:
             print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
 
+        # ── Per-system Support/Test breakdown ─────────────────────────
+        try:
+            from collections import defaultdict as _ddc
+            _sup_s_tot = _ddc(int); _sup_s_done = _ddc(int)
+            _off = 0
+            while True:
+                _r = sb.table("support_master").select("system,date_completed") \
+                        .range(_off, _off + 999).execute()
+                for _row in (_r.data or []):
+                    _s = _row.get("system") or ""
+                    _sup_s_tot[_s] += 1
+                    if _row.get("date_completed"): _sup_s_done[_s] += 1
+                if len(_r.data or []) < 1000: break
+                _off += 1000
+            del _r
+
+            # Test: joint_master where package IS NOT NULL (test_package_master is unused)
+            _tst_s_tot = _ddc(int); _tst_s_done = _ddc(int)
+            _off = 0
+            while True:
+                _r = sb.table("joint_master").select("system,date_completed") \
+                        .not_.is_("package", "null") \
+                        .range(_off, _off + 999).execute()
+                for _row in (_r.data or []):
+                    _s = _row.get("system") or ""
+                    _tst_s_tot[_s] += 1
+                    if _row.get("date_completed"): _tst_s_done[_s] += 1
+                if len(_r.data or []) < 1000: break
+                _off += 1000
+            del _r
+
+            for _item in (raw.get("systems") or []):
+                _s = _item.get("system") or ""
+                _item["support_total"] = _sup_s_tot.get(_s, 0)
+                _item["support_comp"]  = _sup_s_done.get(_s, 0)
+                _item["testpkg_total"] = _tst_s_tot.get(_s, 0)
+                _item["testpkg_comp"]  = _tst_s_done.get(_s, 0)
+            print(f"[cache] Per-system breakdown: {len(raw.get('systems', []))} systems")
+        except Exception as _sbe:
+            print(f"[cache] Per-system breakdown error (non-critical): {_sbe}")
+
         # ── KPI + weekly override: 직접 joint_master에서 집계 ──
         # v17 RPC가 completed 필드 불일치로 실적을 과소 집계하는 문제 보정.
         # date_completed IS NOT NULL 기준으로 직접 페이지네이션 집계.
