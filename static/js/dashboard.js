@@ -409,7 +409,7 @@ async function renderOverview(kpi, wkData, units, systems) {
         }
 
         // ── By System: single merged-header table ──────────────────────
-        const sysList = (systems || []).slice().sort((a, b) => (b.progress_pct||0) - (a.progress_pct||0));
+        const sysList = (systems || []).slice().sort((a, b) => (b.completed_di||0) - (a.completed_di||0));
         const sysBody = document.getElementById("sysBreakdownBody");
         if (sysBody) {
             if (!sysList.length) {
