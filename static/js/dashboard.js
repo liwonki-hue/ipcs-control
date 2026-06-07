@@ -624,26 +624,29 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             return pb - pa;
         };
 
+        const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
+        const _areaRank = (areaName) => { const i = AREA_ORDER.indexOf(areaName); return i < 0 ? 99 : i; };
+        const _byAreaThenProgress = (subareaMap) => (a, b) => {
+            const ra = _areaRank(subareaMap[a.sub_area] || "");
+            const rb = _areaRank(subareaMap[b.sub_area] || "");
+            if (ra !== rb) return ra - rb;
+            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
+            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
+            return pb - pa;
+        };
+
         const sysTb = document.getElementById("epSysTableBody");
         if(sysTb && systems) sysTb.innerHTML = _epTableRows([...systems].sort(_byProgressDesc), "system", true);
 
-        // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
-        if(areas && areas.length) {
-            const sorted = [...areas].sort(_byProgressDesc);
-            const mid = Math.ceil(sorted.length / 2);
-            const areaTb  = document.getElementById("epAreaTableBody");
-            const areaTb2 = document.getElementById("epAreaTableBody2");
-            if(areaTb)  areaTb.innerHTML  = _epTableRows(sorted.slice(0, mid), "sub_area", false);
-            if(areaTb2) areaTb2.innerHTML = _epTableRows(sorted.slice(mid),    "sub_area", true, areas);
-        }
-
-        // Support tables
+        // Support tables (fetch first to get subarea_map for piping sort too)
+        let subareaMap = {};
         try {
             const sup = await apiFetch("/api/ep-support-summary");
+            subareaMap = sup.subarea_map || {};
             const supSysTb = document.getElementById("epSupSysTableBody");
             if(supSysTb && sup.sys) supSysTb.innerHTML = _epTableRows([...sup.sys].sort(_byProgressDesc), "system", true);
             if(sup.area && sup.area.length) {
-                const supSorted = [...sup.area].sort(_byProgressDesc);
+                const supSorted = [...sup.area].sort(_byAreaThenProgress(subareaMap));
                 const supMid = Math.ceil(supSorted.length / 2);
                 const supAreaTb  = document.getElementById("epSupAreaTableBody");
                 const supAreaTb2 = document.getElementById("epSupAreaTableBody2");
@@ -651,6 +654,16 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
                 if(supAreaTb2) supAreaTb2.innerHTML = _epTableRows(supSorted.slice(supMid),    "sub_area", true, sup.area);
             }
         } catch(e) { console.error("EP support summary failed", e); }
+
+        // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
+        if(areas && areas.length) {
+            const sorted = [...areas].sort(_byAreaThenProgress(subareaMap));
+            const mid = Math.ceil(sorted.length / 2);
+            const areaTb  = document.getElementById("epAreaTableBody");
+            const areaTb2 = document.getElementById("epAreaTableBody2");
+            if(areaTb)  areaTb.innerHTML  = _epTableRows(sorted.slice(0, mid), "sub_area", false);
+            if(areaTb2) areaTb2.innerHTML = _epTableRows(sorted.slice(mid),    "sub_area", true, areas);
+        }
 
         if(weekly && weekly.length > 0) {
             // EP Target = week 40 (2026-12-30). Show all weeks 1-40 on x-axis.
