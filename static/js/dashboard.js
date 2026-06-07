@@ -677,13 +677,19 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             const lastEpActIdx = wkView.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
             // Cumulative actual: show up to last active week, null after
             const cumulData = wkView.map((w, i) => i <= lastEpActIdx ? w.cumul_actual : null);
+            // EP Target S-Curve: cubic smoothstep over 40 weeks (same logic as Overview)
+            const epPlanSCurve = wkView.map((_, i) => {
+                if (d_total_di <= 0) return null;
+                const t = i / (wkView.length - 1);
+                return Math.round(d_total_di * (3*t*t - 2*t*t*t));
+            });
             destroyChart("epScurveChart");
             const ctx = document.getElementById("epScurveChart")?.getContext("2d");
             if(ctx) {
                 charts["epScurveChart"] = new Chart(ctx, {
                     type: "bar",
                     data: { labels: wkView.map(w=>`W${w.week_no}`), datasets: [
-                        { label:"EP Target DI",    type:"line", yAxisID:"yL", data:wkView.map(()=>d_total_di), borderColor:"rgba(255,82,82,0.55)", borderDash:[4,4], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1, datalabels:{display:false} },
+                        { label:"EP Target DI",    type:"line", yAxisID:"yL", data:epPlanSCurve, borderColor:"rgba(255,82,82,0.55)", borderDash:[4,4], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1, datalabels:{display:false} },
                         { label:"Cumulative Actual",type:"line", yAxisID:"yL", data:cumulData, borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:3, pointBackgroundColor:"#22d3a1", pointHoverRadius:5, tension:0.1, order:2, spanGaps:false, datalabels:{display:false} },
                         { label:"Weekly DI",       type:"bar",  yAxisID:"yR", data:wkView.map(w=>w.completed_di>0?w.completed_di:null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"rgba(37,99,235,0.8)", borderWidth:1, borderRadius:2, barPercentage:0.8, categoryPercentage:0.9, order:3,
                           datalabels:{display:true, align:"end", anchor:"end", offset:2, clamp:false, color:"#5b8def", font:{size:8,weight:"600"}, formatter:(v)=>v?fmtNum(v,0):""} }
