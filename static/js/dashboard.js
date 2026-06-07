@@ -531,11 +531,19 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const d_completed_di = systems?.length ? systems.reduce((s,r) => s + (r.completed_di || 0), 0) : (d.completed_di || 0);
         const pct = d_total_di > 0 ? parseFloat((d_completed_di / d_total_di * 100).toFixed(2)) : 0;
 
+        // ── EP Support 수량: phase=EP 기준 집계 (전체 kpi와 분리) ────────
+        let support_comp = 0, support_tot = 0, subareaMap = {};
+        let sup = null;
+        try {
+            sup = await apiFetch("/api/ep-support-summary");
+            subareaMap = sup.subarea_map || {};
+            support_tot  = (sup.sys || []).reduce((s,r) => s + (r.total_di     || 0), 0);
+            support_comp = (sup.sys || []).reduce((s,r) => s + (r.completed_di || 0), 0);
+        } catch(e) { console.error("EP support summary failed", e); }
+        const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
+
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
-        const support_pct  = kpi ? parseFloat((kpi.support_pct  || 0).toFixed(2)) : 0;
         const testpkg_pct  = kpi ? parseFloat((kpi.testpkg_pct  || 0).toFixed(2)) : 0;
-        const support_comp = kpi ? (kpi.support_comp  || 0) : 0;
-        const support_tot  = kpi ? (kpi.support_total || 0) : 0;
         const test_comp    = kpi ? (kpi.testpkg_comp  || 0) : 0;
         const test_tot     = kpi ? (kpi.testpkg_total || 0) : 0;
         const readiness_pct = parseFloat((pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1).toFixed(2));
@@ -638,11 +646,8 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         const sysTb = document.getElementById("epSysTableBody");
         if(sysTb && systems) sysTb.innerHTML = _epTableRows([...systems].sort(_byProgressDesc), "system", true);
 
-        // Support tables (fetch first to get subarea_map for piping sort too)
-        let subareaMap = {};
-        try {
-            const sup = await apiFetch("/api/ep-support-summary");
-            subareaMap = sup.subarea_map || {};
+        // Support tables (sup already fetched above for KPI)
+        if(sup) {
             const supSysTb = document.getElementById("epSupSysTableBody");
             if(supSysTb && sup.sys) supSysTb.innerHTML = _epTableRows([...sup.sys].sort(_byProgressDesc), "system", true);
             if(sup.area && sup.area.length) {
@@ -653,7 +658,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
                 if(supAreaTb)  supAreaTb.innerHTML  = _epTableRows(supSorted.slice(0, supMid), "sub_area", false);
                 if(supAreaTb2) supAreaTb2.innerHTML = _epTableRows(supSorted.slice(supMid),    "sub_area", true, sup.area);
             }
-        } catch(e) { console.error("EP support summary failed", e); }
+        }
 
         // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
         if(areas && areas.length) {
