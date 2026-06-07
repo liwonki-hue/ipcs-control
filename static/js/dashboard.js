@@ -634,13 +634,38 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
 
         const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
         const _areaRank = (areaName) => { const i = AREA_ORDER.indexOf(areaName); return i < 0 ? 99 : i; };
+        const _progressDesc = (a, b) => {
+            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
+            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
+            return pb - pa;
+        };
+        const _prNum = (name) => { const m = name.match(/PR\s*#\s*(\d+)/i); return m ? parseInt(m[1]) : 0; };
+        const _mbRank = (name) => {
+            if (name === "MB STR") return 0;
+            if (/^HRSG/i.test(name)) return 1;
+            if (/^GT/i.test(name))   return 2;
+            return 3;
+        };
         const _byAreaThenProgress = (subareaMap) => (a, b) => {
             const ra = _areaRank(subareaMap[a.sub_area] || "");
             const rb = _areaRank(subareaMap[b.sub_area] || "");
             if (ra !== rb) return ra - rb;
-            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
-            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
-            return pb - pa;
+
+            const area = subareaMap[a.sub_area] || "";
+            const isPR = (n) => /^PR\s*#/i.test(n);
+
+            if (area === "YARD") {
+                const aP = isPR(a.sub_area), bP = isPR(b.sub_area);
+                if (aP !== bP) return aP ? 1 : -1;       // non-PR before PR
+                if (aP)        return _prNum(a.sub_area) - _prNum(b.sub_area); // PR: 오름차순
+                return _progressDesc(a, b);               // non-PR: progress 내림차순
+            }
+            if (area === "MB #1" || area === "MB #2") {
+                const ma = _mbRank(a.sub_area), mb2 = _mbRank(b.sub_area);
+                if (ma !== mb2) return ma - mb2;          // MB STR → HRSG → GT
+                return _progressDesc(a, b);
+            }
+            return _progressDesc(a, b);
         };
 
         const sysTb = document.getElementById("epSysTableBody");
