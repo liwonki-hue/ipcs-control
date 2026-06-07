@@ -672,13 +672,24 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             return _progressDesc(a, b);
         };
 
+        const pipingSysSorted = [...(systems || [])].sort(_byProgressDesc);
         const sysTb = document.getElementById("epSysTableBody");
-        if(sysTb && systems) sysTb.innerHTML = _epTableRows([...systems].sort(_byProgressDesc), "system", true);
+        if(sysTb && systems) sysTb.innerHTML = _epTableRows(pipingSysSorted, "system", true);
 
         // Support tables (sup already fetched above for KPI)
         if(sup) {
             const supSysTb = document.getElementById("epSupSysTableBody");
-            if(supSysTb && sup.sys) supSysTb.innerHTML = _epTableRows([...sup.sys].sort(_byProgressDesc), "system", true);
+            if(supSysTb && sup.sys) {
+                const pipingOrder = pipingSysSorted.map(s => s.system);
+                const supSysSorted = [...sup.sys].sort((a, b) => {
+                    const ia = pipingOrder.indexOf(a.system), ib = pipingOrder.indexOf(b.system);
+                    if (ia === -1 && ib === -1) return 0;
+                    if (ia === -1) return 1;
+                    if (ib === -1) return -1;
+                    return ia - ib;
+                });
+                supSysTb.innerHTML = _epTableRows(supSysSorted, "system", true);
+            }
             if(sup.area && sup.area.length) {
                 const supSorted = [...sup.area].sort(_byAreaThenProgress(subareaMap));
                 const supMid = Math.ceil(supSorted.length / 2);
