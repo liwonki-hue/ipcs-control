@@ -1668,6 +1668,23 @@ def api_area_field_quantities():
         return jsonify({"error": str(e)}), 500
 
 # ── Support Master CRUD ───────────────────────────────────────────────
+@app.route("/api/ep-support-summary")
+def api_ep_support_summary():
+    try:
+        rows = get_sb().table("support_master").select("system,sub_area,date_completed").eq("phase","EP").execute().data or []
+        sys_map, area_map = {}, {}
+        for r in rows:
+            s, a = r.get("system",""), r.get("sub_area","")
+            comp = 1 if r.get("date_completed") else 0
+            sys_map.setdefault(s, {"system": s, "total_di": 0, "completed_di": 0})
+            sys_map[s]["total_di"] += 1; sys_map[s]["completed_di"] += comp
+            area_map.setdefault(a, {"sub_area": a, "total_di": 0, "completed_di": 0})
+            area_map[a]["total_di"] += 1; area_map[a]["completed_di"] += comp
+        return jsonify({"sys": list(sys_map.values()), "area": list(area_map.values())})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/support-master", methods=["GET"])
 def api_support_get():
     try:

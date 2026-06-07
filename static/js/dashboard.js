@@ -637,6 +637,21 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             if(areaTb2) areaTb2.innerHTML = _epTableRows(sorted.slice(mid),    "sub_area", true, areas);
         }
 
+        // Support tables
+        try {
+            const sup = await apiFetch("/api/ep-support-summary");
+            const supSysTb = document.getElementById("epSupSysTableBody");
+            if(supSysTb && sup.sys) supSysTb.innerHTML = _epTableRows([...sup.sys].sort(_byProgressDesc), "system", true);
+            if(sup.area && sup.area.length) {
+                const supSorted = [...sup.area].sort(_byProgressDesc);
+                const supMid = Math.ceil(supSorted.length / 2);
+                const supAreaTb  = document.getElementById("epSupAreaTableBody");
+                const supAreaTb2 = document.getElementById("epSupAreaTableBody2");
+                if(supAreaTb)  supAreaTb.innerHTML  = _epTableRows(supSorted.slice(0, supMid), "sub_area", false);
+                if(supAreaTb2) supAreaTb2.innerHTML = _epTableRows(supSorted.slice(supMid),    "sub_area", true, sup.area);
+            }
+        } catch(e) { console.error("EP support summary failed", e); }
+
         if(weekly && weekly.length > 0) {
             // EP Target = week 40 (2026-12-30). Show all weeks 1-40 on x-axis.
             const EP_TARGET_WK = 40;

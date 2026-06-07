@@ -140,11 +140,11 @@
           <div class="panel"><div class="panel-title">EP S-Curve &mdash; Target vs Actual (until 2026-12-30)</div><div style="position:relative;height:220px"><canvas id="epScurveChart"></canvas></div></div>
         </div>
       </div>
-      <!-- Bottom: 3-column table grid (like Weekly Productivity) -->
+      <!-- Bottom: Piping 3-column table grid -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start">
-        <!-- Col 1: EP System table -->
+        <!-- Col 1: Piping EP System table -->
         <div class="panel">
-          <div class="panel-title">Progress by EP System</div>
+          <div class="panel-title">Piping Progress by EP System</div>
           <div class="table-wrap">
             <table class="data-table" style="width:100%;table-layout:fixed">
               <colgroup><col style="width:30%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
@@ -159,9 +159,9 @@
             </table>
           </div>
         </div>
-        <!-- Col 2: EP Sub Area (1) -->
+        <!-- Col 2: Piping EP Sub Area (1) -->
         <div class="panel">
-          <div class="panel-title">Progress by EP Sub Area (1)</div>
+          <div class="panel-title">Piping Progress by EP Sub Area (1)</div>
           <div class="table-wrap">
             <table class="data-table" style="width:100%;table-layout:fixed">
               <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
@@ -176,9 +176,9 @@
             </table>
           </div>
         </div>
-        <!-- Col 3: EP Sub Area (2) + TOTAL -->
+        <!-- Col 3: Piping EP Sub Area (2) + TOTAL -->
         <div class="panel">
-          <div class="panel-title">Progress by EP Sub Area (2)</div>
+          <div class="panel-title">Piping Progress by EP Sub Area (2)</div>
           <div class="table-wrap">
             <table class="data-table" style="width:100%;table-layout:fixed">
               <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
@@ -190,6 +190,60 @@
                 <th>PROGRESS</th>
               </tr></thead>
               <tbody id="epAreaTableBody2"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Support: 3-column table grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;margin-top:12px">
+        <!-- Col 1: Support EP System table -->
+        <div class="panel">
+          <div class="panel-title">Support Progress by EP System</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:30%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SYSTEM</th>
+                <th>TOTAL</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epSupSysTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Col 2: Support EP Sub Area (1) -->
+        <div class="panel">
+          <div class="panel-title">Support Progress by EP Sub Area (1)</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SUB AREA</th>
+                <th>TOTAL</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epSupAreaTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- Col 3: Support EP Sub Area (2) + TOTAL -->
+        <div class="panel">
+          <div class="panel-title">Support Progress by EP Sub Area (2)</div>
+          <div class="table-wrap">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
+              <thead><tr>
+                <th style="text-align:left">SUB AREA</th>
+                <th>TOTAL</th>
+                <th>COMPLETED</th>
+                <th>REMAINING</th>
+                <th>PROGRESS</th>
+              </tr></thead>
+              <tbody id="epSupAreaTableBody2"></tbody>
             </table>
           </div>
         </div>
