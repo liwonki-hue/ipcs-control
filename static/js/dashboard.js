@@ -2141,17 +2141,8 @@ async function exportWelderExcel() {
 // ================================================================================
 let smData = [], smCurrentPage = 0;
 const SM_PAGE_SIZE = 30;
-let _smPhaseSynced = false;
 
 async function loadSupportMaster() {
-    // 세션 첫 로드 시 ISO Drawing 기준으로 Phase/Package 자동 매칭 (백그라운드)
-    if (!_smPhaseSynced) {
-        _smPhaseSynced = true;
-        fetch("/api/support-master/sync-phase-package", {method: "POST"})
-            .then(r => r.json())
-            .then(d => { if (d.ok && d.updated > 0) loadSupportMaster(); })
-            .catch(() => {});
-    }
     const unit    = document.getElementById("sm-unit")?.value    || "";
     const system  = document.getElementById("sm-system")?.value  || "";
     const subarea = document.getElementById("sm-subarea")?.value || "";
