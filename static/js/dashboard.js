@@ -618,16 +618,23 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             </tr>`;
         }
 
+        const _byProgressDesc = (a, b) => {
+            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
+            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
+            return pb - pa;
+        };
+
         const sysTb = document.getElementById("epSysTableBody");
-        if(sysTb && systems) sysTb.innerHTML = _epTableRows(systems, "system", true);
+        if(sysTb && systems) sysTb.innerHTML = _epTableRows([...systems].sort(_byProgressDesc), "system", true);
 
         // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
         if(areas && areas.length) {
-            const mid = Math.ceil(areas.length / 2);
+            const sorted = [...areas].sort(_byProgressDesc);
+            const mid = Math.ceil(sorted.length / 2);
             const areaTb  = document.getElementById("epAreaTableBody");
             const areaTb2 = document.getElementById("epAreaTableBody2");
-            if(areaTb)  areaTb.innerHTML  = _epTableRows(areas.slice(0, mid), "sub_area", false);
-            if(areaTb2) areaTb2.innerHTML = _epTableRows(areas.slice(mid),    "sub_area", true, areas);
+            if(areaTb)  areaTb.innerHTML  = _epTableRows(sorted.slice(0, mid), "sub_area", false);
+            if(areaTb2) areaTb2.innerHTML = _epTableRows(sorted.slice(mid),    "sub_area", true, areas);
         }
 
         if(weekly && weekly.length > 0) {
