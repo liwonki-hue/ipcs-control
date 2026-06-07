@@ -1194,7 +1194,6 @@ function renderJMTable(rows){
             <td style="white-space:nowrap">
                 <button type="button" class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button>
                 <button type="button" class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
-                <button type="button" class="btn-del-row" onclick="deleteJoint(${r.id})" title="Delete">DEL</button>
             </td>
         </tr>`;
     }).join("");
@@ -2605,12 +2604,14 @@ async function loadTestMaster() {
     const system  = document.getElementById("tm-system")?.value  || "";
     const pkg     = document.getElementById("tm-package")?.value || "";
     const status  = document.getElementById("tm-status")?.value  || "";
+    const search  = document.getElementById("tm-search")?.value.trim() || "";
     const offset  = tmCurrentPage * TM_PAGE;
     try {
         let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
         if (system) url += `&system=${encodeURIComponent(system)}`;
         if (pkg)    url += `&test_pkg_no=${encodeURIComponent(pkg)}`;
         if (status) url += `&status=${encodeURIComponent(status)}`;
+        if (search) url += `&q=${encodeURIComponent(search)}`;
         const res = await apiFetch(url);
         tmData = res.data || [];
         document.getElementById("tm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
@@ -2699,7 +2700,9 @@ function renderTMTable(data) {
         return;
     }
     const iopt = v => v ? ` selected` : "";
-    const cin  = "width:92%;text-align:center;color:#000;background:#fff";
+    const fnt  = "font-family:'DM Mono',monospace;font-size:11px;font-weight:400";
+    const cin  = `width:92%;text-align:center;color:#000;background:#fff;${fnt}`;
+    const ssel = `width:98%;text-align:center;color:#000;background:#fff;${fnt}`;
     tbody.innerHTML = data.map((r, i) => {
         const dc  = r.date_completed ? r.date_completed.substring(0,10) : "";
         const res = r.completed ? "PASS" : (dc ? "FAIL" : "");
@@ -2714,21 +2717,22 @@ function renderTMTable(data) {
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
             <td style="text-align:center">${readinessBadge}</td>
             <td style="text-align:center">
-                <select class="cell-input" id="tm-method-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff">
-                    <option value="" color="#000">-</option>
-                    <option value="Pneumatic"  ${r.method==="Pneumatic" ?" selected":""} color="#000">Pneumatic</option>
-                    <option value="Hydro"      ${r.method==="Hydro"     ?" selected":""} color="#000">Hydro</option>
-                    <option value="In Service" ${r.method==="In Service"?" selected":""} color="#000">In Service</option>
+                <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
+                    <option value="" style="color:#000">-</option>
+                    <option value="Visual"     ${r.method==="Visual"    ?" selected":""} style="color:#000">Visual</option>
+                    <option value="Pneumatic"  ${r.method==="Pneumatic" ?" selected":""} style="color:#000">Pneumatic</option>
+                    <option value="Hydro"      ${r.method==="Hydro"     ?" selected":""} style="color:#000">Hydro</option>
+                    <option value="In Service" ${r.method==="In Service"?" selected":""} style="color:#000">In Service</option>
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${r.test_pressure||""}" style="${cin}"></td>
             <td style="text-align:center">
-                <select class="cell-input" id="tm-media-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff">
-                    <option value="" color="#000">-</option>
-                    <option value="IA (N2 Gas)"   ${r.media==="IA (N2 Gas)"  ?" selected":""} color="#000">IA (N2 Gas)</option>
-                    <option value="Water"         ${r.media==="Water"        ?" selected":""} color="#000">Water</option>
-                    <option value="Demi. Water"   ${r.media==="Demi. Water"  ?" selected":""} color="#000">Demi. Water</option>
+                <select class="cell-input" id="tm-media-${r.id}" style="${ssel}">
+                    <option value="" style="color:#000">-</option>
+                    <option value="IA (N2 Gas)"   ${r.media==="IA (N2 Gas)"  ?" selected":""} style="color:#000">IA (N2 Gas)</option>
+                    <option value="Water"         ${r.media==="Water"        ?" selected":""} style="color:#000">Water</option>
+                    <option value="Demi. Water"   ${r.media==="Demi. Water"  ?" selected":""} style="color:#000">Demi. Water</option>
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>
@@ -2737,10 +2741,10 @@ function renderTMTable(data) {
                 oninput="this.style.color=this.value?'#000':'transparent'"
                 onchange="this.style.color=this.value?'#000':'transparent'"></td>
             <td style="text-align:center">
-                <select class="cell-input" id="tm-result-${r.id}" style="width:90%;text-align:center;color:#000;background:#fff">
-                    <option value=""${iopt(!res)} color="#000">-</option>
-                    <option value="PASS"${iopt(res==="PASS")} color="#000">PASS</option>
-                    <option value="FAIL"${iopt(res==="FAIL")} color="#000">FAIL</option>
+                <select class="cell-input" id="tm-result-${r.id}" style="width:90%;text-align:center;color:#000;background:#fff;${fnt}">
+                    <option value=""${iopt(!res)} style="color:#000">-</option>
+                    <option value="PASS"${iopt(res==="PASS")} style="color:#000">PASS</option>
+                    <option value="FAIL"${iopt(res==="FAIL")} style="color:#000">FAIL</option>
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-remark-${r.id}" value="${r.remark||""}" style="${cin}"></td>
@@ -2856,9 +2860,6 @@ function _renderRtKpi(kpi) {
     set("rt-welders",     kpi.welder_count ?? "—");
 }
 
-// RT 불량 원인별 세로막대 차트
-// RT 불량 원인별 세로막대 — 연두색 단색, 막대 상부 라벨
-// RT 불량 원인별 — Monthly Trend와 동일한 연두색
 function _renderRtFindingChart(byFinding) {
     destroyChart("rtFindingChart");
     const el = document.getElementById("rtFindingChart");
@@ -2948,8 +2949,8 @@ function _renderRtMonthlyChart(byMonth) {
                     type: "bar",
                     label: "Repair",
                     data: byMonth.map(m => m.repair),
-                    backgroundColor: "rgba(245,158,11,0.45)",
-                    borderColor: "#f59e0b",
+                    backgroundColor: "rgba(34,211,161,0.4)",
+                    borderColor: "#22d3a1",
                     borderWidth: 1,
                     barPercentage: 0.46,
                     categoryPercentage: 0.65,
@@ -2968,16 +2969,16 @@ function _renderRtMonthlyChart(byMonth) {
                     type: "line",
                     label: "Repair Rate (%)",
                     data: byMonth.map(m => m.repair_rate),
-                    borderColor: "#f59e0b",
-                    backgroundColor: "rgba(245,158,11,0.08)",
+                    borderColor: "#2563eb",
+                    backgroundColor: "rgba(37,99,235,0.08)",
                     borderWidth: 2,
                     pointRadius: 5,
-                    pointBackgroundColor: "#f59e0b",
+                    pointBackgroundColor: "#2563eb",
                     tension: 0.3,
                     yAxisID: "y2",
                     datalabels: {
                         display: true,
-                        color: "#f59e0b",
+                        color: "#2563eb",
                         font: { size: 12, weight: "bold" },
                         anchor: "end",
                         align: "top",
@@ -3003,7 +3004,7 @@ function _renderRtMonthlyChart(byMonth) {
                 },
                 y2: {
                     type: "linear", position: "right", beginAtZero: true,
-                    ticks: { color: "#f59e0b", font: { size: 10 }, callback: v => v + "%" },
+                    ticks: { color: "#2563eb", font: { size: 10 }, callback: v => v + "%" },
                     grid: { display: false }
                 }
             },

@@ -484,12 +484,12 @@
       <!-- 차트 2개 -->
       <div class="grid-2" style="margin-bottom:10px">
         <div class="panel">
-          <div class="panel-title">RT Defect by Cause</div>
-          <div style="position:relative;height:300px"><canvas id="rtFindingChart"></canvas></div>
-        </div>
-        <div class="panel">
           <div class="panel-title">Monthly RT Trend</div>
           <div style="position:relative;height:340px"><canvas id="rtMonthlyChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">RT Defect by Cause</div>
+          <div style="position:relative;height:300px"><canvas id="rtFindingChart"></canvas></div>
         </div>
       </div>
 
@@ -641,28 +641,28 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1700px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1240px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th rowspan="2" style="width:200px">ISO Drawing No</th>
-                <th rowspan="2" style="width:45px">Rev</th>
-                <th rowspan="2" style="width:45px">Jnt</th>
-                <th rowspan="2" style="width:160px">Welder</th>
-                <th rowspan="2" style="width:85px">Inspec</th>
+                <th rowspan="2" style="width:235px">ISO Drawing No</th>
+                <th rowspan="2" style="width:56px">Rev</th>
+                <th rowspan="2" style="width:70px">Jnt</th>
+                <th rowspan="2" style="width:165px">Welder</th>
+                <th rowspan="2" style="width:42px">Inspec</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">PT</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">MT</th>
                 <th colspan="3" style="border-bottom:1px solid var(--border)">RT 1st</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border); background:rgba(59,130,246,0.12)">RT 2nd</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">PWHT</th>
-                <th rowspan="2" style="width:80px">Action</th>
+                <th rowspan="2" style="width:48px">Action</th>
               </tr>
               <tr>
-                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
-                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
-                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none;border-right:none">Result</th>
-                <th style="width:490px;font-size:9px;border-right:none;border-left:none">Finding</th>
-                <th style="width:100px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:15px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
-                <th style="width:100px;font-size:9px;border-right:none">Date</th><th style="width:15px;font-size:9px;border-left:none">Result</th>
+                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
+                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
+                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none;border-right:none">Result</th>
+                <th style="width:88px;font-size:9px;border-right:none;border-left:none">Finding</th>
+                <th style="width:70px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:36px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
+                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
               </tr>
             </thead>
             <tbody id="ndeBody"></tbody>
@@ -741,6 +741,7 @@
             <option value="pass">PASS</option>
             <option value="pending">Pending</option>
           </select>
+          <input id="tm-search" class="filter-sel" type="text" style="min-width:180px;" onkeydown="if(event.key==='Enter'){tmCurrentPage=0;loadTestMaster();}">
           <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>

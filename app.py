@@ -2059,12 +2059,16 @@ def api_testpkg_get():
         subarea  = request.args.get("sub_area",    "").strip()
         pkg_no   = request.args.get("test_pkg_no", "").strip()
         status   = request.args.get("status",      "").strip()
+        search   = request.args.get("q",           "").strip()
         q = sb.table("test_package_master").select("*", count="exact")
         if system:  q = q.eq("system",      system)
         if subarea: q = q.eq("sub_area",    subarea)
         if pkg_no:  q = q.eq("test_pkg_no", pkg_no)
         if status == "pass":    q = q.eq("completed", True)
         if status == "pending": q = q.eq("completed", False)
+        if search:
+            like = f"%{search}%"
+            q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
         res = q.order("id").range(offset, offset + limit - 1).execute()
         rows = res.data or []
 

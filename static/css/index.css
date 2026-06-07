@@ -15,7 +15,7 @@
   --muted: #94a3b8;
   --text: #1e293b;
   --text-dim: #475569;
-  --sidebar-w: 218px;
+  --sidebar-w: 200px;
   --header-h: 52px;
 }
 
@@ -339,8 +339,9 @@ select:focus, input:focus { border-color: var(--accent); }
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
-    font-family: 'DM Mono', monospace;
-    font-size: 11px;
+    font-family: 'DM Mono', monospace !important;
+    font-size: 11px !important;
+    font-weight: 400 !important;
     width: 100%;
     text-align: center !important;
     padding: 4px 6px;
@@ -357,6 +358,7 @@ select:focus, input:focus { border-color: var(--accent); }
     opacity: 0.5;
 }
 input.cell-input { box-sizing: border-box !important; text-align: center !important; min-width: 0 !important; }
+select.cell-input { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; text-align: center !important; text-align-last: center !important; }
 
 /* date input 빈 값일 때 "연도-월-일" 숨김 */
 input[type="date"].date-empty::-webkit-datetime-edit { color: transparent; }
