@@ -988,7 +988,8 @@ async function loadUnitArea() {
             return `<div class="unit-card"><div class="unit-card-name">Unit ${u.unit}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(u.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(u.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-di">${(u.total_joints||0).toLocaleString()} joints</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
-        const allAreasKpi = dash.areas || [];
+        const _areaDisplayOrder = { "YD BLDG": 1, "YARD": 2, "MB #1": 3, "MB #2": 4 };
+        const allAreasKpi = [...(dash.areas || [])].sort((a, b) => (_areaDisplayOrder[a.area]||99) - (_areaDisplayOrder[b.area]||99));
         document.getElementById("areaCards").innerHTML = allAreasKpi.map(a => {
             const p=a.progress_pct, c=pctColor(p);
             return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${a.area}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
@@ -1033,7 +1034,7 @@ async function loadUnitArea() {
 
         // ── Area Chart: Stacked horizontal (Completed DI + Remaining DI)
         const allAreas = dash.areas || [];
-        const areaOrder = { "MB #1": 1, "MB #2": 2, "YD BLDG": 3, "YARD": 4 };
+        const areaOrder = { "YD BLDG": 1, "YARD": 2, "MB #1": 3, "MB #2": 4 };
         const sortedAreas = [...allAreas].sort((a, b) => (areaOrder[a.area]||99) - (areaOrder[b.area]||99));
 
         destroyChart("areaChart");
