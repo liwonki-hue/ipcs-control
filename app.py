@@ -945,7 +945,7 @@ def api_joints_get():
         if pkg:     q = q.eq("package",     pkg)
         if welder:  q = q.ilike("welder",   f"%{welder}%")
         if nde_only == "true":
-            q = q.or_("inspection.in.(PT,MT,RT),not.pt_date.is.null,not.mt_date.is.null,not.rt_date.is.null,not.pwht_date.is.null")
+            q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
         if status == "completed": q = q.not_.is_("date_completed", "null")
         if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
