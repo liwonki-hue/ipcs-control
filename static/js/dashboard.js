@@ -2719,8 +2719,6 @@ function renderTMTable(data) {
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
             <td style="text-align:center">${readinessBadge}</td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${r.test_pressure||""}" style="${cin}"></td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff">
                     <option value="" color="#000">-</option>
@@ -2729,7 +2727,16 @@ function renderTMTable(data) {
                     <option value="In Service" ${r.method==="In Service"?" selected":""} color="#000">In Service</option>
                 </select>
             </td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-media-${r.id}" value="${r.media||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${r.test_pressure||""}" style="${cin}"></td>
+            <td style="text-align:center">
+                <select class="cell-input" id="tm-media-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff">
+                    <option value="" color="#000">-</option>
+                    <option value="IA (N2 Gas)"   ${r.media==="IA (N2 Gas)"  ?" selected":""} color="#000">IA (N2 Gas)</option>
+                    <option value="Water"         ${r.media==="Water"        ?" selected":""} color="#000">Water</option>
+                    <option value="Demi. Water"   ${r.media==="Demi. Water"  ?" selected":""} color="#000">Demi. Water</option>
+                </select>
+            </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>
             <td style="text-align:center"><input type="date" class="cell-input" id="tm-date-${r.id}" value="${dc}"
                 style="width:100%;text-align:center;color:${dateColor};background:#fff"
@@ -2759,7 +2766,7 @@ async function saveTMRow(id) {
         design_pressure: document.getElementById(`tm-dp-${id}`)?.value?.trim()     || null,
         test_pressure:   document.getElementById(`tm-tp-${id}`)?.value?.trim()     || null,
         method:          document.getElementById(`tm-method-${id}`)?.value          || null,
-        media:           document.getElementById(`tm-media-${id}`)?.value?.trim()  || null,
+        media:           document.getElementById(`tm-media-${id}`)?.value          || null,
         holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
         date_completed:  dateVal || null,
         completed:       completed,
