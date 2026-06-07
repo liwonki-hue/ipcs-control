@@ -663,6 +663,10 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             if (area === "MB #1" || area === "MB #2") {
                 const ma = _mbRank(a.sub_area), mb2 = _mbRank(b.sub_area);
                 if (ma !== mb2) return ma - mb2;          // MB STR → HRSG → GT
+                // HRSG/GT 내부: 번호 오름차순 (#11 → #12)
+                const numOf = (n) => { const m = n.match(/#\s*(\d+)/); return m ? parseInt(m[1]) : 0; };
+                const na = numOf(a.sub_area), nb = numOf(b.sub_area);
+                if (na !== nb) return na - nb;
                 return _progressDesc(a, b);
             }
             return _progressDesc(a, b);
