@@ -8,14 +8,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=6.4">
+<link rel="stylesheet" href="/static/css/index.css?v=6.5">
 </head>
 <body>
 
 <nav class="sidebar">
   <div class="sidebar-logo">
     <div class="logo-icon">&#9889;</div>
-    <div class="logo-title">BOP DASHBOARD</div>
+    <div class="logo-title">BOP PIPING DASHBOARD</div>
     <div class="logo-sub">CCGT PIPING PROGRESS</div>
   </div>
   <div class="nav-section">Monitoring</div>
@@ -24,7 +24,9 @@
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Weekly Productivity</button>
   <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
+  <div class="nav-section">Analysis</div>
   <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
+  <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon">&#128269;</span> RT Quality Performance</button>
   <div class="nav-section">Data Input</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
@@ -44,7 +46,7 @@
 <div class="main-area">
   <header class="top-header">
     <div>
-      <div class="header-title">&#9889; CCGT BOP PIPING PROGRESS DASHBOARD</div>
+      <div class="header-title">&#9889; TRUKISTAN CCGT PIPING DASHBOARD</div>
       <div class="header-sub">DOOSAN ENERBILITY &middot; LLP INTEGRA CONSTRUCTION KZ &middot; KAZAKHSTAN CCGT</div>
     </div>
     <div class="header-right">
@@ -462,6 +464,96 @@
       </div>
     </div>
 
+    <!-- ═══════════ RT QUALITY PERFORMANCE ═══════════ -->
+    <div class="page hidden" id="page-rt_quality">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">RT Quality Performance</div></div>
+
+      <!-- KPI 카드 -->
+      <div class="panel" style="margin-bottom:10px">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px" id="rtKpiRow">
+          <div class="kpi-card" style="border-top-color:#ef4444"><div class="kpi-label">Repair Rate</div><div class="kpi-value" id="rt-repair-rate" style="color:#ef4444">—</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">% of RT shots</div></div>
+          <div class="kpi-card"><div class="kpi-label">Total RT Shots</div><div class="kpi-value" id="rt-total" style="color:var(--accent)">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">1st PASS</div><div class="kpi-value" id="rt-first-pass" style="color:var(--green)">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Repair (1st FAIL)</div><div class="kpi-value" id="rt-repair" style="color:var(--orange)">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">2nd PASS</div><div class="kpi-value" id="rt-second-pass" style="color:var(--cyan)">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">2nd FAIL</div><div class="kpi-value" id="rt-second-fail" style="color:#ef4444">—</div></div>
+          <div class="kpi-card"><div class="kpi-label">Welders (RT)</div><div class="kpi-value" id="rt-welders" style="color:var(--indigo)">—</div></div>
+        </div>
+      </div>
+
+      <!-- 차트 2개 -->
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="panel">
+          <div class="panel-title">RT Defect by Cause</div>
+          <div style="position:relative;height:300px"><canvas id="rtFindingChart"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Monthly RT Trend</div>
+          <div style="position:relative;height:340px"><canvas id="rtMonthlyChart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- 시스템별 테이블 + Welder 테이블 -->
+      <div class="grid-2" style="margin-bottom:10px;align-items:start">
+        <div class="panel">
+          <div class="panel-title">Repair Rate by System</div>
+          <div class="table-wrap" style="max-height:264px;overflow-y:auto;scrollbar-gutter:stable">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:22%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:18%"></colgroup>
+              <thead><tr>
+                <th style="text-align:center">System</th>
+                <th style="text-align:center">Total RT</th>
+                <th style="text-align:center">PASS</th>
+                <th style="text-align:center">Repair</th>
+                <th style="text-align:center">Remaining</th>
+                <th style="text-align:center">Repair Rate</th>
+              </tr></thead>
+              <tbody id="rtSystemBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-title">Welder Repair Rate Summary</div>
+          <div class="table-wrap" style="max-height:264px;overflow-y:auto;scrollbar-gutter:stable">
+            <table class="data-table" style="width:100%;table-layout:fixed">
+              <colgroup><col style="width:22%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:15%"><col style="width:18%"></colgroup>
+              <thead><tr>
+                <th style="text-align:center">Welder</th>
+                <th style="text-align:center">Total RT</th>
+                <th style="text-align:center">PASS</th>
+                <th style="text-align:center">Repair</th>
+                <th style="text-align:center">Remaining</th>
+                <th style="text-align:center">Repair Rate</th>
+              </tr></thead>
+              <tbody id="rtWelderBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Repair 상세 목록 -->
+      <div class="panel">
+        <div class="panel-title">Repair Joint List <span id="rtRepairCount" style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px"></span></div>
+        <div class="table-wrap" style="max-height:360px;overflow-y:auto;scrollbar-gutter:stable">
+          <table class="data-table" style="width:100%;min-width:900px;table-layout:fixed">
+            <colgroup>
+              <col style="width:7%"><col style="width:5%"><col style="width:19%">
+              <col style="width:5%"><col style="width:12%">
+              <col style="width:10%"><col style="width:8%"><col style="width:16%">
+              <col style="width:10%"><col style="width:8%">
+            </colgroup>
+            <thead><tr>
+              <th>System</th><th>S/F</th><th>ISO Drawing</th>
+              <th>Jnt</th><th>Welder</th>
+              <th>RT 1st Date</th><th>RT 1st</th><th>Finding</th>
+              <th>RT 2nd Date</th><th>RT 2nd</th>
+            </tr></thead>
+            <tbody id="rtRepairBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ═══════════ SUPPORT MASTER ═══════════ -->
     <div class="page hidden" id="page-support_master">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master Data</div></div>
@@ -758,6 +850,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=7.16"></script>
+<script src="/static/js/dashboard.js?v=7.26"></script>
 </body>
 </html>

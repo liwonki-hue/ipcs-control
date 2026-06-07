@@ -7,7 +7,7 @@ import bisect
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from collections import defaultdict
+from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request
 from supabase import create_client, Client
@@ -1320,9 +1320,8 @@ def api_welder_summary():
 @app.route("/api/welder-daily")
 def api_welder_daily():
     try:
-        from datetime import date as _date
         sb  = get_sb()
-        cutoff = (_date.today() - timedelta(days=120)).isoformat()
+        cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
         res = sb.table("joint_master") \
             .select("date_completed, welder, di") \
             .gte("date_completed", cutoff) \
@@ -1423,7 +1422,7 @@ def api_joints_import():
 # ── Sync Phase + Package from local Excel ─────────────────────────────
 @app.route("/api/joints/sync-phase-package", methods=["POST"])
 def api_joints_sync_phase_package():
-    import openpyxl, os
+    import openpyxl
     EXCEL_PATH = os.path.join(os.path.dirname(__file__), "Raw File", "BOP Piping Joint Master.xlsx")
     try:
         if not os.path.exists(EXCEL_PATH):
@@ -1627,6 +1626,159 @@ def api_testpkg_joints():
         return jsonify({"error": str(e)}), 500
 
 
+# ── RT Quality Performance ─────────────────────────────────────────────
+@app.route("/api/rt-quality")
+def api_rt_quality():
+    """RT 불량률 분석: 전체 KPI, 용접사별/시스템별/월별 repair rate, repair 상세 목록."""
+    try:
+        sb = get_sb()
+        cols = ("id,system,sub_area,iso_drawing,joint_no,welder,sf,"
+                "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,date_completed")
+
+        # RT 촬영된 조인트 전체 수집 (rt_date 있는 행 대상)
+        rows, offset_ = [], 0
+        while True:
+            res = (sb.table("joint_master")
+                     .select(cols)
+                     .not_.is_("rt_date", "null")
+                     .order("rt_date")
+                     .range(offset_, offset_ + 999)
+                     .execute())
+            batch = res.data or []
+            rows.extend(batch)
+            if len(batch) < 1000:
+                break
+            offset_ += 1000
+
+        # KPI 집계
+        total      = len(rows)
+        first_pass = sum(1 for r in rows if r.get("rt_result") == "PASS")
+        repair     = sum(1 for r in rows if r.get("rt_result") not in ("PASS", None, ""))
+        second_pass = sum(1 for r in rows
+                         if r.get("rt_result") not in ("PASS", None, "")
+                         and r.get("rt_2_result") == "PASS")
+        second_fail = repair - second_pass
+
+        def pct(n, d):
+            return round(n / d * 100, 1) if d else 0.0
+
+        kpi = {
+            "total_rt":     total,
+            "first_pass":   first_pass,
+            "repair":       repair,
+            "repair_rate":  pct(repair, total),
+            "second_pass":  second_pass,
+            "second_fail":  second_fail,
+        }
+
+        # Remaining: repair 후 2nd RT 미촬영 건수
+        remaining_total = sum(
+            1 for r in rows
+            if r.get("rt_result") not in ("PASS", None, "")
+            and not r.get("rt_2_date")
+        )
+        kpi["remaining"] = remaining_total
+
+        # 용접사별 집계 (Repair 건수 내림차순)
+        w_tot  = defaultdict(int)
+        w_pass = defaultdict(int)
+        w_rep  = defaultdict(int)
+        w_rem  = defaultdict(int)
+        for r in rows:
+            welders = [w.strip() for w in (r.get("welder") or "UNKNOWN").split("/") if w.strip()]
+            if not welders:
+                welders = ["UNKNOWN"]
+            is_repair = r.get("rt_result") not in ("PASS", None, "")
+            is_rem    = is_repair and not r.get("rt_2_date")
+            for w in welders:
+                w_tot[w]  += 1
+                if not is_repair: w_pass[w] += 1
+                if is_repair:     w_rep[w]  += 1
+                if is_rem:        w_rem[w]  += 1
+        by_welder = sorted(
+            [{"welder": w, "total": w_tot[w], "pass": w_pass[w],
+              "repair": w_rep[w], "remaining": w_rem[w],
+              "repair_rate": pct(w_rep[w], w_tot[w])}
+             for w in w_tot],
+            key=lambda x: (-x["repair"], -x["repair_rate"])
+        )
+        welder_count = len(w_tot)
+
+        # KPI에 welder_count 추가
+        kpi["welder_count"] = welder_count
+
+        # 기본 시스템 목록 (RT 데이터 없는 시스템도 포함)
+        BASE_SYSTEMS = ["AS", "CCP", "CCW", "FG", "FW", "GT", "HP", "HRSG", "HW", "LP", "RW", "ST"]
+
+        # 시스템별 집계 (Repair 건수 내림차순)
+        s_tot  = defaultdict(int)
+        s_pass = defaultdict(int)
+        s_rep  = defaultdict(int)
+        s_rem  = defaultdict(int)
+        for r in rows:
+            sys = r.get("system") or "—"
+            is_repair = r.get("rt_result") not in ("PASS", None, "")
+            is_rem    = is_repair and not r.get("rt_2_date")
+            s_tot[sys]  += 1
+            if not is_repair: s_pass[sys] += 1
+            if is_repair:     s_rep[sys]  += 1
+            if is_rem:        s_rem[sys]  += 1
+        all_sys = set(s_tot.keys()) | set(BASE_SYSTEMS)
+        by_system = sorted(
+            [{"system": s, "total": s_tot.get(s, 0), "pass": s_pass.get(s, 0),
+              "repair": s_rep.get(s, 0), "remaining": s_rem.get(s, 0),
+              "repair_rate": pct(s_rep.get(s, 0), s_tot.get(s, 0))}
+             for s in all_sys],
+            key=lambda x: (-x["repair"], x["system"])
+        )
+
+        # 월별 집계
+        m_tot = defaultdict(int)
+        m_rep = defaultdict(int)
+        for r in rows:
+            dt = (r.get("rt_date") or "")[:7]  # YYYY-MM
+            if not dt:
+                continue
+            m_tot[dt] += 1
+            if r.get("rt_result") not in ("PASS", None, ""):
+                m_rep[dt] += 1
+        by_month = [
+            {"month": m, "total": m_tot[m], "repair": m_rep[m],
+             "repair_rate": pct(m_rep[m], m_tot[m])}
+            for m in sorted(m_tot)
+        ]
+
+        # 불량 항목별 집계 (rt_finding, repair 건만)
+        f_count = defaultdict(int)
+        for r in rows:
+            if r.get("rt_result") not in ("PASS", None, ""):
+                finding = (r.get("rt_finding") or "Unknown").strip() or "Unknown"
+                f_count[finding] += 1
+        by_finding = sorted(
+            [{"finding": f, "count": c} for f, c in f_count.items()],
+            key=lambda x: -x["count"]
+        )
+
+        # Repair 상세 목록 (rt_result != PASS)
+        repair_list = [
+            {k: r.get(k) for k in
+             ("id","system","sub_area","iso_drawing","joint_no","welder","sf",
+              "rt_date","rt_result","rt_finding","rt_2_date","rt_2_result")}
+            for r in rows if r.get("rt_result") not in ("PASS", None, "")
+        ]
+
+        return jsonify({
+            "kpi":         kpi,
+            "by_welder":   by_welder,
+            "by_system":   by_system,
+            "by_month":    by_month,
+            "by_finding":  by_finding,
+            "repair_list": repair_list,
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Area별 Field DI / Support EA 집계 ─────────────────────────────────
 @app.route("/api/area-field-quantities")
 def api_area_field_quantities():
@@ -1655,7 +1807,6 @@ def api_area_field_quantities():
             offset += batch
 
         # Support EA: 단일 쿼리로 sub_area 필터 후 Python에서 집계 (N+1 제거)
-        from collections import Counter as _Counter
         ea_rows, ea_off = [], 0
         while True:
             r = (sb.table("support_master")
@@ -1666,7 +1817,7 @@ def api_area_field_quantities():
             if len(r.data or []) < 1000:
                 break
             ea_off += 1000
-        ea_by_sub = dict(_Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
+        ea_by_sub = dict(Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
 
         return jsonify({"di": di_by_sub, "ea": ea_by_sub})
     except Exception as e:

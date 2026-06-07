@@ -1,11 +1,10 @@
-// dashboard.js Full frontend logic  v7.16
+// dashboard.js Full frontend logic  v7.26
 
-const API = "";  // Flask runs on same origin
+const API = "";
 let charts = {};
 let jmData = [];
 let jmCurrentPage = 0;
 const JM_PAGE_SIZE = 30;
-let weekData = [];
 let metaData = { units: [], systems: [] };
 
 // ================================================================================
@@ -188,7 +187,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
@@ -207,6 +206,7 @@ function navigate(page) {
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "joint_master":loadJointMaster();  break;
         case "welder":      loadWelder();       break;
+        case "rt_quality":  loadRtQuality();    break;
         case "support_master": loadSupportMaster(); break;
         case "nde_pwht":    loadNdePwht();      break;
         case "testpkg_master": loadTestPkgMaster(); break;
@@ -1839,8 +1839,8 @@ function renderWelder(data, dashData) {
                         type: "bar",
                         label: "Total DI",
                         data: wkSlice.map(w => w.total_di),
-                        backgroundColor: "rgba(34,211,161,0.45)",
-                        borderColor: "#22d3a1",
+                        backgroundColor: "rgba(37,99,235,0.5)",
+                        borderColor: "#2563eb",
                         borderWidth: 1,
                         barPercentage: 0.6,
                         yAxisID: "y",
@@ -1875,7 +1875,7 @@ function renderWelder(data, dashData) {
                 scales: {
                     x: { ticks: { color: "#7a95b8", font: { size: 10 } }, grid: { display: false } },
                     y: { type: "linear", position: "left", beginAtZero: true,
-                         ticks: { color: "#22d3a1", font: { size: 10 } },
+                         ticks: { color: "#60a5fa", font: { size: 10 } },
                          grid: { display: false },
                          title: { display: true, text: "Total DI", color: "#4a6080", font: { size: 10 } } },
                     y2: { type: "linear", position: "right", beginAtZero: true,
@@ -1884,7 +1884,7 @@ function renderWelder(data, dashData) {
                           title: { display: true, text: "AVG DI/DAY PER WELDER", color: "#4a6080", font: { size: 10 } } }
                 },
                 plugins: {
-                    legend: { labels: { color: "#7a95b8", font: { size: 10 }, boxWidth: 10 } },
+                    legend: { position: "top", align: "end", labels: { color: "#475569", font: { size: 10 }, boxWidth: 10, padding: 10 } },
                     tooltip: { backgroundColor: "#111827", borderColor: "#1e2d45", borderWidth: 1,
                                titleColor: "#e2eaf6", bodyColor: "#7a95b8", padding: 10 }
                 }
@@ -1955,7 +1955,7 @@ function renderWelder(data, dashData) {
                 scales: {
                     x: { ticks: { color: "#7a95b8", font: { size: 10 } }, grid: { display: false } },
                     y: { type: "linear", position: "left", beginAtZero: true,
-                         ticks: { color: "#6366f1", font: { size: 10 } },
+                         ticks: { color: "#60a5fa", font: { size: 10 } },
                          grid: { display: false },
                          title: { display: true, text: "Total DI", color: "#4a6080", font: { size: 10 } } },
                     y2: { type: "linear", position: "right", beginAtZero: true,
@@ -1964,7 +1964,7 @@ function renderWelder(data, dashData) {
                           title: { display: true, text: "AVG DI/DAY PER WELDER", color: "#4a6080", font: { size: 10 } } }
                 },
                 plugins: {
-                    legend: { labels: { color: "#7a95b8", font: { size: 10 }, boxWidth: 10 } },
+                    legend: { position: "top", align: "end", labels: { color: "#475569", font: { size: 10 }, boxWidth: 10, padding: 10 } },
                     tooltip: { backgroundColor: "#111827", borderColor: "#1e2d45", borderWidth: 1,
                                titleColor: "#e2eaf6", bodyColor: "#7a95b8", padding: 10 }
                 }
@@ -2806,6 +2806,300 @@ async function syncTestMaster() {
         toast(`Sync 완료: ${data.inserted}건 신규 등록 (전체 ${data.total}건)`);
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
+}
+
+// ================================================================================
+//  RT QUALITY PERFORMANCE
+// ================================================================================
+let _rtData = null;
+
+// rt_finding 텍스트 → 약어 변환
+function _rtFindingAbbr(f) {
+    if (!f || f === "Unknown") return "Unknown";
+    const map = [
+        [/crack/i,                   "CRACK"],
+        [/porosity|poros/i,          "POROS"],
+        [/lack of fusion|lof/i,      "LOF"],
+        [/incomplete fusion/i,       "INC.FUS"],
+        [/incomplete penetration|ip\b/i, "INC.PEN"],
+        [/undercut/i,                "UC"],
+        [/root concavity/i,          "ROOT-C"],
+        [/concavity/i,               "CONC"],
+        [/burn.?through/i,           "B/T"],
+        [/slag/i,                    "SLAG"],
+        [/tungsten/i,                "TI"],
+        [/void/i,                    "VOID"],
+        [/overlap/i,                 "OVLP"],
+        [/misalignment/i,            "MIS"],
+    ];
+    for (const [re, abbr] of map) {
+        if (re.test(f)) return abbr;
+    }
+    return f.length > 9 ? f.slice(0, 8) + "." : f;
+}
+
+async function loadRtQuality() {
+    try {
+        const res = await fetch("/api/rt-quality");
+        if (!res.ok) throw new Error("API error " + res.status);
+        _rtData = await res.json();
+        _renderRtKpi(_rtData.kpi);
+        _renderRtFindingChart(_rtData.by_finding);
+        _renderRtMonthlyChart(_rtData.by_month);
+        _renderRtSystemTable(_rtData.by_system);
+        _renderRtWelderTable(_rtData.by_welder);
+        _renderRtRepairList(_rtData.repair_list);
+    } catch(e) {
+        console.error("RT Quality load failed", e);
+    }
+}
+
+function _renderRtKpi(kpi) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set("rt-repair-rate", kpi.repair_rate != null ? kpi.repair_rate.toFixed(1) + "%" : "—");
+    set("rt-total",       kpi.total_rt     ?? "—");
+    set("rt-first-pass",  kpi.first_pass   ?? "—");
+    set("rt-repair",      kpi.repair       ?? "—");
+    set("rt-second-pass", kpi.second_pass  ?? "—");
+    set("rt-second-fail", kpi.second_fail  ?? "—");
+    set("rt-welders",     kpi.welder_count ?? "—");
+}
+
+// RT 불량 원인별 세로막대 차트
+// RT 불량 원인별 세로막대 — 연두색 단색, 막대 상부 라벨
+// RT 불량 원인별 — Monthly Trend와 동일한 연두색
+function _renderRtFindingChart(byFinding) {
+    destroyChart("rtFindingChart");
+    const el = document.getElementById("rtFindingChart");
+    if (!el) return;
+    if (!byFinding || !byFinding.length) {
+        el.parentElement.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--green);font-size:13px">No defects recorded</div>`;
+        return;
+    }
+    const labels = byFinding.map(d => _rtFindingAbbr(d.finding));
+    const counts = byFinding.map(d => d.count);
+    charts["rtFindingChart"] = new Chart(el.getContext("2d"), {
+        type: "bar",
+        data: {
+            labels,
+            datasets: [{
+                label: "Count",
+                data: counts,
+                backgroundColor: "rgba(37,99,235,0.5)",
+                borderColor: "#2563eb",
+                borderWidth: 1,
+                barPercentage: 0.35,
+                categoryPercentage: 0.6,
+                datalabels: {
+                    display: true,
+                    color: "#2563eb",
+                    font: { size: 14, weight: "bold" },
+                    anchor: "end",
+                    align: "top",
+                    offset: 4,
+                    formatter: v => v
+                }
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            layout: { padding: { top: 32 } },
+            scales: {
+                x: { ticks: { color: "#94a3b8", font: { size: 11 } }, grid: { display: false } },
+                y: {
+                    beginAtZero: true,
+                    suggestedMax: Math.max(...counts) * 1.5,
+                    ticks: { color: "#7a95b8", font: { size: 10 }, stepSize: 1 },
+                    grid: { color: "rgba(255,255,255,0.06)" }
+                }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+// Monthly RT Trend — 범례 오른쪽, 막대 라벨 막대 위에 표시, % 라벨 아래 배치로 겹침 방지
+function _renderRtMonthlyChart(byMonth) {
+    destroyChart("rtMonthlyChart");
+    const el = document.getElementById("rtMonthlyChart");
+    if (!el || !byMonth.length) return;
+
+    const maxTotal = Math.max(...byMonth.map(m => m.total));
+
+    charts["rtMonthlyChart"] = new Chart(el.getContext("2d"), {
+        type: "bar",
+        data: {
+            labels: byMonth.map(m => m.month),
+            datasets: [
+                {
+                    type: "bar",
+                    label: "Total RT",
+                    data: byMonth.map(m => m.total),
+                    backgroundColor: "rgba(37,99,235,0.5)",
+                    borderColor: "#2563eb",
+                    borderWidth: 1,
+                    barPercentage: 0.46,
+                    categoryPercentage: 0.65,
+                    yAxisID: "y",
+                    datalabels: {
+                        display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                        color: "#2563eb",
+                        font: { size: 12, weight: "bold" },
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        formatter: v => v
+                    }
+                },
+                {
+                    type: "bar",
+                    label: "Repair",
+                    data: byMonth.map(m => m.repair),
+                    backgroundColor: "rgba(245,158,11,0.45)",
+                    borderColor: "#f59e0b",
+                    borderWidth: 1,
+                    barPercentage: 0.46,
+                    categoryPercentage: 0.65,
+                    yAxisID: "y",
+                    datalabels: {
+                        display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+                        color: "#2563eb",
+                        font: { size: 12, weight: "bold" },
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        formatter: v => v
+                    }
+                },
+                {
+                    type: "line",
+                    label: "Repair Rate (%)",
+                    data: byMonth.map(m => m.repair_rate),
+                    borderColor: "#f59e0b",
+                    backgroundColor: "rgba(245,158,11,0.08)",
+                    borderWidth: 2,
+                    pointRadius: 5,
+                    pointBackgroundColor: "#f59e0b",
+                    tension: 0.3,
+                    yAxisID: "y2",
+                    datalabels: {
+                        display: true,
+                        color: "#f59e0b",
+                        font: { size: 12, weight: "bold" },
+                        anchor: "end",
+                        align: "top",
+                        offset: 4,
+                        formatter: v => v.toFixed(1) + "%"
+                    }
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 400 },
+            layout: { padding: { top: 36, bottom: 4 } },
+            interaction: { mode: "index", intersect: false },
+            scales: {
+                x: { ticks: { color: "#7a95b8", font: { size: 10 } }, grid: { display: false } },
+                y: {
+                    type: "linear", position: "left", beginAtZero: true,
+                    suggestedMax: maxTotal * 1.5,
+                    ticks: { color: "#2563eb", font: { size: 10 }, stepSize: 1 },
+                    grid: { color: "rgba(0,0,0,0.05)" }
+                },
+                y2: {
+                    type: "linear", position: "right", beginAtZero: true,
+                    ticks: { color: "#f59e0b", font: { size: 10 }, callback: v => v + "%" },
+                    grid: { display: false }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "top",
+                    align: "end",
+                    labels: { color: "#475569", font: { size: 10 }, boxWidth: 12, padding: 10 }
+                }
+            }
+        }
+    });
+}
+
+// Repair Rate 색상 헬퍼
+function _rtRateColor(rate) {
+    if (rate >= 20) return "#ef4444";
+    if (rate >= 10) return "var(--orange)";
+    if (rate > 0)   return "var(--yellow)";
+    return "var(--green)";
+}
+
+const _RT_MONO = "font-family:'DM Mono',monospace";
+
+// 공통 테이블 행 렌더 헬퍼 — 수치 단색(--text-dim), Repair Rate만 색상, 2nd PASS 열 없음
+function _rtTableRow(nameCell, r) {
+    const rateColor = _rtRateColor(r.repair_rate);
+    const dim = "text-align:center;color:var(--text-dim);" + _RT_MONO;
+    return `<tr>
+        ${nameCell}
+        <td style="${dim}">${r.total || 0}</td>
+        <td style="${dim}">${r.pass || 0}</td>
+        <td style="${dim}">${r.repair || 0}</td>
+        <td style="${dim}">${r.remaining || 0}</td>
+        <td style="text-align:center;${_RT_MONO};color:${rateColor};font-weight:700">${(r.repair_rate || 0).toFixed(1)}%</td>
+    </tr>`;
+}
+
+function _renderRtSystemTable(bySystem) {
+    const tbody = document.getElementById("rtSystemBody");
+    if (!tbody) return;
+    if (!bySystem.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No data</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = bySystem.map(r =>
+        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.system}</td>`, r)
+    ).join("");
+}
+
+function _renderRtWelderTable(byWelder) {
+    const tbody = document.getElementById("rtWelderBody");
+    if (!tbody) return;
+    if (!byWelder.length) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No data</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = byWelder.map(r =>
+        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.welder}</td>`, r)
+    ).join("");
+}
+
+function _renderRtRepairList(repairList) {
+    const tbody   = document.getElementById("rtRepairBody");
+    const countEl = document.getElementById("rtRepairCount");
+    if (!tbody) return;
+    if (countEl) countEl.textContent = `(${repairList.length} joints)`;
+    if (!repairList.length) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--green)">No repairs — 100% 1st pass!</td></tr>`;
+        return;
+    }
+    tbody.innerHTML = repairList.map(r => {
+        const res2Color = r.rt_2_result === "PASS" ? "var(--green)" : r.rt_2_result === "FAIL" ? "#ef4444" : "var(--text-dim)";
+        return `<tr>
+            <td style="color:var(--text-dim)">${r.system || "—"}</td>
+            <td style="text-align:center">${r.sf || "—"}</td>
+            <td style="font-size:10px">${r.iso_drawing || "—"}</td>
+            <td style="text-align:center">${r.joint_no || "—"}</td>
+            <td style="color:var(--accent)">${r.welder || "—"}</td>
+            <td style="font-family:'DM Mono',monospace;font-size:10px">${r.rt_date ? r.rt_date.slice(0,10) : "—"}</td>
+            <td style="text-align:center;color:#ef4444;font-weight:700">${r.rt_result || "—"}</td>
+            <td style="font-size:9px">${r.rt_finding || "—"}</td>
+            <td style="font-family:'DM Mono',monospace;font-size:10px">${r.rt_2_date ? r.rt_2_date.slice(0,10) : "—"}</td>
+            <td style="text-align:center;color:${res2Color};font-weight:700">${r.rt_2_result || "—"}</td>
+        </tr>`;
+    }).join("");
 }
 
 async function exportTMExcel() {
