@@ -12,6 +12,8 @@ let metaData = { units: [], systems: [] };
 //  INIT
 // ================================================================================
 let _dashData = null;
+let _epSupportData = null;
+let _epSupportDataTime = 0;
 
 async function getDashData(forceRefresh=false) {
     if (_dashData && !forceRefresh) return _dashData;
@@ -535,7 +537,12 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
         let support_comp = 0, support_tot = 0, subareaMap = {};
         let sup = null;
         try {
-            sup = await apiFetch("/api/ep-support-summary");
+            const now = Date.now();
+            if (!_epSupportData || now - _epSupportDataTime > 1200_000) {
+                _epSupportData = await apiFetch("/api/ep-support-summary");
+                _epSupportDataTime = now;
+            }
+            sup = _epSupportData;
             subareaMap = sup.subarea_map || {};
             support_tot  = (sup.sys || []).reduce((s,r) => s + (r.total_di     || 0), 0);
             support_comp = (sup.sys || []).reduce((s,r) => s + (r.completed_di || 0), 0);
@@ -626,12 +633,6 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             </tr>`;
         }
 
-        const _byProgressDesc = (a, b) => {
-            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
-            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
-            return pb - pa;
-        };
-
         const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
         const _areaRank = (areaName) => { const i = AREA_ORDER.indexOf(areaName); return i < 0 ? 99 : i; };
         const _progressDesc = (a, b) => {
@@ -672,7 +673,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             return _progressDesc(a, b);
         };
 
-        const pipingSysSorted = [...(systems || [])].sort(_byProgressDesc);
+        const pipingSysSorted = [...(systems || [])].sort(_progressDesc);
         const sysTb = document.getElementById("epSysTableBody");
         if(sysTb && systems) sysTb.innerHTML = _epTableRows(pipingSysSorted, "system", true);
 
@@ -1442,7 +1443,7 @@ async function saveJointDate(id){
 // ================================================================================
 async function refreshData(){
     try{
-        await fetch("/api/cache/clear");_dashData=null;
+        await fetch("/api/cache/clear");_dashData=null;_epSupportData=null;
         const data=await getDashData(true);renderKPI(data.kpi,data.weekly);
         const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
         if(visPage)navigate(visPage);
@@ -1494,6 +1495,7 @@ async function _refreshAfterSave() {
     _refreshPending = true;
     try {
         await fetch("/api/cache/clear").catch(() => {});
+        _epSupportData = null;
         const fresh = await getDashData(true);
         _dashData = fresh;
         renderKPI(fresh.kpi, fresh.weekly);
@@ -2317,7 +2319,8 @@ async function saveSMRow(id) {
             })
         });
         if (!r.ok) throw new Error("HTTP "+r.status);
-        toast(`✓ Support #${id} saved`); 
+        toast(`✓ Support #${id} saved`);
+        _epSupportData = null;
         fetch("/api/cache/clear");
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }

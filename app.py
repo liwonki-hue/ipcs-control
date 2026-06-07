@@ -239,6 +239,7 @@ _build_fail      = False
 _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
 CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
+_ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
 
 def _extract_d17(d17, raw):
     """v17 RPC 응답에서 raw dict 채우기"""
@@ -423,7 +424,10 @@ def _build():
                     print(f"[cache] EP RPC error (non-critical): {ep_e}")
             finally:
                 # 느린 RPC 스레드가 남아있어도 _build() 블로킹 방지
-                ex.shutdown(wait=False, cancel_futures=True)
+                try:
+                    ex.shutdown(wait=False, cancel_futures=True)  # Python 3.9+
+                except TypeError:
+                    ex.shutdown(wait=False)  # Python 3.8
 
         # ── Week schedule fallback ──────────────────────────────────────
         if not raw.get("weeks"):
@@ -678,6 +682,7 @@ def api_cache_clear():
         _cache.clear()
         _meta_cache["time"] = 0
         _meta_cache["data"] = None
+        _ep_sup_cache.clear()
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -1670,6 +1675,11 @@ def api_area_field_quantities():
 # ── Support Master CRUD ───────────────────────────────────────────────
 @app.route("/api/ep-support-summary")
 def api_ep_support_summary():
+    global _ep_sup_cache
+    with _lock:
+        cached = _ep_sup_cache.get("data")
+        if cached and time.time() - _ep_sup_cache.get("time", 0) < CACHE_TTL:
+            return jsonify(cached)
     try:
         rows = get_sb().table("support_master").select("system,sub_area,area,date_completed").eq("phase","EP").execute().data or []
         sys_map, area_map, subarea_map = {}, {}, {}
@@ -1681,7 +1691,11 @@ def api_ep_support_summary():
             area_map.setdefault(sa, {"sub_area": sa, "area": ar, "total_di": 0, "completed_di": 0})
             area_map[sa]["total_di"] += 1; area_map[sa]["completed_di"] += comp
             if sa and ar: subarea_map[sa] = ar
-        return jsonify({"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map})
+        result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map}
+        with _lock:
+            _ep_sup_cache["data"] = result
+            _ep_sup_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
