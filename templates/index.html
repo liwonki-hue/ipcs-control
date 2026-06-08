@@ -340,7 +340,7 @@
         <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
           <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="jm-iso-info" style="color:#ffffff"></span></div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="date" id="jm-bulk-date" style="width:140px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff;cursor:pointer">
+            <input type="text" id="jm-bulk-date" class="date-empty" placeholder="YY-MM-DD" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff;cursor:pointer;text-align:center" onclick="_pickDate(this)" readonly>
             <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applyIsoBulkDate()">Apply to All</button>
             <button class="btn-clear-row" style="padding:8px 16px" onclick="clearIsoBulkDate()">Clear All</button>
           </div>
@@ -582,7 +582,7 @@
         <div id="sm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
           <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="sm-iso-info" style="color:#ffffff"></span></div>
           <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" id="sm-bulk-date" placeholder="YY-MM-DD" style="width:110px;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff">
+            <input type="text" id="sm-bulk-date" class="date-empty" placeholder="YY-MM-DD" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff;cursor:pointer;text-align:center" onclick="_pickDate(this)" readonly>
             <button id="sm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applySmBulkDate()">Apply to All</button>
             <button class="btn-clear-row" style="padding:8px 16px" onclick="clearSmBulkDate()">Clear All</button>
           </div>
@@ -641,7 +641,7 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1240px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1285px !important; table-layout:fixed !important;">
             <thead>
               <tr>
                 <th rowspan="2" style="width:235px">ISO Drawing No</th>
@@ -657,12 +657,12 @@
                 <th rowspan="2" style="width:48px">Action</th>
               </tr>
               <tr>
-                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
-                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
-                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none;border-right:none">Result</th>
+                <th style="width:60px;font-size:9px;border-right:none">Date</th><th style="width:11px;font-size:9px;border-left:none;text-align:center">Result</th>
+                <th style="width:60px;font-size:9px;border-right:none">Date</th><th style="width:11px;font-size:9px;border-left:none;text-align:center">Result</th>
+                <th style="width:60px;font-size:9px;border-right:none">Date</th><th style="width:11px;font-size:9px;border-left:none;border-right:none;text-align:center">Result</th>
                 <th style="width:88px;font-size:9px;border-right:none;border-left:none">Finding</th>
-                <th style="width:70px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:36px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12)">Result</th>
-                <th style="width:70px;font-size:9px;border-right:none">Date</th><th style="width:16px;font-size:9px;border-left:none">Result</th>
+                <th style="width:60px;font-size:9px;border-right:none;background:rgba(59,130,246,0.12)">Date</th><th style="width:31px;font-size:9px;border-left:none;background:rgba(59,130,246,0.12);text-align:center">Result</th>
+                <th style="width:60px;font-size:9px;border-right:none">Date</th><th style="width:11px;font-size:9px;border-left:none;text-align:center">Result</th>
               </tr>
             </thead>
             <tbody id="ndeBody"></tbody>
@@ -734,6 +734,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Master</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;height:auto;">
+          <input id="tm-search" class="filter-sel" type="text" style="min-width:380px;" placeholder="System / Pkg No. / Method / Test Pressure" onkeydown="if(event.key==='Enter'){tmCurrentPage=0;loadTestMaster();}">
           <select id="tm-system" class="filter-sel" style="min-width:110px;" onchange="tmCurrentPage=0;tmOnSystemChange()"><option value="">All Systems</option></select>
           <select id="tm-package" class="filter-sel" style="min-width:150px;" onchange="tmCurrentPage=0;loadTestMaster()"><option value="">All Packages</option></select>
           <select id="tm-status" class="filter-sel" style="min-width:100px;" onchange="tmCurrentPage=0;loadTestMaster()">
@@ -741,7 +742,6 @@
             <option value="pass">PASS</option>
             <option value="pending">Pending</option>
           </select>
-          <input id="tm-search" class="filter-sel" type="text" style="min-width:180px;" onkeydown="if(event.key==='Enter'){tmCurrentPage=0;loadTestMaster();}">
           <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>

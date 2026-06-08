@@ -828,42 +828,36 @@ def api_weekly_actuals():
 
 @app.route("/api/daily-actuals")
 def api_daily_actuals():
-    """현재 작업주 기간의 일별 DI 실적 집계"""
+    """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계"""
     try:
         sb = get_sb()
-        today = datetime.now().strftime("%Y-%m-%d")
 
-        # 현재 주차 범위 조회
-        wk_res = sb.table("week_schedule") \
-            .select("week_no,week_start_date,week_end_date") \
-            .lte("week_start_date", today) \
-            .gte("week_end_date", today) \
-            .limit(1).execute()
-        weeks = wk_res.data or []
-        del wk_res
+        # 실적이 있는 날짜만 최근 5일 추출
+        dates_res = sb.table("joint_master") \
+            .select("date_completed") \
+            .not_.is_("date_completed", "null") \
+            .gt("di", 0) \
+            .order("date_completed", desc=True) \
+            .limit(500).execute()
+        all_dates = dates_res.data or []
+        del dates_res
 
-        if not weeks:
-            # 현재 날짜가 week_schedule에 없으면 가장 최근 주차 사용
-            wk_res2 = sb.table("week_schedule") \
-                .select("week_no,week_start_date,week_end_date") \
-                .lte("week_start_date", today) \
-                .order("week_start_date", desc=True) \
-                .limit(1).execute()
-            weeks = wk_res2.data or []
-            del wk_res2
+        distinct_dates = sorted(set(
+            str(r["date_completed"])[:10] for r in all_dates if r.get("date_completed")
+        ))
+        del all_dates
 
-        if not weeks:
-            return jsonify([])
+        if not distinct_dates:
+            return jsonify({"date_start": None, "date_end": None, "data": []})
 
-        w = weeks[0]
-        wk_start = str(w["week_start_date"])[:10]
-        wk_end   = str(w["week_end_date"])[:10]
-        week_no  = w["week_no"]
+        last_5 = distinct_dates[-5:]
+        range_start = last_5[0]
+        range_end   = last_5[-1]
 
         j_res = sb.table("joint_master") \
             .select("date_completed,di,sf") \
-            .gte("date_completed", wk_start) \
-            .lte("date_completed", wk_end) \
+            .gte("date_completed", range_start) \
+            .lte("date_completed", range_end) \
             .not_.is_("date_completed", "null") \
             .execute()
         joints = j_res.data or []
@@ -875,6 +869,8 @@ def api_daily_actuals():
 
         for j in joints:
             dc = str(j.get("date_completed") or "")[:10]
+            if dc not in last_5:
+                continue
             di = float(j.get("di") or 0)
             sf = (j.get("sf") or "").upper()
             day_di[dc] += di
@@ -887,17 +883,16 @@ def api_daily_actuals():
         result = [
             {
                 "date":         dc,
-                "completed_di": round(day_di[dc], 2),
+                "completed_di": round(day_di.get(dc, 0), 2),
                 "fab_di":       round(day_fab.get(dc, 0), 2),
                 "erect_di":     round(day_erect.get(dc, 0), 2),
-                "week_no":      int(week_no),
             }
-            for dc in sorted(day_di)
+            for dc in last_5
         ]
-        return jsonify({"week_no": int(week_no), "week_start": wk_start, "week_end": wk_end, "data": result})
+        return jsonify({"date_start": range_start, "date_end": range_end, "data": result})
     except Exception as e:
         print(f"[daily-actuals] Error: {e}")
-        return jsonify({"week_no": None, "week_start": None, "week_end": None, "data": []}), 500
+        return jsonify({"date_start": None, "date_end": None, "data": []}), 500
 
 
 @app.route("/api/refresh-db-cache")
@@ -2223,6 +2218,7 @@ def api_testpkg_sync():
 def compress_response(resp):
     data_len = resp.content_length or len(resp.data or b"")
     if (resp.status_code == 200
+            and resp.content_type
             and resp.content_type.startswith("application/json")
             and data_len > 2048
             and "gzip" in request.headers.get("Accept-Encoding", "")):

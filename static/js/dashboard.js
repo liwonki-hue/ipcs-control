@@ -1,7 +1,41 @@
-// dashboard.js Full frontend logic  v7.26
+// dashboard.js Full frontend logic  v7.27
 
 const API = "";
 let charts = {};
+
+// ── 날짜 헬퍼 ──────────────────────────────────────────────────────────────────
+// type=text 날짜 입력에 달력 팝업 연결. 선택 시 YY-MM-DD 표시, data-full-date에 YYYY-MM-DD 보관.
+function _pickDate(el) {
+    const rect = el.getBoundingClientRect();
+    const p = document.createElement("input");
+    p.type = "date";
+    // opacity:0.01 — 거의 투명하지만 브라우저가 실체 요소로 인식해 달력 위치 계산 가능
+    p.style.cssText = `position:fixed;top:${rect.top}px;left:${rect.left}px;width:${rect.width}px;height:${rect.height}px;opacity:0.01;border:none;padding:0;margin:0;z-index:9999;cursor:pointer;`;
+    if (el.dataset.fullDate) p.value = el.dataset.fullDate;
+    document.body.appendChild(p);
+    p.addEventListener("change", () => {
+        if (p.value) {
+            el.value = p.value.slice(2);
+            el.dataset.fullDate = p.value;
+            el.classList.remove("date-empty");
+        }
+        if (document.body.contains(p)) document.body.removeChild(p);
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    p.addEventListener("blur", () => {
+        setTimeout(() => { if (document.body.contains(p)) document.body.removeChild(p); }, 300);
+    });
+    p.focus();
+    try { p.showPicker(); } catch(e) { p.click(); }
+}
+
+// data-full-date(YYYY-MM-DD) 우선, 없으면 "20"+value(YY-MM-DD) 반환
+function _fullDateVal(id) {
+    const el = document.getElementById(id);
+    if (!el || !el.value) return "";
+    return el.dataset.fullDate || ("20" + el.value);
+}
+// ──────────────────────────────────────────────────────────────────────────────
 let jmData = [];
 let jmCurrentPage = 0;
 const JM_PAGE_SIZE = 30;
@@ -848,14 +882,12 @@ async function loadDailyTrend() {
     try {
         const res = await apiFetch("/api/daily-actuals");
         const data = res.data || [];
-        const weekNo = res.week_no;
-        const wkStart = res.week_start, wkEnd = res.week_end;
+        const dateStart = res.date_start, dateEnd = res.date_end;
 
         const titleEl = document.getElementById("dailyTrendTitle");
         if (titleEl) {
-            const label = weekNo ? `W${weekNo} Daily Trend` : "Daily Trend";
-            const range = wkStart && wkEnd ? ` (${wkStart.slice(5)} ~ ${wkEnd.slice(5)})` : "";
-            titleEl.textContent = label + range;
+            const range = dateStart && dateEnd ? ` (${dateStart.slice(5)} ~ ${dateEnd.slice(5)})` : "";
+            titleEl.textContent = "Daily Welding Trend" + range;
         }
 
         destroyChart("dailyTrend");
@@ -1113,7 +1145,7 @@ function updateIsoBulkPanel(isoVal,rows){
 
 async function applyIsoBulkDate(){
     const isoVal=document.getElementById("jm-iso")?.value?.trim();
-    let dateVal=document.getElementById("jm-bulk-date")?.value?.trim();
+    const dateVal=_fullDateVal("jm-bulk-date");
     if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
     if(!dateVal){toast("날짜를 선택하세요","error");return;}
     {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
@@ -1125,7 +1157,9 @@ async function applyIsoBulkDate(){
         let saved=0;
         for(const r of targets){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:dateVal})});
-            const el=document.getElementById(`date-${r.id}`);if(el)el.value=dateVal;saved++;
+            const el=document.getElementById(`date-${r.id}`);
+            if(el){el.value=dateVal.slice(2);el.dataset.fullDate=dateVal;el.classList.remove("date-empty");}
+            saved++;
         }
         toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
@@ -1143,7 +1177,7 @@ async function clearIsoBulkDate(){
     try{
         for(const r of targets){
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
-            const el=document.getElementById(`date-${r.id}`);if(el)el.value="";
+            const el=document.getElementById(`date-${r.id}`);if(el){el.value="";delete el.dataset.fullDate;el.classList.add("date-empty");}
         }
         toast(`✓ ${targets.length} joints cleared (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
@@ -1174,7 +1208,7 @@ function renderJMTable(rows){
             <td style="text-align:center">${r.sf||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
             <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
-            <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="date" value="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onchange="this.classList.toggle('date-empty',!this.value)"></td>
+            <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="text" value="${dStr?dStr.slice(2):''}" data-full-date="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
                     <option value="">-</option>
@@ -1249,27 +1283,27 @@ function renderNdeTable(rows){
             <td style="text-align:center" title="${r.welder||""}">${r.welder||""}</td>
             <td style="text-align:center;font-weight:700;color:var(--accent)">${r.inspection||""}</td>
             
-            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-pt-date-${r.id}" value="${pt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
-            <td style="text-align:center;border-left:none;padding-left:2px;">
-                <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input${pt_date?'':' date-empty'}" id="nde-pt-date-${r.id}" value="${pt_date?pt_date.slice(2):''}" data-full-date="${pt_date}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+            <td style="text-align:center;border-left:none;padding:1px 0;">
+                <select class="cell-input" id="nde-pt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none;padding:2px 0;">
                     <option value="">-</option>
                     <option value="PASS" ${r.pt_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.pt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
-            
-            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-mt-date-${r.id}" value="${mt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
-            <td style="text-align:center;border-left:none;padding-left:2px;">
-                <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input${mt_date?'':' date-empty'}" id="nde-mt-date-${r.id}" value="${mt_date?mt_date.slice(2):''}" data-full-date="${mt_date}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+            <td style="text-align:center;border-left:none;padding:1px 0;">
+                <select class="cell-input" id="nde-mt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none;padding:2px 0;">
                     <option value="">-</option>
                     <option value="PASS" ${r.mt_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.mt_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
-            
-            <td style="text-align:center;border-right:none;padding:3px 2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input" id="nde-rt-date-${r.id}" value="${rt_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
-            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"> 
-                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
+
+            <td style="text-align:center;border-right:none;padding:3px 2px;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}"><input type="text" class="cell-input${rt_date?'':' date-empty'}" id="nde-rt-date-${r.id}" value="${rt_date?rt_date.slice(2):''}" data-full-date="${rt_date}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+            <td style="text-align:center;border-left:none;padding:1px 0;border-right:none;${r.rt_result==='FAIL'?'background:rgba(239,68,68,0.15);':''}">
+                <select class="cell-input" id="nde-rt-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none;padding:2px 0;${r.rt_result==='FAIL'?'color:#ef4444;font-weight:700;':''}">
                     <option value="">-</option>
                     <option value="PASS" ${r.rt_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.rt_result==='FAIL'?'selected':''}>FAIL</option>
@@ -1292,18 +1326,18 @@ function renderNdeTable(rows){
                     <option value="MULTI" ${r.rt_finding==='MULTI'?'selected':''}>MULTI (Multiple)</option>
                 </select>
             </td>
-            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;background:rgba(59,130,246,0.07)"><input type="text" class="cell-input" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
-            <td style="text-align:center;border-left:none;padding-left:2px;background:rgba(59,130,246,0.07)">
-                <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+            <td style="text-align:center;border-left:none;padding-left:2px;border-right:none;padding-right:2px;background:rgba(59,130,246,0.07)"><input type="text" class="cell-input${r.rt_2_date?'':' date-empty'}" id="nde-rt-2-date-${r.id}" value="${r.rt_2_date?r.rt_2_date.slice(2,10):''}" data-full-date="${r.rt_2_date?r.rt_2_date.substring(0,10):''}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+            <td style="text-align:center;border-left:none;padding:1px 0;background:rgba(59,130,246,0.07)">
+                <select class="cell-input" id="nde-rt-2-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none;padding:2px 0;">
                     <option value="">-</option>
                     <option value="PASS" ${r.rt_2_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.rt_2_result==='FAIL'?'selected':''}>FAIL</option>
                 </select>
             </td>
 
-            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input" id="nde-pwht-date-${r.id}" value="${pwht_date}" placeholder="YY-MM-DD" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px"></td>
-            <td style="text-align:center;border-left:none;padding-left:2px;">
-                <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;">
+            <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input${pwht_date?'':' date-empty'}" id="nde-pwht-date-${r.id}" value="${pwht_date?pwht_date.slice(2):''}" data-full-date="${pwht_date}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+            <td style="text-align:center;border-left:none;padding:1px 0;">
+                <select class="cell-input" id="nde-pwht-res-${r.id}" style="width:100%;text-align:center;text-align-last:center;-webkit-appearance:none;appearance:none;padding:2px 0;">
                     <option value="">-</option>
                     <option value="PASS" ${r.pwht_result==='PASS'?'selected':''}>PASS</option>
                     <option value="FAIL" ${r.pwht_result==='FAIL'?'selected':''}>FAIL</option>
@@ -1318,23 +1352,18 @@ function renderNdeTable(rows){
 
 async function saveNdeRow(id){
     const data = {
-        pt_date: document.getElementById(`nde-pt-date-${id}`).value.trim() || null,
+        pt_date: _fullDateVal(`nde-pt-date-${id}`) || null,
         pt_result: document.getElementById(`nde-pt-res-${id}`).value,
-        mt_date: document.getElementById(`nde-mt-date-${id}`).value.trim() || null,
+        mt_date: _fullDateVal(`nde-mt-date-${id}`) || null,
         mt_result: document.getElementById(`nde-mt-res-${id}`).value,
-        rt_date: document.getElementById(`nde-rt-date-${id}`).value.trim() || null,
+        rt_date: _fullDateVal(`nde-rt-date-${id}`) || null,
         rt_result: document.getElementById(`nde-rt-res-${id}`).value,
         rt_finding: document.getElementById(`nde-rt-find-${id}`).value || null,
-        rt_2_date: document.getElementById(`nde-rt-2-date-${id}`).value.trim() || null,
+        rt_2_date: _fullDateVal(`nde-rt-2-date-${id}`) || null,
         rt_2_result: document.getElementById(`nde-rt-2-res-${id}`).value,
-        pwht_date: document.getElementById(`nde-pwht-date-${id}`).value.trim() || null,
+        pwht_date: _fullDateVal(`nde-pwht-date-${id}`) || null,
         pwht_result: document.getElementById(`nde-pwht-res-${id}`).value
     };
-
-    // Date normalization
-    ['pt_date', 'mt_date', 'rt_date', 'rt_2_date', 'pwht_date'].forEach(k => {
-        if(data[k] && data[k].length === 8) data[k] = "20" + data[k];
-    });
 
     try{
         const r = await fetch(`${API}/api/joints/${id}`, {
@@ -1373,7 +1402,7 @@ async function clearJointDate(id){
             body:JSON.stringify({date_completed:null, welder:null, inspection:null, pwht:null})});
         if(!r.ok)throw new Error('HTTP '+r.status);
         // 화면 초기화
-        const dateEl=document.getElementById(`date-${id}`);       if(dateEl){dateEl.value='';dateEl.classList.add('date-empty');}
+        const dateEl=document.getElementById(`date-${id}`);       if(dateEl){dateEl.value='';delete dateEl.dataset.fullDate;dateEl.classList.add('date-empty');}
         const weldEl=document.getElementById(`welder-${id}`);     if(weldEl)weldEl.value='';
         const inspEl=document.getElementById(`inspection-${id}`); if(inspEl)inspEl.value='';
         const pwhtEl=document.getElementById(`pwht-${id}`);       if(pwhtEl)pwhtEl.value='';
@@ -1397,13 +1426,12 @@ async function clearJointDate(id){
 }
 
 async function saveJointDate(id){
-    let val=document.getElementById(`date-${id}`)?.value?.trim()||'';
+    let val=_fullDateVal(`date-${id}`);
     let welder=document.getElementById(`welder-${id}`)?.value?.trim()||'';
     let phase=document.getElementById(`phase-${id}`)?.value?.trim()||'';
     let pkg=document.getElementById(`pkg-${id}`)?.value?.trim()||'';
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
     let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
-    if(val && !/^\d{4}-\d{2}-\d{2}$/.test(val)){toast("Invalid date format","error");return;}
     if(val){const _today=new Date().toISOString().slice(0,10);if(val>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
@@ -2191,11 +2219,9 @@ function updateSmIsoBulkPanel(isoVal, rows) {
 
 async function applySmBulkDate() {
     const isoVal = document.getElementById("sm-iso")?.value?.trim();
-    let dateVal = document.getElementById("sm-bulk-date")?.value?.trim();
+    const dateVal = _fullDateVal("sm-bulk-date");
     if (!isoVal) { toast("Please enter Search Drawing first", "error"); return; }
-    if (!dateVal) { toast("Please enter date (YY-MM-DD)", "error"); return; }
-    if (!/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)) { toast("Invalid date format (YY-MM-DD)", "error"); return; }
-    if (dateVal.length === 8) dateVal = "20" + dateVal;
+    if (!dateVal) { toast("날짜를 선택하세요", "error"); return; }
     {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
 
     const targets = smData.filter(r =>
@@ -2216,7 +2242,7 @@ async function applySmBulkDate() {
                 body: JSON.stringify({date_completed: dateVal, completed: true})
             });
             const el = document.getElementById(`sm-date-${r.id}`);
-            if (el) el.value = dateVal;
+            if (el) { el.value = dateVal.slice(2); el.dataset.fullDate = dateVal; el.classList.remove("date-empty"); }
             saved++;
         }
         toast(`✓ ${saved} items saved — KPI updating...`);
@@ -2246,7 +2272,7 @@ async function clearSmBulkDate() {
                 body: JSON.stringify({date_completed: null, completed: false})
             });
             const el = document.getElementById(`sm-date-${r.id}`);
-            if (el) el.value = "";
+            if (el) { el.value = ""; delete el.dataset.fullDate; el.classList.add("date-empty"); }
         }
         toast(`✓ ${targets.length} items cleared — KPI updating...`);
         fetch("/api/cache/clear");
@@ -2278,7 +2304,7 @@ function renderSMTable(rows) {
           <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td>${r.line_no||""}</td>
           <td><input class="cell-input" id="sm-welder-${r.id}" type="text" value="${r.welder||""}"></td>
-          <td style="padding:2px;text-align:center"><input class="cell-input" id="sm-date-${r.id}" type="text" value="${dc}" placeholder="YY-MM-DD" style="width:100%;text-align:center;padding:2px 4px"></td>
+          <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">
             <button class="btn-save-row" onclick="saveSMRow(${r.id})">Save</button>
             <button class="btn-clear-row" onclick="deleteSMItem(${r.id})">Del</button>
@@ -2288,13 +2314,11 @@ function renderSMTable(rows) {
 }
 
 async function saveSMRow(id) {
-    let dateVal = document.getElementById(`sm-date-${id}`)?.value?.trim() || "";
+    let dateVal = _fullDateVal(`sm-date-${id}`);
     let welder  = document.getElementById(`sm-welder-${id}`)?.value?.trim() || "";
     let phase   = document.getElementById(`sm-phase-${id}`)?.value?.trim() || "";
     let pkg     = document.getElementById(`sm-pkg-${id}`)?.value?.trim() || "";
 
-    if (dateVal && !/^\d{2,4}-\d{2}-\d{2}$/.test(dateVal)) { toast("Invalid date (YY-MM-DD)", "error"); return; }
-    if (dateVal && dateVal.length === 8) dateVal = "20" + dateVal;
     if (dateVal) { const _today=new Date().toISOString().slice(0,10); if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;} }
 
     try {
@@ -2473,9 +2497,9 @@ function renderTPTable(rows) {
           <td style="font-weight:600;color:var(--indigo)">${r.package||""}</td>
           <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td style="text-align:center">${r.joint_no||""}</td>
-          <td style="text-align:center;color:var(--accent)">${weldDate||"-"}</td>
+          <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
           <td style="text-align:center;font-weight:700;font-size:11px;color:${inspColor}">${inspLabel}</td>
-          <td style="padding:2px;text-align:center"><input type="text" class="cell-input" id="tp-vt-date-${r.id}" value="${vtDate}" placeholder="YY-MM-DD" style="padding:3px 4px;text-align:center"></td>
+          <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:pointer">
               <option value="" style="color:#000">-</option>
@@ -2498,10 +2522,8 @@ function renderTPTable(rows) {
 }
 
 async function saveTPVT(id) {
-    let vtDate = document.getElementById(`tp-vt-date-${id}`)?.value?.trim() || "";
+    let vtDate = _fullDateVal(`tp-vt-date-${id}`);
     const vtRes  = document.getElementById(`tp-vt-res-${id}`)?.value || "";
-    if (vtDate && !/^\d{2,4}-\d{2}-\d{2}$/.test(vtDate)) { toast("VT Date: enter in YY-MM-DD format", "error"); return; }
-    if (vtDate && vtDate.length === 8) vtDate = "20" + vtDate;
     try {
         const r = await fetch(`${API}/api/joints/${id}`, {
             method: "PATCH",
@@ -2710,7 +2732,6 @@ function renderTMTable(data) {
         const readinessBadge = isReady
             ? `<span style="color:#22d3a1;font-weight:700">Ready</span>`
             : `<span style="color:#f59e0b">Pending</span>`;
-        const dateColor = dc ? "#000" : "transparent";
         return `<tr>
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
@@ -2736,10 +2757,9 @@ function renderTMTable(data) {
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>
-            <td style="text-align:center"><input type="date" class="cell-input" id="tm-date-${r.id}" value="${dc}"
-                style="width:100%;text-align:center;color:${dateColor};background:#fff"
-                oninput="this.style.color=this.value?'#000':'transparent'"
-                onchange="this.style.color=this.value?'#000':'transparent'"></td>
+            <td style="text-align:center"><input type="text" class="cell-input${dc?'':' date-empty'}" id="tm-date-${r.id}" value="${dc?dc.slice(2):''}" data-full-date="${dc}"
+                style="width:100%;text-align:center;background:#fff;cursor:pointer;color:#000"
+                onclick="_pickDate(this)" readonly></td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-result-${r.id}" style="width:90%;text-align:center;color:#000;background:#fff;${fnt}">
                     <option value=""${iopt(!res)} style="color:#000">-</option>
@@ -2758,7 +2778,7 @@ function renderTMTable(data) {
 
 async function saveTMRow(id) {
     const resultVal = document.getElementById(`tm-result-${id}`)?.value || "";
-    const dateVal   = document.getElementById(`tm-date-${id}`)?.value   || "";
+    const dateVal   = _fullDateVal(`tm-date-${id}`);
     const completed = resultVal === "PASS";
     const payload = {
         design_pressure: document.getElementById(`tm-dp-${id}`)?.value?.trim()     || null,
