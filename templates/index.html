@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=6.5">
+<link rel="stylesheet" href="/static/css/index.css?v=6.6">
 </head>
 <body>
 
@@ -76,7 +76,7 @@
 
   <div class="page-body">
     <div class="page hidden" id="page-overview">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('overview')">&#128424; Print</button></div></div>
       <div class="grid-3">
         <div class="col">
           <div class="panel"><div class="panel-title">Overall Piping Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
@@ -94,10 +94,7 @@
       <!-- By System: single merged-header table -->
       <div style="margin-top:0">
         <div class="panel">
-          <div class="panel-title" style="display:flex;align-items:center;gap:10px">
-            By System Progress
-            <button class="btn-de btn-de-export" style="margin-left:auto;padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export</button>
-          </div>
+          <div class="panel-title">By System Progress</div>
           <div class="table-wrap" style="overflow-x:auto">
             <table class="data-table" id="sysBreakdownTable" style="width:100%;min-width:960px;table-layout:fixed">
               <colgroup>
@@ -132,7 +129,7 @@
     </div>
 
     <div class="page hidden" id="page-early_power">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview<span style="font-size:12px;color:var(--text-dim);font-weight:400;margin-left:14px">Target Date: 2026-12-30</span></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview<span style="font-size:12px;color:var(--text-dim);font-weight:400;margin-left:14px">Target Date: 2026-12-30</span></div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportEPExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('early_power')">&#128424; Print</button></div></div>
       <!-- Top row: Gauge + S-Curve -->
       <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:12px">
         <div>
@@ -261,7 +258,7 @@
     </div>
 
     <div class="page hidden" id="page-weekly">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Productivity</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Weekly Productivity</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWeeklyExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('weekly')">&#128424; Print</button></div></div>
 
       <!-- Row 1: Daily Trend (left) + Weekly Trend (right) -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
@@ -305,7 +302,7 @@
     </div>
 
     <div class="page hidden" id="page-unitarea">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Unit / Area Progress</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Unit / Area Progress</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportUnitAreaExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('unitarea')">&#128424; Print</button></div></div>
       <div class="panel" style="margin-bottom:14px"><div class="panel-title">Unit Progress %</div><div id="unitCards" class="grid-4" style="gap:14px"></div></div>
       <div class="panel" style="margin-bottom:14px"><div class="panel-title">Area Progress % (MB#1, MB#2, YARD, YD BLDG)</div><div id="areaCards" class="grid-4" style="gap:14px"></div></div>
       <div class="grid-2">
@@ -330,10 +327,6 @@
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;" title="Select Excel file to bulk import">
-              &#128196; Import
-              <input type="file" id="jm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importJMExcel()">
-            </label>
             <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
         </div>
@@ -379,7 +372,7 @@
 
     
     <div class="page hidden" id="page-welder">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWelderExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('welder')">&#128424; Print</button></div></div>
 
       <!-- KPI Cards -->
       <div class="panel" style="margin-bottom:10px">
@@ -466,7 +459,7 @@
 
     <!-- ═══════════ RT QUALITY PERFORMANCE ═══════════ -->
     <div class="page hidden" id="page-rt_quality">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">RT Quality Performance</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">RT Quality Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportRTExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('rt_quality')">&#128424; Print</button></div></div>
 
       <!-- KPI 카드 -->
       <div class="panel" style="margin-bottom:10px">
@@ -572,10 +565,6 @@
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
-            <label class="btn-de" style="background:rgba(34,211,161,0.12);color:#22d3a1;border-color:rgba(34,211,161,0.4);cursor:pointer;margin:0; padding:5px 10px; font-size:11px;" title="Select Excel file to bulk import">
-              &#128196; Import
-              <input type="file" id="sm-import-file" accept=".xlsx,.xls" style="display:none" onchange="importSMExcel()">
-            </label>
             <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
         </div>
@@ -692,7 +681,8 @@
           <button class="btn-primary" onclick="loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;margin-left:6px;" onclick="syncPhasePackage()" title="Sync PHASE &amp; PACKAGE from local Excel">&#8635; Sync Phase/Pkg</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
-            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export</button>
+            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('testpkg_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
           </div>
         </div>
         <div class="table-wrap" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 230px);">
@@ -745,7 +735,8 @@
           <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>
-            <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export</button>
+            <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('test_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
           </div>
         </div>
         <div class="table-wrap" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 230px);scrollbar-gutter:stable;">
@@ -786,7 +777,13 @@
 @media print {
   .sidebar,.top-header,.kpi-row,.de-toolbar,.jm-top-row,.de-pagination,.page:not(.page-print-active){display:none!important;}
   .main-area{margin-left:0!important;} .page-body{padding:0!important;}
+  .page-header .btn-de{display:none!important;}
+  .panel{background:#fff!important;border:1px solid #ccc!important;box-shadow:none!important;}
+  .panel-title,.page-title,.stat-list,.unit-card,.unit-card-name,.unit-card-pct,.unit-card-di,.kpi-label,.kpi-value{color:#000!important;}
+  .unit-card,.kpi-card{background:#fff!important;border:1px solid #ccc!important;}
+  .gauge-pct{fill:#000!important;} .gauge-label{fill:#555!important;}
   .table-wrap{max-height:none!important;overflow:visible!important;}
+  .scroll-list{max-height:none!important;overflow:visible!important;}
   .data-table th{background:#f8fafc!important;color:#0f172a!important;font-size:9px!important;padding:4px 6px!important;border:1px solid #ccc!important;}
   .data-table td{color:#000!important;background:#fff!important;font-size:9px!important;padding:3px 6px!important;border-bottom:1px solid #ccc!important;}
   .btn-save-row,.btn-clear-row{display:none!important;}
@@ -851,6 +848,6 @@
   Chart.register(ChartDataLabels);
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
-<script src="/static/js/dashboard.js?v=7.27"></script>
+<script src="/static/js/dashboard.js?v=7.28"></script>
 </body>
 </html>

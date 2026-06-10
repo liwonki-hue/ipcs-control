@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import os
-import io
 import gc
 import gzip
 import bisect
@@ -1349,71 +1348,6 @@ def api_welder_daily():
         return jsonify([]), 500
 
 
-# ── Joint Master Bulk Import (Excel) ──────────────────────────────────
-@app.route("/api/joints/import", methods=["POST"])
-def api_joints_import():
-    import pandas as pd
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        f   = request.files["file"]
-        buf = io.BytesIO(f.read())
-        df  = pd.read_excel(buf, dtype=str)
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-
-        FIELD_MAP = {
-            "unit": "unit", "system": "system", "area": "area",
-            "sub_area": "sub_area", "line_no": "line_no",
-            "iso_drawing": "iso_drawing", "rev": "rev",
-            "spool_no": "spool_no", "mat": "mat",
-            "size_inch": "size_inch", "sf": "sf", "joint_no": "joint_no",
-            "di": "di", "welder": "welder", "phase": "phase",
-            "date_completed": "date_completed", "remark": "remark"
-        }
-
-        records, skipped = [], 0
-        for _, row in df.iterrows():
-            rec = {}
-            for col, db_col in FIELD_MAP.items():
-                val = row.get(col)
-                if val is None or (isinstance(val, float) and pd.isna(val)): val = None
-                else: val = str(val).strip() or None
-                rec[db_col] = val
-            if not rec.get("iso_drawing"):
-                skipped += 1; continue
-            for num_col in ("size_inch", "di"):
-                v = rec.get(num_col)
-                if v:
-                    try:   rec[num_col] = float(v)
-                    except: rec[num_col] = None
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"]      = True
-                except:
-                    rec["date_completed"] = None
-            else:
-                rec["completed"] = False
-            records.append(rec)
-
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
-
-        sb = get_sb()
-        inserted = 0
-        for i in range(0, len(records), 500):
-            sb.table("joint_master").insert(records[i:i + 500]).execute()
-            inserted += len(records[i:i + 500])
-
-        with _lock: _cache.clear()
-        _meta_cache["time"] = 0
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
-    except Exception as e:
-        print(f"[joints-import] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 # ── Sync Phase + Package from local Excel ─────────────────────────────
 @app.route("/api/joints/sync-phase-package", methods=["POST"])
 def api_joints_sync_phase_package():
@@ -1903,77 +1837,6 @@ def api_support_delete(rid):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/support-master/import", methods=["POST"])
-def api_support_import():
-    import pandas as pd
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        buf  = io.BytesIO(request.files["file"].read())
-        df   = pd.read_excel(buf, dtype=str)
-        # Normalize columns: remove trailing spaces, lower case, replace space with underscore
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        
-        # Mapping for Support Master Excel columns to DB columns
-        # Excel: ['no._', 'phase', 'unit', 'system', 'area', 'sub_area', 'support_drawing', 'revision', 'iso_drawubg', 'line_no', 'welder', 'actual_date', 'action']
-        FIELD_MAP = {
-            "phase": "phase",
-            "unit": "unit",
-            "system": "system",
-            "area": "area",
-            "sub_area": "sub_area",
-            "support_drawing": "support_drawing",
-            "revision": "revision",
-            "iso_drawubg": "iso_drawing",
-            "iso_drawing": "iso_drawing", # fallback
-            "line_no": "line_no",
-            "welder": "welder",
-            "actual_date": "date_completed"
-        }
-        
-        records, skipped = [], 0
-        for _, row in df.iterrows():
-            rec = {}
-            for excel_col, db_col in FIELD_MAP.items():
-                v = row.get(excel_col)
-                if v is None or (isinstance(v, float) and pd.isna(v)): 
-                    v = None
-                else: 
-                    v = str(v).strip() or None
-                if v: rec[db_col] = v
-            
-            # Additional logic for date_completed and completed
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"]      = True
-                except:
-                    rec["date_completed"] = None
-                    rec["completed"]      = False
-            else:
-                rec["completed"] = False
-                
-            if not rec.get("system") and not rec.get("support_drawing"):
-                skipped += 1; continue
-                
-            records.append(rec)
-            
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
-            
-        sb = get_sb()
-        inserted = 0
-        for i in range(0, len(records), 500):
-            sb.table("support_master").insert(records[i:i+500]).execute()
-            inserted += len(records[i:i+500])
-        with _lock: _cache.clear()
-        return jsonify({"ok": True, "inserted": inserted, "skipped": skipped})
-    except Exception as e:
-        print(f"[support-import] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
-
 @app.route("/api/support-master/sync-phase-package", methods=["POST"])
 def api_support_sync_phase_package():
     """joint_master의 iso_drawing으로 phase/package를 매칭해 support_master에 업데이트."""
@@ -2122,54 +1985,6 @@ def api_testpkg_delete(rid):
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-@app.route("/api/testpkg-master/import", methods=["POST"])
-def api_testpkg_import():
-    import pandas as pd
-    try:
-        if "file" not in request.files:
-            return jsonify({"ok": False, "error": "No file uploaded"}), 400
-        buf  = io.BytesIO(request.files["file"].read())
-        df   = pd.read_excel(buf, dtype=str)
-        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-        FIELDS = ["system", "sub_area", "test_pkg_no", "completed", "date_completed", "remark"]
-        records, skipped = [], 0
-        for _, row in df.iterrows():
-            rec = {}
-            for f in FIELDS:
-                v = row.get(f)
-                if v is None or (isinstance(v, float) and pd.isna(v)):
-                    v = None
-                else:
-                    v = str(v).strip() or None
-                rec[f] = v
-            dc = rec.get("date_completed")
-            if dc:
-                try:
-                    rec["date_completed"] = pd.to_datetime(dc).strftime("%Y-%m-%d")
-                    rec["completed"] = True
-                except Exception:
-                    rec["date_completed"] = None
-                    rec["completed"] = False
-            else:
-                rec["completed"] = False
-            if not rec.get("system") and not rec.get("test_pkg_no"):
-                skipped += 1
-                continue
-            records.append(rec)
-        if not records:
-            return jsonify({"ok": False, "error": f"No valid rows (skipped {skipped})"}), 400
-        sb = get_sb()
-        inserted = 0
-        for i in range(0, len(records), 500):
-            res = sb.table("test_package_master").insert(records[i:i+500]).execute()
-            inserted += len(res.data or [])
-            del res
-        with _lock: _cache.clear()
-        return jsonify({"ok": True, "imported": inserted, "skipped": skipped})
-    except Exception as e:
-        print(f"[testpkg-import] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route("/api/testpkg-master/sync", methods=["POST"])
 def api_testpkg_sync():

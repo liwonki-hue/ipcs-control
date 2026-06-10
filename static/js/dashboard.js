@@ -1572,7 +1572,7 @@ async function exportSystemBreakdown() {
 async function exportSystemsExcel(type){
     if(!_dashData){toast("Data not loaded yet","error");return;}
     let exportData=[],fileName="";
-    if(type==='system'){exportData=(_dashData.systems||[]).map(s=>({"System":s.system,"Total DI":s.plan_di,"Completed DI":s.completed_di,"Remaining DI":s.remaining_di,"Progress %":s.progress_pct}));fileName="System_Progress_Export.xlsx";}
+    if(type==='system'){exportData=(_dashData.systems||[]).map(s=>{const tot=s.total_di||s.plan_di||0,done=s.completed_di||0;return {"System":s.system,"Total DI":tot,"Completed DI":done,"Remaining DI":s.remaining_di!=null?s.remaining_di:Math.max(0,tot-done),"Progress %":s.progress_pct};});fileName="System_Progress_Export.xlsx";}
     else{exportData=(_dashData.subareas||_dashData.areas||[]).map(s=>({"Name":s.sub_area||s.area||"","Total DI":s.total_di,"Completed DI":s.completed_di,"Remaining DI":s.remaining_di||(s.total_di-s.completed_di),"Progress %":s.progress_pct}));fileName="SubArea_Progress_Export.xlsx";}
     if(exportData.length===0){toast("No data available to export","error");return;}
     const ws=XLSX.utils.json_to_sheet(exportData),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Progress");
@@ -1600,47 +1600,68 @@ function printPage(pageId){
     window.print();pages.forEach(p=>p.classList.remove('page-print-active'));
 }
 
-// ================================================================================
-//  JOINT MASTER - TEMPLATE DOWNLOAD & EXCEL IMPORT
-// ================================================================================
-function downloadJMTemplate() {
-    const headers = [
-        "unit","system","area","sub_area","line_no","iso_drawing","rev",
-        "spool_no","mat","size_inch","sf","joint_no","di","welder","phase",
-        "date_completed","remark"
-    ];
-    const sample = [
-        {unit:"B1",system:"CCP",area:"MB #1",sub_area:"PR#3",line_no:"L-001",iso_drawing:"ISO-001",
-         rev:"0",spool_no:"",mat:"CS",size_inch:"4",sf:"F",joint_no:"J-001",di:"4",
-         welder:"",phase:"Phase 2",date_completed:"",remark:""}
-    ];
-    const ws = XLSX.utils.json_to_sheet(sample, {header: headers});
+// 렌더된 DOM 테이블들을 시트로 묶어 내보내는 공용 헬퍼 (specs: [elementId, sheetName][])
+async function exportTablesExcel(specs, fileName){
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "JointMaster");
-    XLSX.writeFile(wb, "Joint_Master_Template.xlsx");
-    toast("✓ Template downloaded");
+    for (const [id, name] of specs) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const tbl = el.tagName === 'TABLE' ? el : el.closest('table');
+        if (!tbl || !tbl.tBodies[0] || !tbl.tBodies[0].rows.length) continue;
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(tbl), name.substring(0, 31));
+    }
+    if (!wb.SheetNames.length) { toast("No data to export", "error"); return; }
+    const ok = await downloadWithPicker(wb, fileName);
+    if (ok) toast("✓ Exported");
 }
 
-async function importJMExcel() {
-    const fileInput = document.getElementById("jm-import-file");
-    if (!fileInput || !fileInput.files.length) {
-        toast("Please select an Excel file first", "error"); return;
-    }
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-        const res = await fetch("/api/joints/import", { method: "POST", body: formData });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error);
-        const msg = `✓ Imported ${data.inserted} rows${data.skipped > 0 ? ` (${data.skipped} skipped)` : ""}`;
-        toast(msg);
-        fileInput.value = "";
-        _autoRefreshKpi();
-        setTimeout(() => loadJointMaster(), 2000);
-    } catch(e) {
-        toast(`✗ Import failed: ${e.message}`, "error");
-    }
+async function exportEPExcel(){
+    await exportTablesExcel([
+        ["epSysTableBody", "Piping by EP System"],
+        ["epAreaTableBody", "Piping by EP SubArea 1"],
+        ["epAreaTableBody2", "Piping by EP SubArea 2"],
+        ["epSupSysTableBody", "Support by EP System"],
+        ["epSupAreaTableBody", "Support by EP SubArea 1"],
+        ["epSupAreaTableBody2", "Support by EP SubArea 2"]
+    ], "Early_Power_Export.xlsx");
+}
+
+async function exportWeeklyExcel(){
+    await exportTablesExcel([
+        ["weeklyTable", "Productivity Log"],
+        ["weeklyMaterialTable", "By Material"],
+        ["weeklySystemTable", "By System"],
+        ["weeklySubareaTable", "By SubArea 1"],
+        ["weeklySubareaTable2", "By SubArea 2"]
+    ], "Weekly_Productivity_Export.xlsx");
+}
+
+async function exportRTExcel(){
+    await exportTablesExcel([
+        ["rtSystemBody", "Repair Rate by System"],
+        ["rtWelderBody", "Welder Repair Rate"],
+        ["rtRepairBody", "Repair Joint List"]
+    ], "RT_Quality_Export.xlsx");
+}
+
+async function exportUnitAreaExcel(){
+    const dash = await getDashData();
+    const units = (dash?.units || []).map(u => ({
+        "Unit": u.unit, "Total DI": u.total_di, "Completed DI": u.completed_di,
+        "Remaining DI": (u.total_di || 0) - (u.completed_di || 0),
+        "Progress %": u.progress_pct, "Joints": u.total_joints || 0
+    }));
+    const areas = (dash?.areas || []).map(a => ({
+        "Area": a.area, "Total DI": a.total_di, "Completed DI": a.completed_di,
+        "Remaining DI": (a.total_di || 0) - (a.completed_di || 0),
+        "Progress %": a.progress_pct
+    }));
+    if (!units.length && !areas.length) { toast("No data to export", "error"); return; }
+    const wb = XLSX.utils.book_new();
+    if (units.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(units), "Units");
+    if (areas.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(areas), "Areas");
+    const ok = await downloadWithPicker(wb, "Unit_Area_Export.xlsx");
+    if (ok) toast("✓ Exported");
 }
 
 // ================================================================================
@@ -2335,31 +2356,6 @@ async function submitSMItem() {
         const d = await r.json(); if (!d.ok) throw new Error(d.error);
         toast("✓ Support added"); closeSMModal(); loadSupportMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
-}
-
-async function importSMExcel() {
-    const fi = document.getElementById("sm-import-file");
-    if (!fi?.files.length) { toast("Select file first", "error"); return; }
-    
-    // Show a loading toast
-    toast("Uploading and processing Support Master Excel...", "info");
-    
-    const fd = new FormData(); 
-    fd.append("file", fi.files[0]);
-    
-    try {
-        const res = await fetch("/api/support-master/import", {method:"POST", body:fd});
-        const data = await res.json(); 
-        if (!data.ok) throw new Error(data.error);
-        
-        const msg = `✓ Imported ${data.inserted} rows${data.skipped>0?` (${data.skipped} skipped)`:""}`;
-        toast(msg); 
-        fi.value = "";
-        fetch("/api/cache/clear"); 
-        loadSupportMaster();
-    } catch(e) { 
-        toast(`✗ Import failed: ${e.message}`, "error"); 
-    }
 }
 
 async function exportSMExcel() {
