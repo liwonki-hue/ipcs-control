@@ -979,14 +979,14 @@ async function loadWeekly() {
                 </tr>`;
             };
             const mkSysRows = arr => arr.map(r=>`<tr>
-                <td>${r.system||r.mat||r.name||""}</td>
+                <td style="color:var(--accent)">${r.system||r.mat||r.name||""}</td>
                 <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
                 <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
             </tr>`).join("") + mkTotalRow(arr);
             const mkSubRows = (arr, showTotal=false, totalArr=null) => arr.map(r=>`<tr>
-                <td>${r.sub_area||r.name||""}</td>
+                <td style="color:var(--accent)">${r.sub_area||r.name||""}</td>
                 <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
@@ -1924,7 +1924,7 @@ function renderWelder(data, dashData) {
                         type: "bar",
                         label: "Total DI",
                         data: wkSlice.map(w => w.total_di),
-                        backgroundColor: "rgba(37,99,235,0.5)",
+                        backgroundColor: "rgba(37,99,235,0.25)",
                         borderColor: "#2563eb",
                         borderWidth: 1,
                         barPercentage: 0.6,
@@ -1944,7 +1944,7 @@ function renderWelder(data, dashData) {
                         yAxisID: "y2",
                         datalabels: {
                             display: true,
-                            color: "#60a5fa",
+                            color: "#fb923c",
                             font: { size: 10, weight: "bold" },
                             anchor: "end",
                             align: "top",
@@ -2004,7 +2004,7 @@ function renderWelder(data, dashData) {
                         type: "bar",
                         label: "Total DI",
                         data: moSlice.map(m => m.total_di),
-                        backgroundColor: "rgba(99,102,241,0.45)",
+                        backgroundColor: "rgba(99,102,241,0.22)",
                         borderColor: "#6366f1",
                         borderWidth: 1,
                         barPercentage: 0.6,
@@ -2024,7 +2024,7 @@ function renderWelder(data, dashData) {
                         yAxisID: "y2",
                         datalabels: {
                             display: true,
-                            color: "#60a5fa",
+                            color: "#fb923c",
                             font: { size: 10, weight: "bold" },
                             anchor: "end",
                             align: "top",
@@ -2475,7 +2475,7 @@ async function loadSystemPackages() {
     pkgSel.innerHTML = '<option value="">All Packages</option>';
     if (!system) return;
     try {
-        const pkgs = await apiFetch(`/api/packages?system=${encodeURIComponent(system)}`);
+        const pkgs = await apiFetch(`/api/joints/packages?system=${encodeURIComponent(system)}`);
         if (Array.isArray(pkgs)) {
             pkgs.forEach(p => pkgSel.add(new Option(p, p)));
         }

@@ -64,6 +64,18 @@ def reset_sb():
         _sb = None
     print("[supabase] client reset")
 
+def _sb_exec(fn):
+    """Supabase 연결 오류(WinError 10060 등) 시 클라이언트 리셋 후 1회 재시도"""
+    try:
+        return fn(get_sb())
+    except Exception as e:
+        err = str(e)
+        if "10060" in err or "WinError" in err or "ConnectionReset" in err or "timeout" in err.lower():
+            print(f"[supabase] connection error, resetting client: {e}")
+            reset_sb()
+            return fn(get_sb())
+        raise
+
 # ── RPC data processing ────────────────────────────────────────────────
 def _parse_rpc(raw):
     if not isinstance(raw, dict):
@@ -241,13 +253,14 @@ CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free 
 _ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
+_daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 캐시
+_wkbd_cache: dict  = {"time": 0, "data": None}      # /api/weekly-last-breakdown 5분 캐시
 
 def _build_secondary_caches():
-    """_build() 완료 후 백그라운드에서 보조 캐시 사전 로딩 (Test Master readiness + 패키지 목록)"""
+    """_build() 완료 후 보조 캐시 사전 로딩 (Test Master readiness + 패키지 목록)"""
     global _pkg_stats_cache, _pkg_cache
     try:
-        sb = get_sb()
-        rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
+        rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v1", {}).execute())
         pkg_stats = {r["package"]: [int(r["total"]), int(r["completed"])] for r in (rpc_res.data or [])}
         with _lock:
             _pkg_stats_cache["data"] = pkg_stats
@@ -257,8 +270,7 @@ def _build_secondary_caches():
         print(f"[secondary_cache] pkg_stats skipped (RPC not deployed?): {e}")
 
     try:
-        sb = get_sb()
-        rpc_res = sb.rpc("get_distinct_packages_v1", {}).execute()
+        rpc_res = _sb_exec(lambda sb: sb.rpc("get_distinct_packages_v1", {}).execute())
         by_sys: dict = {}
         for r in (rpc_res.data or []):
             s = r.get("system") or ""
@@ -664,8 +676,6 @@ def _build():
                 "sub_areas": m_sub
             }
             _meta_cache["time"] = time.time()
-            
-        with _lock:
             _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
@@ -720,6 +730,10 @@ def api_cache_clear():
         _pkg_stats_cache.clear()
         _pkg_cache["time"] = 0
         _pkg_cache["data"] = {}
+        _daily_cache["time"] = 0
+        _daily_cache["data"] = None
+        _wkbd_cache["time"] = 0
+        _wkbd_cache["data"] = None
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -865,17 +879,21 @@ def api_weekly_actuals():
 
 @app.route("/api/daily-actuals")
 def api_daily_actuals():
-    """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계"""
+    """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
+    global _daily_cache
+    with _lock:
+        cached = _daily_cache.get("data")
+        age    = time.time() - _daily_cache.get("time", 0)
+    if cached is not None and age < 300:
+        return jsonify(cached)
     try:
-        sb = get_sb()
-
-        # 실적이 있는 날짜만 최근 5일 추출
-        dates_res = sb.table("joint_master") \
-            .select("date_completed") \
-            .not_.is_("date_completed", "null") \
-            .gt("di", 0) \
-            .order("date_completed", desc=True) \
-            .limit(500).execute()
+        # 실적이 있는 날짜만 최근 5일 추출 — 연결 오류 시 자동 재시도
+        dates_res = _sb_exec(lambda sb: sb.table("joint_master")
+            .select("date_completed")
+            .not_.is_("date_completed", "null")
+            .gt("di", 0)
+            .order("date_completed", desc=True)
+            .limit(500).execute())
         all_dates = dates_res.data or []
         del dates_res
 
@@ -888,22 +906,20 @@ def api_daily_actuals():
             return jsonify({"date_start": None, "date_end": None, "data": []})
 
         last_5 = distinct_dates[-5:]
-        range_start = last_5[0]
-        range_end   = last_5[-1]
+        range_start, range_end = last_5[0], last_5[-1]
 
-        j_res = sb.table("joint_master") \
-            .select("date_completed,di,sf") \
-            .gte("date_completed", range_start) \
-            .lte("date_completed", range_end) \
-            .not_.is_("date_completed", "null") \
-            .execute()
+        j_res = _sb_exec(lambda sb: sb.table("joint_master")
+            .select("date_completed,di,sf")
+            .gte("date_completed", range_start)
+            .lte("date_completed", range_end)
+            .not_.is_("date_completed", "null")
+            .execute())
         joints = j_res.data or []
         del j_res
 
-        day_di    = defaultdict(float)
-        day_fab   = defaultdict(float)
+        day_di = defaultdict(float)
+        day_fab = defaultdict(float)
         day_erect = defaultdict(float)
-
         for j in joints:
             dc = str(j.get("date_completed") or "")[:10]
             if dc not in last_5:
@@ -911,24 +927,23 @@ def api_daily_actuals():
             di = float(j.get("di") or 0)
             sf = (j.get("sf") or "").upper()
             day_di[dc] += di
-            if sf in ("S", "SHOP"):
-                day_fab[dc] += di
-            elif sf in ("F", "FIELD"):
-                day_erect[dc] += di
+            if sf in ("S", "SHOP"):   day_fab[dc]   += di
+            elif sf in ("F", "FIELD"): day_erect[dc] += di
         del joints
 
-        result = [
-            {
-                "date":         dc,
-                "completed_di": round(day_di.get(dc, 0), 2),
-                "fab_di":       round(day_fab.get(dc, 0), 2),
-                "erect_di":     round(day_erect.get(dc, 0), 2),
-            }
+        result = {"date_start": range_start, "date_end": range_end, "data": [
+            {"date": dc, "completed_di": round(day_di.get(dc,0),2),
+             "fab_di": round(day_fab.get(dc,0),2), "erect_di": round(day_erect.get(dc,0),2)}
             for dc in last_5
-        ]
-        return jsonify({"date_start": range_start, "date_end": range_end, "data": result})
+        ]}
+        with _lock:
+            _daily_cache["data"] = result
+            _daily_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
         print(f"[daily-actuals] Error: {e}")
+        if cached is not None:          # 오류 시 stale 캐시라도 반환
+            return jsonify(cached)
         return jsonify({"date_start": None, "date_end": None, "data": []}), 500
 
 
@@ -1063,21 +1078,28 @@ def api_joints_delete(jid):
 # ── Weekly Last-Week System/SubArea Breakdown ─────────────────────────
 @app.route("/api/weekly-last-breakdown")
 def api_weekly_last_breakdown():
+    """주간 breakdown 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
+    global _wkbd_cache
+    with _lock:
+        cached = _wkbd_cache.get("data")
+        age    = time.time() - _wkbd_cache.get("time", 0)
+    if cached is not None and age < 300:
+        return jsonify(cached)
     try:
-        sb = get_sb()
-        # 1. Find the last date with completed joints
-        last_row = sb.table("joint_master").select("date_completed") \
-                     .not_.is_("date_completed", "null") \
-                     .order("date_completed", desc=True).limit(1).execute().data
+        # 1. Find the last date with completed joints — 연결 오류 시 재시도
+        last_row = _sb_exec(lambda sb: sb.table("joint_master").select("date_completed")
+                     .not_.is_("date_completed", "null")
+                     .order("date_completed", desc=True).limit(1).execute()).data
         if not last_row:
             return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": "", "week_end": ""})
         last_date = str(last_row[0]["date_completed"])[:10]
 
-        # 2. Find which week contains that date (single filtered query, no Python scan)
-        wk_rows = sb.table("week_schedule").select("week_no,week_start_date,week_end_date") \
-                    .lte("week_start_date", last_date) \
-                    .gte("week_end_date",   last_date) \
-                    .limit(1).execute().data or []
+        # 2. Find which week contains that date
+        wk_rows = _sb_exec(lambda sb: sb.table("week_schedule")
+                    .select("week_no,week_start_date,week_end_date")
+                    .lte("week_start_date", last_date)
+                    .gte("week_end_date",   last_date)
+                    .limit(1).execute()).data or []
         last_week = wk_rows[0] if wk_rows else None
         if not last_week:
             return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": last_date, "week_end": last_date})
@@ -1086,7 +1108,8 @@ def api_weekly_last_breakdown():
         we_date = str(last_week["week_end_date"])[:10]
         week_no = last_week["week_no"]
 
-        # 3. Query joints completed in this week (paginate to avoid 1000-row truncation)
+        # 3. Query joints completed in this week
+        sb = get_sb()
         joints = []
         _q = sb.table("joint_master") \
                .select("system,sub_area,sf,size_inch,mat") \
@@ -1100,10 +1123,8 @@ def api_weekly_last_breakdown():
             if len(_page) < 1000: break
             _off += 1000
 
-        # 4. Aggregate by system and sub_area and mat
-        sys_map = {}
-        sub_map = {}
-        mat_map = {}
+        # 4. Aggregate
+        sys_map, sub_map, mat_map = {}, {}, {}
         for j in joints:
             sys = j.get("system") or "—"
             sub = j.get("sub_area") or "—"
@@ -1116,10 +1137,9 @@ def api_weekly_last_breakdown():
                 if key not in mapping:
                     mapping[key] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
                 mapping[key]["completed_di"] += di
-                if is_fab:   mapping[key]["fab_di"]   += di
+                if is_fab:     mapping[key]["fab_di"]   += di
                 elif is_erect: mapping[key]["erect_di"] += di
 
-        # 항상 표시할 재질 — 실적 없어도 0으로 포함
         for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
             if always_mat not in mat_map:
                 mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
@@ -1132,7 +1152,7 @@ def api_weekly_last_breakdown():
                 key=lambda x: x[key_field]
             )
 
-        return jsonify({
+        result = {
             "week_no":    week_no,
             "week_label": f"W{week_no}",
             "week_start": ws_date,
@@ -1140,9 +1160,15 @@ def api_weekly_last_breakdown():
             "systems":    to_list(sys_map, "system"),
             "subareas":   to_list(sub_map, "sub_area"),
             "materials":  to_list(mat_map, "mat"),
-        })
+        }
+        with _lock:
+            _wkbd_cache["data"] = result
+            _wkbd_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
         print(f"[weekly-breakdown] Error: {e}")
+        if cached is not None:      # 오류 시 stale 캐시라도 반환
+            return jsonify(cached)
         return jsonify({"error": str(e)}), 500
 
 
