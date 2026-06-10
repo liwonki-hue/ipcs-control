@@ -239,6 +239,40 @@ _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
 CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
 _ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
+_pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
+_pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
+
+def _build_secondary_caches():
+    """_build() 완료 후 백그라운드에서 보조 캐시 사전 로딩 (Test Master readiness + 패키지 목록)"""
+    global _pkg_stats_cache, _pkg_cache
+    try:
+        sb = get_sb()
+        rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
+        pkg_stats = {r["package"]: [int(r["total"]), int(r["completed"])] for r in (rpc_res.data or [])}
+        with _lock:
+            _pkg_stats_cache["data"] = pkg_stats
+            _pkg_stats_cache["time"] = time.time()
+        print(f"[secondary_cache] pkg_stats loaded: {len(pkg_stats)} packages")
+    except Exception as e:
+        print(f"[secondary_cache] pkg_stats skipped (RPC not deployed?): {e}")
+
+    try:
+        sb = get_sb()
+        rpc_res = sb.rpc("get_distinct_packages_v1", {}).execute()
+        by_sys: dict = {}
+        for r in (rpc_res.data or []):
+            s = r.get("system") or ""
+            p = r.get("package") or ""
+            if p:
+                if s not in by_sys: by_sys[s] = set()
+                by_sys[s].add(p)
+        with _lock:
+            _pkg_cache["data"] = {s: sorted(v) for s, v in by_sys.items()}
+            _pkg_cache["time"] = time.time()
+        print(f"[secondary_cache] pkg_list loaded: {len(_pkg_cache['data'])} systems")
+    except Exception as e:
+        print(f"[secondary_cache] pkg_list skipped (RPC not deployed?): {e}")
+
 
 def _extract_d17(d17, raw):
     """v17 RPC 응답에서 raw dict 채우기"""
@@ -635,6 +669,7 @@ def _build():
             _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
+        _build_secondary_caches()  # 빌드 완료 전 동기 실행 — 첫 요청부터 캐시 히트
     except Exception as e:
         with _lock:
             _build_fail = True
@@ -682,6 +717,9 @@ def api_cache_clear():
         _meta_cache["time"] = 0
         _meta_cache["data"] = None
         _ep_sup_cache.clear()
+        _pkg_stats_cache.clear()
+        _pkg_cache["time"] = 0
+        _pkg_cache["data"] = {}
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -951,6 +989,51 @@ def api_joints_get():
         return jsonify({"data": res.data, "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/joints/packages", methods=["GET"])
+def api_joints_packages():
+    """시스템별 distinct package 목록 반환 — 캐시 우선, 미스 시 RPC 단일 쿼리"""
+    global _pkg_cache
+    try:
+        system = request.args.get("system", "").strip()
+        now = time.time()
+
+        with _lock:
+            cached_data = _pkg_cache.get("data")
+            cached_age  = now - _pkg_cache.get("time", 0)
+
+        if cached_data and cached_age < 3600:
+            return jsonify(cached_data.get(system, []))
+
+        # 캐시 미스: RPC 단일 쿼리로 전체 패키지 목록 로딩
+        sb = get_sb()
+        try:
+            rpc_res = sb.rpc("get_distinct_packages_v1", {}).execute()
+            by_sys: dict = {}
+            for r in (rpc_res.data or []):
+                s = r.get("system") or ""
+                p = r.get("package") or ""
+                if p:
+                    if s not in by_sys: by_sys[s] = set()
+                    by_sys[s].add(p)
+            with _lock:
+                _pkg_cache["data"] = {s: sorted(v) for s, v in by_sys.items()}
+                _pkg_cache["time"] = time.time()
+            return jsonify(_pkg_cache["data"].get(system, []))
+        except Exception:
+            # fallback: per-system paginated query
+            q = sb.table("joint_master").select("package").not_.is_("package", "null")
+            if system:
+                q = q.eq("system", system)
+            rows, off = [], 0
+            while True:
+                r = q.range(off, off + 999).execute()
+                rows.extend(r.data or [])
+                if len(r.data or []) < 1000: break
+                off += 1000
+            return jsonify(sorted(set(r["package"] for r in rows if r.get("package"))))
+    except Exception as e:
+        return jsonify([])
 
 @app.route("/api/joints", methods=["POST"])
 def api_joints_post():
@@ -1485,9 +1568,10 @@ def api_testpkg_joints():
         system  = request.args.get("system",   "").strip()
         status  = request.args.get("status",   "").strip()
         iso     = request.args.get("iso",      "").strip()
+        welder  = request.args.get("welder",   "").strip()
 
         q = sb.table("joint_master").select(
-            "id,system,package,iso_drawing,joint_no,date_completed,"
+            "id,system,package,iso_drawing,joint_no,date_completed,welder,"
             "vt_date,vt_result,"
             "inspection,mt_date,mt_result,pt_date,pt_result,"
             "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result",
@@ -1496,6 +1580,7 @@ def api_testpkg_joints():
 
         if pkg:    q = q.ilike("package",     f"%{pkg}%")
         if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
+        if welder: q = q.ilike("welder",      f"%{welder}%")
         if system: q = q.eq("system",  system)
 
         # status 필터: completed = vt_result=PASS + date_completed, pending = 그 외
@@ -1918,6 +2003,7 @@ def api_testpkg_get():
         pkg_no   = request.args.get("test_pkg_no", "").strip()
         status   = request.args.get("status",      "").strip()
         search   = request.args.get("q",           "").strip()
+        skip_readiness = request.args.get("skip_readiness", "0") == "1"
         q = sb.table("test_package_master").select("*", count="exact")
         if system:  q = q.eq("system",      system)
         if subarea: q = q.eq("sub_area",    subarea)
@@ -1931,30 +2017,44 @@ def api_testpkg_get():
         rows = res.data or []
 
         # Readiness: 패키지 내 모든 Joint가 완료(date_completed IS NOT NULL)이면 Ready
-        pkg_nos = [r["test_pkg_no"] for r in rows if r.get("test_pkg_no")]
-        if pkg_nos:
-            pkg_stats: dict = {}
-            off2 = 0
-            while True:
-                jr = sb.table("joint_master").select("package,date_completed") \
-                        .in_("package", pkg_nos).range(off2, off2 + 999).execute()
-                for j in (jr.data or []):
-                    p = j.get("package") or ""
-                    if p not in pkg_stats:
-                        pkg_stats[p] = [0, 0]   # [total, completed]
-                    pkg_stats[p][0] += 1
-                    if j.get("date_completed"):
-                        pkg_stats[p][1] += 1
-                if len(jr.data or []) < 1000:
-                    del jr; break
-                del jr
-                off2 += 1000
+        if skip_readiness:
+            for row in rows:
+                row["readiness"] = "Pending"
+        else:
+            global _pkg_stats_cache
+            now2 = time.time()
+            with _lock:
+                pkg_stats = _pkg_stats_cache.get("data")
+                pkg_stats_age = now2 - _pkg_stats_cache.get("time", 0)
+            if pkg_stats is None or pkg_stats_age > CACHE_TTL:
+                try:
+                    # 단일 RPC 쿼리 (get_pkg_readiness_stats_v1 미배포 시 fallback)
+                    rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
+                    pkg_stats = {r["package"]: [int(r["total"]), int(r["completed"])] for r in (rpc_res.data or [])}
+                except Exception:
+                    # fallback: paginated scan
+                    pkg_stats = {}
+                    off2 = 0
+                    while True:
+                        jr = sb.table("joint_master").select("package,date_completed") \
+                                .not_.is_("package", "null").range(off2, off2 + 999).execute()
+                        for j in (jr.data or []):
+                            p = j.get("package") or ""
+                            if p not in pkg_stats:
+                                pkg_stats[p] = [0, 0]
+                            pkg_stats[p][0] += 1
+                            if j.get("date_completed"):
+                                pkg_stats[p][1] += 1
+                        if len(jr.data or []) < 1000:
+                            del jr; break
+                        del jr
+                        off2 += 1000
+                with _lock:
+                    _pkg_stats_cache["data"] = pkg_stats
+                    _pkg_stats_cache["time"] = time.time()
             for row in rows:
                 s = pkg_stats.get(row.get("test_pkg_no") or "", [0, 0])
                 row["readiness"] = "Ready" if s[0] > 0 and s[0] == s[1] else "Pending"
-        else:
-            for row in rows:
-                row["readiness"] = "Pending"
 
         return jsonify({"data": rows, "count": res.count})
     except Exception as e:

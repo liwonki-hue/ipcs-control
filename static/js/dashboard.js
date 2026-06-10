@@ -1114,15 +1114,33 @@ async function loadUnitArea() {
 // ================================================================================
 //  JOINT MASTER
 // ================================================================================
+async function loadJMPackages() {
+    const system = document.getElementById("jm-system")?.value || "";
+    const sel = document.getElementById("jm-package");
+    if (!sel) return;
+    sel.innerHTML = '<option value="">All PKG</option>';
+    sel.value = "";
+    jmCurrentPage = 0;
+    loadJointMaster();
+    if (!system) return;
+    try {
+        const pkgs = await apiFetch(`/api/joints/packages?system=${encodeURIComponent(system)}`);
+        (pkgs || []).forEach(p => sel.add(new Option(p, p)));
+    } catch(e) { console.error("PKG load failed", e); }
+}
+
 async function loadJointMaster() {
     const unit=document.getElementById("jm-unit")?.value||"", system=document.getElementById("jm-system")?.value||"",
           status=document.getElementById("jm-status")?.value||"", isoVal=document.getElementById("jm-iso")?.value?.trim()||"",
-          subarea=document.getElementById("jm-subarea")?.value||"", phase=document.getElementById("jm-phase")?.value||"", 
+          subarea=document.getElementById("jm-subarea")?.value||"", phase=document.getElementById("jm-phase")?.value||"",
+          pkg=document.getElementById("jm-package")?.value||"",
           insp=document.getElementById("jm-inspection")?.value||"", offset=jmCurrentPage*JM_PAGE_SIZE;
+    _tableLoading("jmBody", 15);
     try {
         const params=new URLSearchParams({limit:JM_PAGE_SIZE,offset});
         if(unit)params.set("unit",unit); if(system)params.set("system",system); if(status)params.set("status",status);
         if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(phase)params.set("phase",phase);
+        if(pkg)params.set("package",pkg);
         if(insp)params.set("inspection",insp);
         const res=await apiFetch(`/api/joints?${params}`);
         jmData=res.data;
@@ -1234,8 +1252,6 @@ function renderJMTable(rows){
 }
 
 
-function openAddJointModal(){document.getElementById("addJointModal").style.display="flex";}
-function closeAddJointModal(){document.getElementById("addJointModal").style.display="none";}
 
 // ================================================================================
 //  NDE & PWHT
@@ -1250,6 +1266,7 @@ async function loadNdePwht() {
     const inspVal=document.getElementById("nde-insp")?.value||"";
     const welderVal=document.getElementById("nde-welder")?.value?.trim()||"";
     const offset=ndeCurrentPage*NDE_PAGE_SIZE;
+    _tableLoading("ndeBody", 12);
     try {
         const params=new URLSearchParams({limit:NDE_PAGE_SIZE,offset,nde_only:"true"});
         if(unit)params.set("unit",unit); if(system)params.set("system",system);
@@ -1376,14 +1393,6 @@ async function saveNdeRow(id){
     }catch(e){ toast("✗ Save failed: " + e.message, "error"); }
 }
 
-async function submitNewJoint(){
-    const data={unit:document.getElementById("new-unit").value.trim(),system:document.getElementById("new-system").value.trim(),sub_area:document.getElementById("new-area").value.trim(),line_no:document.getElementById("new-line_no").value.trim(),iso_drawing:document.getElementById("new-iso").value.trim(),rev:document.getElementById("new-rev").value.trim(),spool_no:document.getElementById("new-spool").value.trim(),mat:document.getElementById("new-mat").value.trim(),size_inch:parseFloat(document.getElementById("new-size").value)||0,sf:document.getElementById("new-sf").value.trim(),joint_no:document.getElementById("new-joint_no").value.trim(),welder:document.getElementById("new-welder").value.trim(),phase:document.getElementById("new-phase").value.trim(),completed:false};
-    try{
-        const r=await fetch(`${API}/api/joints`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)});
-        if(!r.ok)throw new Error('HTTP '+r.status);
-        toast("✓ Joint added successfully");closeAddJointModal();loadJointMaster();fetch("/api/cache/clear");
-    }catch(e){toast("✗ Failed to add joint","error");}
-}
 
 async function deleteJoint(id){
     if(!confirm("Are you sure you want to delete this joint? (ID: "+id+")"))return;
@@ -1579,9 +1588,39 @@ async function exportSystemsExcel(type){
     const success=await downloadWithPicker(wb,fileName);if(success)toast(`${type==='system'?'System':'Sub Area'} export complete`);
 }
 
+// 테이블 tbody에 로딩 행 표시
+function _tableLoading(tbodyId, colspan) {
+    const el = document.getElementById(tbodyId);
+    if (el) el.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;padding:24px;color:#7a95b8;font-size:12px;letter-spacing:0.05em">Loading...</td></tr>`;
+}
+
+// 필터 파라미터 읽기 헬퍼 [[elementId, paramKey], ...]
+function _readFilters(fields) {
+    const p = new URLSearchParams();
+    for (const [id, key] of fields) {
+        const val = document.getElementById(id)?.value?.trim() || "";
+        if (val) p.set(key, val);
+    }
+    return p;
+}
+
+// 현재 필터 조건으로 전체 데이터 조회 (limit=10000)
+async function _fetchAllFiltered(endpoint, params) {
+    params.set("limit", 10000);
+    params.set("offset", 0);
+    const res = await apiFetch(`${endpoint}?${params}`);
+    return res.data || [];
+}
+
 async function exportJMExcel(){
-    if(!jmData||jmData.length===0){toast("No data to export","error");return;}
-    const exportData=jmData.map(r=>({
+    toast("데이터 로딩 중...", "info");
+    const params = _readFilters([
+        ["jm-unit","unit"],["jm-system","system"],["jm-status","status"],
+        ["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]
+    ]);
+    const data = await _fetchAllFiltered("/api/joints", params);
+    if(!data.length){toast("No data to export","error");return;}
+    const exportData=data.map(r=>({
         "ID":r.id, "UNIT":r.unit||"", "SYSTEM":r.system||"", "AREA":r.area||"",
         "SUB AREA":r.sub_area||"", "LINE NO":r.line_no||"", "ISO DRAWING":r.iso_drawing||"",
         "REV":r.rev||"", "SPOOL NO":r.spool_no||"", "MAT":r.mat||"",
@@ -1591,13 +1630,48 @@ async function exportJMExcel(){
         "REMARK":r.remark||""
     }));
     const ws=XLSX.utils.json_to_sheet(exportData),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"JointMaster");
-    const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast("Exported to .xlsx successfully");
+    const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
 }
 
-function printPage(pageId){
+async function printPage(pageId){
+    const _PRINT_TABS = {
+        "joint_master": {
+            endpoint: "/api/joints",
+            params: () => _readFilters([["jm-unit","unit"],["jm-system","system"],["jm-status","status"],["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]]),
+            render: d => renderJMTable(d), restore: () => renderJMTable(jmData)
+        },
+        "support_master": {
+            endpoint: "/api/support-master",
+            params: () => _readFilters([["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-status","status"],["sm-phase","phase"],["sm-package","package"],["sm-iso","iso"]]),
+            render: d => renderSMTable(d), restore: () => renderSMTable(smData)
+        },
+        "nde_pwht": {
+            endpoint: "/api/joints",
+            params: () => { const p = _readFilters([["nde-unit","unit"],["nde-system","system"],["nde-iso","iso"],["nde-insp","inspection"],["nde-welder","welder"]]); p.set("nde_only","true"); return p; },
+            render: d => renderNdeTable(d), restore: () => renderNdeTable(ndeData)
+        },
+        "testpkg_master": {
+            endpoint: "/api/testpkg-joints",
+            params: () => _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]),
+            render: d => renderTPTable(d), restore: () => renderTPTable(tpData)
+        },
+        "test_master": {
+            endpoint: "/api/testpkg-master",
+            params: () => _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"]]),
+            render: d => renderTMTable(d), restore: () => renderTMTable(tmData)
+        }
+    };
+    const cfg = _PRINT_TABS[pageId];
+    if (cfg) {
+        toast("인쇄 데이터 로딩 중...", "info");
+        const allData = await _fetchAllFiltered(cfg.endpoint, cfg.params());
+        cfg.render(allData);
+    }
     const pages=document.querySelectorAll('.page');pages.forEach(p=>p.classList.remove('page-print-active'));
     const target=document.getElementById("page-"+pageId);if(target)target.classList.add('page-print-active');
-    window.print();pages.forEach(p=>p.classList.remove('page-print-active'));
+    window.print();
+    pages.forEach(p=>p.classList.remove('page-print-active'));
+    if (cfg) cfg.restore();
 }
 
 // 렌더된 DOM 테이블들을 시트로 묶어 내보내는 공용 헬퍼 (specs: [elementId, sheetName][])
@@ -2162,7 +2236,7 @@ async function loadSupportMaster() {
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
     const iso     = document.getElementById("sm-iso")?.value?.trim() || "";
     const offset  = smCurrentPage * SM_PAGE_SIZE;
-
+    _tableLoading("smBody", 12);
     try {
         const params = new URLSearchParams({limit: SM_PAGE_SIZE, offset});
         if (unit)    params.set("unit",     unit);
@@ -2332,35 +2406,13 @@ async function deleteSMItem(id) {
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
-function openSMModal()  { document.getElementById("addSMModal").style.display = "flex"; }
-function closeSMModal() { document.getElementById("addSMModal").style.display = "none"; }
-
-async function submitSMItem() {
-    const data = {
-        phase:           document.getElementById("sm-new-phase").value.trim(),
-        package:         document.getElementById("sm-new-package")?.value?.trim() || null,
-        unit:            document.getElementById("sm-new-unit").value.trim(),
-        system:          document.getElementById("sm-new-system").value.trim(),
-        area:            document.getElementById("sm-new-area").value.trim(),
-        sub_area:        document.getElementById("sm-new-subarea").value.trim(),
-        support_drawing: document.getElementById("sm-new-support_drawing").value.trim(),
-        revision:        document.getElementById("sm-new-revision").value.trim(),
-        iso_drawing:     document.getElementById("sm-new-iso").value.trim(),
-        line_no:         document.getElementById("sm-new-line_no").value.trim(),
-        welder:          document.getElementById("sm-new-welder").value.trim(),
-        completed:       false
-    };
-    if (!data.system && !data.support_drawing) { toast("System or Support Drawing required", "error"); return; }
-    try {
-        const r = await fetch("/api/support-master", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(data)});
-        const d = await r.json(); if (!d.ok) throw new Error(d.error);
-        toast("✓ Support added"); closeSMModal(); loadSupportMaster();
-    } catch(e) { toast(`✗ ${e.message}`, "error"); }
-}
 
 async function exportSMExcel() {
-    if (!smData?.length) { toast("No data", "error"); return; }
-    const rows = smData.map(r => ({
+    toast("데이터 로딩 중...", "info");
+    const params = _readFilters([["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-status","status"],["sm-phase","phase"],["sm-package","package"],["sm-iso","iso"]]);
+    const data = await _fetchAllFiltered("/api/support-master", params);
+    if (!data.length) { toast("No data", "error"); return; }
+    const rows = data.map(r => ({
         "NO. ": r.id,
         "PHASE": r.phase || "",
         "UNIT": r.unit || "",
@@ -2374,11 +2426,11 @@ async function exportSMExcel() {
         "WELDER": r.welder || "",
         "ACTUAL DATE": r.date_completed ? r.date_completed.substring(0,10) : "",
     }));
-    const ws = XLSX.utils.json_to_sheet(rows); 
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "SupportMaster");
-    const ok = await downloadWithPicker(wb, "Support_Master_Export.xlsx"); 
-    if (ok) toast("✓ Exported");
+    const ok = await downloadWithPicker(wb, "Support_Master_Export.xlsx");
+    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
 }
 
 // ================================================================================
@@ -2389,16 +2441,19 @@ const TP_PAGE = 30;
 
 async function loadTestPkgMaster() {
     const iso    = document.getElementById("tp-iso")?.value?.trim() || "";
+    const welder = document.getElementById("tp-welder")?.value?.trim() || "";
     const pkg    = document.getElementById("tp-package")?.value?.trim() || "";
     const system = document.getElementById("tp-system")?.value  || "";
     const status = document.getElementById("tp-status")?.value  || "";
     const offset = tpCurrentPage * TP_PAGE;
+    _tableLoading("tpBody", 18);
     try {
         const tpSys = document.getElementById("tp-system");
         if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
 
         const params = new URLSearchParams({limit: TP_PAGE, offset});
         if (iso)    params.set("iso",     iso);
+        if (welder) params.set("welder",  welder);
         if (pkg)    params.set("package", pkg);
         if (system) params.set("system",  system);
         if (status) params.set("status",  status);
@@ -2495,17 +2550,6 @@ async function saveTPVT(id) {
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
-async function syncPhasePackage() {
-    if (!confirm("Sync PHASE and PACKAGE from BOP Piping Joint Master.xlsx in the Raw File folder.\nDo you want to continue?")) return;
-    toast("Syncing...");
-    try {
-        const r = await fetch("/api/joints/sync-phase-package", {method:"POST"});
-        const d = await r.json();
-        if (!d.ok) throw new Error(d.error);
-        toast(`✓ Sync complete: ${d.updated} joints updated (${d.rows_read} rows read)`);
-        loadTestPkgMaster();
-    } catch(e) { toast(`✗ Sync failed: ${e.message}`, "error"); }
-}
 
 async function syncSMPhasePackage() {
     if (!confirm("Support Master의 ISO Drawing으로 Joint Master에서 Phase/Package를 매칭합니다.\n계속하시겠습니까?")) return;
@@ -2520,8 +2564,12 @@ async function syncSMPhasePackage() {
 }
 
 async function exportNDEExcel() {
-    if (!ndeData || ndeData.length === 0) { toast("No NDE data to export", "error"); return; }
-    const rows = ndeData.map(r => ({
+    toast("데이터 로딩 중...", "info");
+    const params = _readFilters([["nde-unit","unit"],["nde-system","system"],["nde-iso","iso"],["nde-insp","inspection"],["nde-welder","welder"]]);
+    params.set("nde_only", "true");
+    const data = await _fetchAllFiltered("/api/joints", params);
+    if (!data.length) { toast("No NDE data to export", "error"); return; }
+    const rows = data.map(r => ({
         "ISO Drawing": r.iso_drawing || "",
         "Rev":         r.rev         || "",
         "Joint No":    r.joint_no    || "",
@@ -2543,12 +2591,15 @@ async function exportNDEExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "NDE_PWHT");
     const ok = await downloadWithPicker(wb, "NDE_PWHT_Export.xlsx");
-    if (ok) toast("✓ NDE & PWHT exported");
+    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
 }
 
 async function exportTPExcel() {
-    if (!tpData?.length) { toast("No data", "error"); return; }
-    const rows = tpData.map(r => ({
+    toast("데이터 로딩 중...", "info");
+    const params = _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]);
+    const data = await _fetchAllFiltered("/api/testpkg-joints", params);
+    if (!data.length) { toast("No data", "error"); return; }
+    const rows = data.map(r => ({
         "ID": r.id,
         "System": r.system||"",
         "Package": r.package||"",
@@ -2569,7 +2620,8 @@ async function exportTPExcel() {
     }));
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
-    const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx"); if (ok) toast("✓ Exported");
+    const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx");
+    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
 }
 
 // ================================================================================
@@ -2587,6 +2639,7 @@ async function loadTestMaster() {
     const status  = document.getElementById("tm-status")?.value  || "";
     const search  = document.getElementById("tm-search")?.value.trim() || "";
     const offset  = tmCurrentPage * TM_PAGE;
+    _tableLoading("tmBody", 13);
     try {
         let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
         if (system) url += `&system=${encodeURIComponent(system)}`;
@@ -2639,7 +2692,7 @@ function _renderTMPagination(curPage, totalRows) {
 
 async function _loadTMAllForFilters() {
     try {
-        const res = await apiFetch("/api/testpkg-master?limit=2000&offset=0");
+        const res = await apiFetch("/api/testpkg-master?limit=2000&offset=0&skip_readiness=1");
         _tmAllData = res.data || [];
         _populateTMSystemFilter();
     } catch(e) {}
@@ -3074,8 +3127,12 @@ function _renderRtRepairList(repairList) {
 }
 
 async function exportTMExcel() {
-    if (!tmData?.length) { toast("No data", "error"); return; }
-    const rows = tmData.map((r,i) => ({
+    toast("데이터 로딩 중...", "info");
+    const params = _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"]]);
+    params.set("skip_readiness", "1");
+    const data = await _fetchAllFiltered("/api/testpkg-master", params);
+    if (!data.length) { toast("No data", "error"); return; }
+    const rows = data.map((r,i) => ({
         "No":               i+1,
         "System":           r.system           || "",
         "PACKAGE":          r.test_pkg_no      || "",
@@ -3092,5 +3149,5 @@ async function exportTMExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestMaster");
     const ok = await downloadWithPicker(wb, "Test_Master_Export.xlsx");
-    if (ok) toast("✓ Exported");
+    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
 }

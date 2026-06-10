@@ -317,13 +317,13 @@
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()" style="width:160px;">
           <select id="jm-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
-          <select id="jm-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
+          <select id="jm-system" class="filter-sel" style="min-width:100px;" onchange="loadJMPackages()"><option value="">System</option></select>
           <select id="jm-subarea" class="filter-sel" style="min-width:100px;"><option value="">Sub Area</option></select>
           <select id="jm-status" class="filter-sel" style="min-width:90px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
+          <select id="jm-package" class="filter-sel" style="min-width:110px;" onchange="jmCurrentPage=0;loadJointMaster()"><option value="">All PKG</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <button class="btn-primary" onclick="loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
-          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openAddJointModal()">+ Add Joint</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
@@ -560,10 +560,9 @@
           <select id="sm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
           <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;loadSupportMaster()" style="width:130px;">
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
-          <button class="btn-primary" style="background:#22d3a1; padding:6px 12px; margin-left: 10px;" onclick="openSMModal()">+ Add Support</button>
-          <button class="btn-primary" style="background:#f59e0b; padding:6px 12px; margin-left:6px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
+            <button class="btn-primary" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
             <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
@@ -671,6 +670,7 @@
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:160px;">
+          <input id="tp-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:120px;">
           <select id="tp-system" class="filter-sel" style="min-width:100px;" onchange="tpCurrentPage=0;loadSystemPackages();loadTestPkgMaster()"><option value="">System</option></select>
           <select id="tp-package" class="filter-sel" style="min-width:130px;" onchange="tpCurrentPage=0;loadTestPkgMaster()"><option value="">All Packages</option></select>
           <select id="tp-status"  class="filter-sel" style="min-width:100px;">
@@ -679,7 +679,6 @@
             <option value="pending">PENDING</option>
           </select>
           <button class="btn-primary" onclick="loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
-          <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;margin-left:6px;" onclick="syncPhasePackage()" title="Sync PHASE &amp; PACKAGE from local Excel">&#8635; Sync Phase/Pkg</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('testpkg_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
@@ -792,56 +791,6 @@
 }
 </style>
 
-<!-- Modal: Add Support Item -->
-<div id="addSMModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-    <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add Support Item</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><input type="text" id="sm-new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Package</label><br><input type="text" id="sm-new-package" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Unit</label><br><input type="text" id="sm-new-unit" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="sm-new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Area</label><br><input type="text" id="sm-new-area" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Sub Area</label><br><input type="text" id="sm-new-subarea" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Support Drawing</label><br><input type="text" id="sm-new-support_drawing" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Revision</label><br><input type="text" id="sm-new-revision" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">ISO Drawing</label><br><input type="text" id="sm-new-iso" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Line No</label><br><input type="text" id="sm-new-line_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder</label><br><input type="text" id="sm-new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-    </div>
-    <div style="margin-top:20px;text-align:right;">
-      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeSMModal()">Cancel</button>
-      <button class="btn-primary" style="background:#2563eb;" onclick="submitSMItem()">Save Support</button>
-    </div>
-  </div>
-</div>
-
-
-
-<div id="addJointModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
-  <div style="background:#fff;width:500px;padding:25px;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-    <h3 style="margin-top:0;margin-bottom:15px;color:#1e2d45;border-bottom:1px solid #e1e8ef;padding-bottom:10px;">Add New Joint</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Unit</label><br><input type="text" id="new-unit" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. B1"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">System</label><br><input type="text" id="new-system" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. CCP"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Area</label><br><input type="text" id="new-area" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. MB #1"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Line No</label><br><input type="text" id="new-line_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div style="grid-column:span 2"><label style="font-size:11px;font-weight:600;color:#7a95b8">ISO Drawing</label><br><input type="text" id="new-iso" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Rev</label><br><input type="text" id="new-rev" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" value="0"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Spool No</label><br><input type="text" id="new-spool" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Material</label><br><input type="text" id="new-mat" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Size (Inch)</label><br><input type="number" id="new-size" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" step="0.1"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">S/F</label><br><select id="new-sf" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="S">S - Shop</option><option value="F">F - Field</option></select></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Joint No</label><br><input type="text" id="new-joint_no" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Welder ID</label><br><input type="text" id="new-welder" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px" placeholder="e.g. W001, W002" title="Use comma for multiple welders"></div>
-      <div><label style="font-size:11px;font-weight:600;color:#7a95b8">Phase</label><br><select id="new-phase" class="cell-input" style="width:100%;border:1px solid #c8e0f4;padding:6px;border-radius:4px"><option value="">Select Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select></div>
-    </div>
-    <div style="margin-top:20px;text-align:right;">
-      <button class="btn-de" style="background:#f4f6f8;color:#4a6080;" onclick="closeAddJointModal()">Cancel</button>
-      <button class="btn-primary" style="background:#2563eb;" onclick="submitNewJoint()">Save Joint</button>
-    </div>
-  </div>
-</div>
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 <script>
