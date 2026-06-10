@@ -341,7 +341,7 @@ function renderKPI(d, wkData) {
     document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
     document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
     const weightSubEl = document.getElementById("kpi-overall-weight-sub");
-    if (weightSubEl) weightSubEl.textContent = `PIPING ${Math.round(pipingPct)}% · SUP ${Math.round(supportPct)}% · TEST ${Math.round(testPct)}%`;
+    if (weightSubEl) weightSubEl.textContent = `PIPING 70% · SUPPORT 20% · TEST 10%`;
 
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
@@ -1476,43 +1476,6 @@ async function refreshData(){
         if(visPage)navigate(visPage);
         toast("↺ Data refreshed!");
     }catch(e){toast("Refresh failed: "+e.message,"error");}
-}
-
-// weekly-actuals 병합: DOMContentLoaded 초기 로드 + 저장 후 갱신 시 공통 사용
-async function _applyWeeklyActuals() {
-    if (!_dashData) return;
-    try {
-        const wa = await fetch("/api/weekly-actuals", {cache:"no-store"}).then(r => r.json());
-        if (!Array.isArray(wa) || !wa.length) return;
-        const waMap = {};
-        wa.forEach(w => { if (w.week_no) waMap[w.week_no] = w; });
-        (_dashData.weekly || []).forEach(w => {
-            const m = waMap[w.week_no];
-            if (m) {
-                w.completed_di = m.completed_di || w.completed_di;
-                w.fab_di       = m.fab_di       || w.fab_di;
-                w.erect_di     = m.erect_di     || w.erect_di;
-            }
-        });
-        // v17에 없는 주차 추가
-        const existing = new Set((_dashData.weekly||[]).map(w=>w.week_no));
-        wa.forEach(w => {
-            if (!w.week_label) w.week_label = 'W' + w.week_no;
-            if (!existing.has(w.week_no)) _dashData.weekly.push(w);
-        });
-        _dashData.weekly.sort((a,b)=>a.week_no-b.week_no);
-        // cumul_actual 재계산
-        let _cum = 0;
-        _dashData.weekly.forEach(w => {
-            _cum += (w.completed_di || 0);
-            w.cumul_actual = Math.round(_cum * 100) / 100;
-        });
-        renderKPI(_dashData.kpi, _dashData.weekly);
-        const _visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
-        if (_visPage === "overview" || !_visPage) renderOverview(_dashData.kpi, _dashData.weekly, _dashData.units, _dashData.systems);
-        else if (_visPage === "weekly")      loadWeekly();
-        else if (_visPage === "early_power") loadEarlyPower();
-    } catch(e) { console.warn("[weekly-actuals]", e); }
 }
 
 let _refreshPending = false;

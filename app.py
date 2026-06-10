@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request
-from supabase import create_client, Client
+from supabase import create_client
 
 # ── Load .env ─────────────────────────────────────────────────────────
 def load_env_manually():
