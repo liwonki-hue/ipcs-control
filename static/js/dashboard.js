@@ -2628,7 +2628,7 @@ async function exportTPExcel() {
 //  TEST MASTER
 // ================================================================================
 let tmData = [], tmCurrentPage = 0;
-const TM_PAGE = 50;
+const TM_PAGE = 15;
 
 // 전체 패키지 목록 캐시 (System 필터용)
 let _tmAllData = [];
@@ -2740,22 +2740,42 @@ function renderTMTable(data) {
     tbody.innerHTML = data.map((r, i) => {
         const dc  = r.date_completed ? r.date_completed.substring(0,10) : "";
         const res = r.completed ? "PASS" : (dc ? "FAIL" : "");
-        const isReady = r.readiness === "Ready";
-        const readinessBadge = isReady
-            ? `<span style="color:#22d3a1;font-weight:700">Ready</span>`
-            : `<span style="color:#f59e0b">Pending</span>`;
+        const pt = r.piping_total     || 0;
+        const pc = r.piping_completed || 0;
+        const st = r.support_total    || 0;
+        const si = r.support_installed|| 0;
+        const pp = pt > 0 ? (pc / pt) * 100 : 0;
+        const sp = st > 0 ? (si / st) * 100 : 0;
+        const op = pp * 0.7 + sp * 0.3;
+        const mU = (r.method||"").toUpperCase();
+        const mdU = (r.media||"").toUpperCase();
+        const readinessCell = `<div style="padding:3px 8px">
+            <div style="font-size:11px;font-weight:400;color:#3b82f6;text-align:center;margin-bottom:4px;font-family:'DM Mono',monospace">${op.toFixed(1)}%</div>
+            <div style="display:flex;gap:2px;margin:0 2px">
+                <div style="flex:7;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Piping ${pp.toFixed(1)}%">
+                    <div style="width:${Math.min(pp,100).toFixed(1)}%;height:100%;background:#3b82f6;border-radius:2px"></div>
+                </div>
+                <div style="flex:3;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Support ${sp.toFixed(1)}%">
+                    <div style="width:${Math.min(sp,100).toFixed(1)}%;height:100%;background:#a78bfa;border-radius:2px"></div>
+                </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:2px;padding:0 2px">
+                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace">P:${pp.toFixed(1)}%</span>
+                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace">S:${sp.toFixed(1)}%</span>
+            </div>
+        </div>`;
         return `<tr>
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
-            <td style="text-align:center">${readinessBadge}</td>
+            <td style="padding:0">${readinessCell}</td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
                     <option value="" style="color:#000">-</option>
-                    <option value="Visual"     ${r.method==="Visual"    ?" selected":""} style="color:#000">Visual</option>
-                    <option value="Pneumatic"  ${r.method==="Pneumatic" ?" selected":""} style="color:#000">Pneumatic</option>
-                    <option value="Hydro"      ${r.method==="Hydro"     ?" selected":""} style="color:#000">Hydro</option>
-                    <option value="In Service" ${r.method==="In Service"?" selected":""} style="color:#000">In Service</option>
+                    <option value="VISUAL"      ${mU==="VISUAL"     ?" selected":""} style="color:#000">VISUAL</option>
+                    <option value="PNEUMATIC"   ${mU==="PNEUMATIC"  ?" selected":""} style="color:#000">PNEUMATIC</option>
+                    <option value="HYDRO"       ${mU==="HYDRO"      ?" selected":""} style="color:#000">HYDRO</option>
+                    <option value="IN SERVICE"  ${mU==="IN SERVICE" ?" selected":""} style="color:#000">IN SERVICE</option>
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
@@ -2763,9 +2783,9 @@ function renderTMTable(data) {
             <td style="text-align:center">
                 <select class="cell-input" id="tm-media-${r.id}" style="${ssel}">
                     <option value="" style="color:#000">-</option>
-                    <option value="IA (N2 Gas)"   ${r.media==="IA (N2 Gas)"  ?" selected":""} style="color:#000">IA (N2 Gas)</option>
-                    <option value="Water"         ${r.media==="Water"        ?" selected":""} style="color:#000">Water</option>
-                    <option value="Demi. Water"   ${r.media==="Demi. Water"  ?" selected":""} style="color:#000">Demi. Water</option>
+                    <option value="IA (N2 GAS)"   ${mdU==="IA (N2 GAS)"  ?" selected":""} style="color:#000">IA (N2 GAS)</option>
+                    <option value="WATER"         ${mdU==="WATER"        ?" selected":""} style="color:#000">WATER</option>
+                    <option value="DEMI. WATER"   ${mdU==="DEMI. WATER"  ?" selected":""} style="color:#000">DEMI. WATER</option>
                 </select>
             </td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>

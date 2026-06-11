@@ -260,14 +260,40 @@ def _build_secondary_caches():
     """_build() 완료 후 보조 캐시 사전 로딩 (Test Master readiness + 패키지 목록)"""
     global _pkg_stats_cache, _pkg_cache
     try:
-        rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v1", {}).execute())
-        pkg_stats = {r["package"]: [int(r["total"]), int(r["completed"])] for r in (rpc_res.data or [])}
+        # v2: piping(joint_master) + support(support_master) 통합 진행률
+        rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v2", {}).execute())
+        pkg_stats = {
+            r["package"]: {
+                "piping_total":      int(r.get("piping_total",     0) or 0),
+                "piping_completed":  int(r.get("piping_completed", 0) or 0),
+                "support_total":     int(r.get("support_total",    0) or 0),
+                "support_installed": int(r.get("support_installed",0) or 0),
+            }
+            for r in (rpc_res.data or [])
+        }
         with _lock:
             _pkg_stats_cache["data"] = pkg_stats
             _pkg_stats_cache["time"] = time.time()
-        print(f"[secondary_cache] pkg_stats loaded: {len(pkg_stats)} packages")
+        print(f"[secondary_cache] pkg_stats v2 loaded: {len(pkg_stats)} packages")
     except Exception as e:
-        print(f"[secondary_cache] pkg_stats skipped (RPC not deployed?): {e}")
+        print(f"[secondary_cache] pkg_stats v2 skipped, fallback to v1: {e}")
+        try:
+            rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v1", {}).execute())
+            pkg_stats = {
+                r["package"]: {
+                    "piping_total":      int(r.get("total",     0) or 0),
+                    "piping_completed":  int(r.get("completed", 0) or 0),
+                    "support_total":     0,
+                    "support_installed": 0,
+                }
+                for r in (rpc_res.data or [])
+            }
+            with _lock:
+                _pkg_stats_cache["data"] = pkg_stats
+                _pkg_stats_cache["time"] = time.time()
+            print(f"[secondary_cache] pkg_stats v1 fallback: {len(pkg_stats)} packages")
+        except Exception as e2:
+            print(f"[secondary_cache] pkg_stats skipped: {e2}")
 
     try:
         rpc_res = _sb_exec(lambda sb: sb.rpc("get_distinct_packages_v1", {}).execute())
@@ -2042,10 +2068,11 @@ def api_testpkg_get():
         res = q.order("id").range(offset, offset + limit - 1).execute()
         rows = res.data or []
 
-        # Readiness: 패키지 내 모든 Joint가 완료(date_completed IS NOT NULL)이면 Ready
+        # Readiness: piping 70% + support 30% 가중 진행률
         if skip_readiness:
             for row in rows:
-                row["readiness"] = "Pending"
+                row["piping_total"] = 0; row["piping_completed"] = 0
+                row["support_total"] = 0; row["support_installed"] = 0
         else:
             global _pkg_stats_cache
             now2 = time.time()
@@ -2054,33 +2081,39 @@ def api_testpkg_get():
                 pkg_stats_age = now2 - _pkg_stats_cache.get("time", 0)
             if pkg_stats is None or pkg_stats_age > CACHE_TTL:
                 try:
-                    # 단일 RPC 쿼리 (get_pkg_readiness_stats_v1 미배포 시 fallback)
-                    rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
-                    pkg_stats = {r["package"]: [int(r["total"]), int(r["completed"])] for r in (rpc_res.data or [])}
+                    rpc_res = sb.rpc("get_pkg_readiness_stats_v2", {}).execute()
+                    pkg_stats = {
+                        r["package"]: {
+                            "piping_total":      int(r.get("piping_total",     0) or 0),
+                            "piping_completed":  int(r.get("piping_completed", 0) or 0),
+                            "support_total":     int(r.get("support_total",    0) or 0),
+                            "support_installed": int(r.get("support_installed",0) or 0),
+                        }
+                        for r in (rpc_res.data or [])
+                    }
                 except Exception:
-                    # fallback: paginated scan
-                    pkg_stats = {}
-                    off2 = 0
-                    while True:
-                        jr = sb.table("joint_master").select("package,date_completed") \
-                                .not_.is_("package", "null").range(off2, off2 + 999).execute()
-                        for j in (jr.data or []):
-                            p = j.get("package") or ""
-                            if p not in pkg_stats:
-                                pkg_stats[p] = [0, 0]
-                            pkg_stats[p][0] += 1
-                            if j.get("date_completed"):
-                                pkg_stats[p][1] += 1
-                        if len(jr.data or []) < 1000:
-                            del jr; break
-                        del jr
-                        off2 += 1000
+                    try:
+                        rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
+                        pkg_stats = {
+                            r["package"]: {
+                                "piping_total":      int(r.get("total",     0) or 0),
+                                "piping_completed":  int(r.get("completed", 0) or 0),
+                                "support_total":     0,
+                                "support_installed": 0,
+                            }
+                            for r in (rpc_res.data or [])
+                        }
+                    except Exception:
+                        pkg_stats = {}
                 with _lock:
                     _pkg_stats_cache["data"] = pkg_stats
                     _pkg_stats_cache["time"] = time.time()
             for row in rows:
-                s = pkg_stats.get(row.get("test_pkg_no") or "", [0, 0])
-                row["readiness"] = "Ready" if s[0] > 0 and s[0] == s[1] else "Pending"
+                s = pkg_stats.get(row.get("test_pkg_no") or "", {})
+                row["piping_total"]      = s.get("piping_total",     0)
+                row["piping_completed"]  = s.get("piping_completed", 0)
+                row["support_total"]     = s.get("support_total",    0)
+                row["support_installed"] = s.get("support_installed",0)
 
         return jsonify({"data": rows, "count": res.count})
     except Exception as e:
