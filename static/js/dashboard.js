@@ -2628,7 +2628,7 @@ async function exportTPExcel() {
 //  TEST MASTER
 // ================================================================================
 let tmData = [], tmCurrentPage = 0;
-const TM_PAGE = 15;
+const TM_PAGE = 20;
 
 // 전체 패키지 목록 캐시 (System 필터용)
 let _tmAllData = [];

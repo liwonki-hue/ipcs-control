@@ -257,59 +257,67 @@ _daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 �
 _wkbd_cache: dict  = {"time": 0, "data": None}      # /api/weekly-last-breakdown 5분 캐시
 
 def _build_secondary_caches():
-    """_build() 완료 후 보조 캐시 사전 로딩 (Test Master readiness + 패키지 목록)"""
+    """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats v2 와 pkg_list 병렬 실행"""
     global _pkg_stats_cache, _pkg_cache
-    try:
-        # v2: piping(joint_master) + support(support_master) 통합 진행률
-        rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v2", {}).execute())
-        pkg_stats = {
-            r["package"]: {
-                "piping_total":      int(r.get("piping_total",     0) or 0),
-                "piping_completed":  int(r.get("piping_completed", 0) or 0),
-                "support_total":     int(r.get("support_total",    0) or 0),
-                "support_installed": int(r.get("support_installed",0) or 0),
-            }
-            for r in (rpc_res.data or [])
-        }
-        with _lock:
-            _pkg_stats_cache["data"] = pkg_stats
-            _pkg_stats_cache["time"] = time.time()
-        print(f"[secondary_cache] pkg_stats v2 loaded: {len(pkg_stats)} packages")
-    except Exception as e:
-        print(f"[secondary_cache] pkg_stats v2 skipped, fallback to v1: {e}")
+
+    def _load_pkg_stats():
         try:
-            rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v1", {}).execute())
-            pkg_stats = {
+            rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v2", {}).execute())
+            data = {
                 r["package"]: {
-                    "piping_total":      int(r.get("total",     0) or 0),
-                    "piping_completed":  int(r.get("completed", 0) or 0),
-                    "support_total":     0,
-                    "support_installed": 0,
+                    "piping_total":      int(r.get("piping_total",     0) or 0),
+                    "piping_completed":  int(r.get("piping_completed", 0) or 0),
+                    "support_total":     int(r.get("support_total",    0) or 0),
+                    "support_installed": int(r.get("support_installed",0) or 0),
                 }
                 for r in (rpc_res.data or [])
             }
             with _lock:
-                _pkg_stats_cache["data"] = pkg_stats
+                _pkg_stats_cache["data"] = data
                 _pkg_stats_cache["time"] = time.time()
-            print(f"[secondary_cache] pkg_stats v1 fallback: {len(pkg_stats)} packages")
-        except Exception as e2:
-            print(f"[secondary_cache] pkg_stats skipped: {e2}")
+            print(f"[secondary_cache] pkg_stats v2: {len(data)} packages")
+        except Exception as e:
+            print(f"[secondary_cache] pkg_stats v2 fallback to v1: {e}")
+            try:
+                rpc_res = _sb_exec(lambda sb: sb.rpc("get_pkg_readiness_stats_v1", {}).execute())
+                data = {
+                    r["package"]: {
+                        "piping_total":      int(r.get("total",     0) or 0),
+                        "piping_completed":  int(r.get("completed", 0) or 0),
+                        "support_total":     0,
+                        "support_installed": 0,
+                    }
+                    for r in (rpc_res.data or [])
+                }
+                with _lock:
+                    _pkg_stats_cache["data"] = data
+                    _pkg_stats_cache["time"] = time.time()
+                print(f"[secondary_cache] pkg_stats v1: {len(data)} packages")
+            except Exception as e2:
+                print(f"[secondary_cache] pkg_stats failed: {e2}")
 
-    try:
-        rpc_res = _sb_exec(lambda sb: sb.rpc("get_distinct_packages_v1", {}).execute())
-        by_sys: dict = {}
-        for r in (rpc_res.data or []):
-            s = r.get("system") or ""
-            p = r.get("package") or ""
-            if p:
-                if s not in by_sys: by_sys[s] = set()
-                by_sys[s].add(p)
-        with _lock:
-            _pkg_cache["data"] = {s: sorted(v) for s, v in by_sys.items()}
-            _pkg_cache["time"] = time.time()
-        print(f"[secondary_cache] pkg_list loaded: {len(_pkg_cache['data'])} systems")
-    except Exception as e:
-        print(f"[secondary_cache] pkg_list skipped (RPC not deployed?): {e}")
+    def _load_pkg_list():
+        try:
+            rpc_res = _sb_exec(lambda sb: sb.rpc("get_distinct_packages_v1", {}).execute())
+            by_sys: dict = {}
+            for r in (rpc_res.data or []):
+                s = r.get("system") or ""
+                p = r.get("package") or ""
+                if p:
+                    if s not in by_sys: by_sys[s] = set()
+                    by_sys[s].add(p)
+            with _lock:
+                _pkg_cache["data"] = {s: sorted(v) for s, v in by_sys.items()}
+                _pkg_cache["time"] = time.time()
+            print(f"[secondary_cache] pkg_list: {len(_pkg_cache['data'])} systems")
+        except Exception as e:
+            print(f"[secondary_cache] pkg_list failed: {e}")
+
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f1 = ex.submit(_load_pkg_stats)
+        f2 = ex.submit(_load_pkg_list)
+        f1.result()
+        f2.result()
 
 
 def _extract_d17(d17, raw):
