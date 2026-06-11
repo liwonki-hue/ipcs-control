@@ -475,12 +475,12 @@
       </div>
 
       <!-- 차트 2개 -->
-      <div class="grid-2" style="margin-bottom:10px">
-        <div class="panel">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+        <div class="panel" style="min-width:0">
           <div class="panel-title">Monthly RT Trend</div>
-          <div style="position:relative;height:340px"><canvas id="rtMonthlyChart"></canvas></div>
+          <div style="position:relative;height:300px"><canvas id="rtMonthlyChart"></canvas></div>
         </div>
-        <div class="panel">
+        <div class="panel" style="min-width:0">
           <div class="panel-title">RT Defect by Cause</div>
           <div style="position:relative;height:300px"><canvas id="rtFindingChart"></canvas></div>
         </div>
