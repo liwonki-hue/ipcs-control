@@ -255,9 +255,12 @@ _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
 _daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 캐시
 _wkbd_cache: dict  = {"time": 0, "data": None}      # /api/weekly-last-breakdown 5분 캐시
+_jm_fv_cache: dict = {}                             # /api/joints/filter-values 컬럼별 캐시 (1h)
+_welder_cache: dict = {"data": None, "time": 0}     # /api/welder-summary 캐시 (15min, 필터 없을 때)
+_rt_cache: dict     = {"data": None, "time": 0}     # /api/rt-quality 캐시 (15min)
 
 def _build_secondary_caches():
-    """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats v2 와 pkg_list 병렬 실행"""
+    """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats, pkg_list, filter-values 병렬 실행"""
     global _pkg_stats_cache, _pkg_cache
 
     def _load_pkg_stats():
@@ -313,11 +316,27 @@ def _build_secondary_caches():
         except Exception as e:
             print(f"[secondary_cache] pkg_list failed: {e}")
 
-    with ThreadPoolExecutor(max_workers=2) as ex:
+    def _load_jm_filter_values():
+        """Joint Master MAT/SIZE/PWHT 드롭박스용 distinct 값 사전 로딩 — RPC 단일 쿼리"""
+        with _lock:
+            all_cached = all(
+                _jm_fv_cache.get(c) and time.time() - _jm_fv_cache[c]["time"] < 3600
+                for c in ("mat", "size_inch", "pwht")
+            )
+        if all_cached:
+            return
+        try:
+            _populate_jm_fv_cache_via_rpc()
+        except Exception as e:
+            print(f"[secondary_cache] jm_filter RPC failed: {e}")
+
+    with ThreadPoolExecutor(max_workers=3) as ex:
         f1 = ex.submit(_load_pkg_stats)
         f2 = ex.submit(_load_pkg_list)
+        f3 = ex.submit(_load_jm_filter_values)
         f1.result()
         f2.result()
+        f3.result()
 
 
 def _extract_d17(d17, raw):
@@ -768,6 +787,11 @@ def api_cache_clear():
         _daily_cache["data"] = None
         _wkbd_cache["time"] = 0
         _wkbd_cache["data"] = None
+        _jm_fv_cache.clear()
+        _welder_cache["data"] = None
+        _welder_cache["time"] = 0
+        _rt_cache["data"] = None
+        _rt_cache["time"] = 0
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -1092,12 +1116,41 @@ def api_joints_packages():
     except Exception as e:
         return jsonify([])
 
+def _populate_jm_fv_cache_via_rpc():
+    """get_jm_filter_values RPC로 mat/size_inch/pwht 3개 컬럼 캐시 한번에 채우기"""
+    rpc_res = _sb_exec(lambda sb: sb.rpc("get_jm_filter_values", {}).execute())
+    data = rpc_res.data
+    if isinstance(data, list) and data: data = data[0]
+    if not isinstance(data, dict): raise ValueError("unexpected RPC result")
+    now = time.time()
+    with _lock:
+        for col, vals in data.items():
+            if vals is None: vals = []
+            _jm_fv_cache[col] = {"data": vals, "time": now}
+    print(f"[jm_filter] RPC loaded: mat={len(data.get('mat') or [])}, "
+          f"size={len(data.get('size_inch') or [])}, pwht={len(data.get('pwht') or [])}")
+
+
 @app.route("/api/joints/filter-values", methods=["GET"])
 def api_joints_filter_values():
     col = request.args.get("col", "")
     ALLOWED = {"phase", "package", "system", "sub_area", "mat", "size_inch", "sf", "inspection", "pwht"}
     if col not in ALLOWED:
         return jsonify({"error": "invalid column"}), 400
+    with _lock:
+        cached = _jm_fv_cache.get(col)
+    if cached and time.time() - cached["time"] < 3600:
+        return jsonify({"values": cached["data"]})
+    # RPC로 3개 컬럼 한번에 로딩 (21번 페이지네이션 → 1번 쿼리)
+    try:
+        _populate_jm_fv_cache_via_rpc()
+        with _lock:
+            cached = _jm_fv_cache.get(col)
+        if cached:
+            return jsonify({"values": cached["data"]})
+    except Exception as rpc_e:
+        print(f"[jm_filter] RPC failed ({rpc_e}), falling back to pagination")
+    # Fallback: 컬럼별 페이지네이션
     try:
         rows, off = [], 0
         while True:
@@ -1112,6 +1165,8 @@ def api_joints_filter_values():
                 seen.add(str(v)); vals.append(v)
         try:    vals.sort()
         except: vals.sort(key=str)
+        with _lock:
+            _jm_fv_cache[col] = {"data": vals, "time": time.time()}
         return jsonify({"values": vals})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -1464,6 +1519,14 @@ def api_welder_summary():
             print(f"[welder-summary] fab/erect merge failed: {e}")
         return data
 
+    use_cache = not (date_from or date_to or sys_ or wld)
+    if use_cache:
+        with _lock:
+            cached_w = _welder_cache.get("data")
+            cached_age = time.time() - _welder_cache.get("time", 0)
+        if cached_w and cached_age < 900:
+            return jsonify(cached_w)
+
     try:
         sb  = get_sb()
         res = sb.rpc("get_welder_stats_v4", {
@@ -1474,12 +1537,22 @@ def api_welder_summary():
         }).execute()
         data = res.data
         if isinstance(data, dict) and data:
-            return jsonify(_add_fab_erect(data))
+            result = _add_fab_erect(data)
+            if use_cache:
+                with _lock:
+                    _welder_cache["data"] = result
+                    _welder_cache["time"] = time.time()
+            return jsonify(result)
         raise ValueError("RPC returned empty or unexpected result")
     except Exception as rpc_err:
         print(f"[welder-summary] RPC failed ({rpc_err}), using Python fallback")
         try:
-            return jsonify(_add_fab_erect(_welder_stats_fallback(date_from, date_to, sys_, wld)))
+            result = _add_fab_erect(_welder_stats_fallback(date_from, date_to, sys_, wld))
+            if use_cache:
+                with _lock:
+                    _welder_cache["data"] = result
+                    _welder_cache["time"] = time.time()
+            return jsonify(result)
         except Exception as e:
             print(f"[welder-summary] Fallback failed: {e}")
             return jsonify({"error": str(e)}), 500
@@ -1736,6 +1809,11 @@ def api_testpkg_joints():
 @app.route("/api/rt-quality")
 def api_rt_quality():
     """RT 불량률 분석: 전체 KPI, 용접사별/시스템별/월별 repair rate, repair 상세 목록."""
+    with _lock:
+        cached_rt = _rt_cache.get("data")
+        cached_rt_age = time.time() - _rt_cache.get("time", 0)
+    if cached_rt and cached_rt_age < 900:
+        return jsonify(cached_rt)
     try:
         sb = get_sb()
         cols = ("id,system,sub_area,iso_drawing,joint_no,welder,sf,"
@@ -1873,14 +1951,18 @@ def api_rt_quality():
             for r in rows if r.get("rt_result") not in ("PASS", None, "")
         ]
 
-        return jsonify({
+        result = {
             "kpi":         kpi,
             "by_welder":   by_welder,
             "by_system":   by_system,
             "by_month":    by_month,
             "by_finding":  by_finding,
             "repair_list": repair_list,
-        })
+        }
+        with _lock:
+            _rt_cache["data"] = result
+            _rt_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

@@ -64,3 +64,18 @@ AS $$
     WHERE package IS NOT NULL AND package <> ''
     ORDER BY system, package;
 $$;
+
+
+-- 4. Joint Master 필터 드롭박스용 distinct 값 ? 21번 페이지네이션 → 단일 RPC 호출
+CREATE OR REPLACE FUNCTION construction.get_jm_filter_values()
+RETURNS json
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+    SELECT json_build_object(
+        'mat',       (SELECT json_agg(v ORDER BY v) FROM (SELECT DISTINCT mat AS v       FROM construction.joint_master WHERE mat       IS NOT NULL AND mat       <> '') t),
+        'size_inch', (SELECT json_agg(v ORDER BY v) FROM (SELECT DISTINCT size_inch AS v FROM construction.joint_master WHERE size_inch IS NOT NULL) t),
+        'pwht',      (SELECT json_agg(v ORDER BY v) FROM (SELECT DISTINCT pwht AS v      FROM construction.joint_master WHERE pwht      IS NOT NULL AND pwht      <> '') t)
+    );
+$$;
