@@ -39,6 +39,7 @@ function _fullDateVal(id) {
 let jmData = [];
 let jmCurrentPage = 0;
 const JM_PAGE_SIZE = 30;
+
 let metaData = { units: [], systems: [] };
 
 // ================================================================================
@@ -238,7 +239,13 @@ function navigate(page) {
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
-        case "joint_master":loadJointMaster();  break;
+        case "joint_master":
+            if ((document.getElementById("jm-mat")?.options?.length||0) <= 1) {
+                _loadJMFilterSel("jm-mat",  "mat",       "Material");
+                _loadJMFilterSel("jm-size", "size_inch", "Size");
+                _loadJMFilterSel("jm-pwht", "pwht",      "PWHT");
+            }
+            loadJointMaster(); break;
         case "welder":      loadWelder();       break;
         case "rt_quality":  loadRtQuality();    break;
         case "support_master": loadSupportMaster(); break;
@@ -283,6 +290,21 @@ function toast(msg, type="success") {
 
 // ================================================================================
 //  META
+async function _loadJMFilterSel(elId, col, placeholder) {
+    const sel = document.getElementById(elId);
+    if (!sel) return;
+    try {
+        const r = await apiFetch(`/api/joints/filter-values?col=${col}`);
+        sel.innerHTML = `<option value="">${placeholder}</option>`;
+        (r.values || []).forEach(v => {
+            const lbl = col === "size_inch"
+                ? (Number.isInteger(parseFloat(v)) ? parseInt(v) : parseFloat(v).toFixed(1))
+                : v;
+            sel.add(new Option(lbl, v));
+        });
+    } catch {}
+}
+
 // ================================================================================
 async function loadMeta() {
     try {
@@ -305,6 +327,7 @@ async function loadMeta() {
             jmSub.innerHTML = '<option value="">Sub Area</option>';
             metaData.sub_areas.forEach(s => jmSub.add(new Option(s, s)));
         }
+        // MAT / SIZE 드롭다운 비동기 populate
 
         // Populate Support Master filters
         const smUnit = document.getElementById("sm-unit");
@@ -1134,7 +1157,11 @@ async function loadJointMaster() {
           status=document.getElementById("jm-status")?.value||"", isoVal=document.getElementById("jm-iso")?.value?.trim()||"",
           subarea=document.getElementById("jm-subarea")?.value||"", phase=document.getElementById("jm-phase")?.value||"",
           pkg=document.getElementById("jm-package")?.value||"",
-          insp=document.getElementById("jm-inspection")?.value||"", offset=jmCurrentPage*JM_PAGE_SIZE;
+          insp=document.getElementById("jm-inspection")?.value||"",
+          pwht=document.getElementById("jm-pwht")?.value||"",
+          mat=document.getElementById("jm-mat")?.value||"",
+          size=document.getElementById("jm-size")?.value||"",
+          offset=jmCurrentPage*JM_PAGE_SIZE;
     _tableLoading("jmBody", 15);
     try {
         const params=new URLSearchParams({limit:JM_PAGE_SIZE,offset});
@@ -1142,11 +1169,13 @@ async function loadJointMaster() {
         if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(phase)params.set("phase",phase);
         if(pkg)params.set("package",pkg);
         if(insp)params.set("inspection",insp);
+        if(pwht)params.set("pwht",pwht);
+        if(mat)params.set("mat",mat);
+        if(size)params.set("size",size);
         const res=await apiFetch(`/api/joints?${params}`);
         jmData=res.data;
         document.getElementById("jm-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
         _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, JM_PAGE_SIZE, "jmGoto");
-
         renderJMTable(jmData); updateIsoBulkPanel(isoVal,jmData);
     } catch(e) { console.error("JM load failed",e); }
 }
@@ -2768,6 +2797,7 @@ function renderTMTable(data) {
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-desc-${r.id}" value="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400"></td>
             <td style="padding:0">${readinessCell}</td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
@@ -2799,7 +2829,6 @@ function renderTMTable(data) {
                     <option value="FAIL"${iopt(res==="FAIL")} style="color:#000">FAIL</option>
                 </select>
             </td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-remark-${r.id}" value="${r.remark||""}" style="${cin}"></td>
             <td style="text-align:center;white-space:nowrap">
                 <button class="btn-save-row" onclick="saveTMRow(${r.id})">Save</button>
                 <button class="btn-del-row"  onclick="deleteTMRow(${r.id})">Del</button>
@@ -2820,7 +2849,7 @@ async function saveTMRow(id) {
         holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
         date_completed:  dateVal || null,
         completed:       completed,
-        remark:          document.getElementById(`tm-remark-${id}`)?.value?.trim() || null
+        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null
     };
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, {
@@ -3163,7 +3192,7 @@ async function exportTMExcel() {
         "Holding Time":     r.holding_time     || "",
         "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
         "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
-        "Remark":           r.remark           || ""
+        "Description":      r.description      || ""
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();

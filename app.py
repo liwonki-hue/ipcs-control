@@ -1021,6 +1021,8 @@ def api_joints_get():
         nde_only= request.args.get("nde_only", "")
         pkg     = request.args.get("package",  "")
         welder  = request.args.get("welder",   "")
+        mat     = request.args.get("mat",      "")
+        size    = request.args.get("size",     "")
         q = sb.table("joint_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
@@ -1030,6 +1032,12 @@ def api_joints_get():
         if insp:    q = q.eq("inspection",  insp)
         if pkg:     q = q.eq("package",     pkg)
         if welder:  q = q.ilike("welder",   f"%{welder}%")
+        if mat:     q = q.eq("mat",          mat)
+        pwht    = request.args.get("pwht",     "")
+        if pwht:    q = q.eq("pwht",         pwht)
+        if size:
+            try:    q = q.eq("size_inch", float(size))
+            except ValueError: pass
         if nde_only == "true":
             q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
         if status == "completed": q = q.not_.is_("date_completed", "null")
@@ -1083,6 +1091,30 @@ def api_joints_packages():
             return jsonify(sorted(set(r["package"] for r in rows if r.get("package"))))
     except Exception as e:
         return jsonify([])
+
+@app.route("/api/joints/filter-values", methods=["GET"])
+def api_joints_filter_values():
+    col = request.args.get("col", "")
+    ALLOWED = {"phase", "package", "system", "sub_area", "mat", "size_inch", "sf", "inspection", "pwht"}
+    if col not in ALLOWED:
+        return jsonify({"error": "invalid column"}), 400
+    try:
+        rows, off = [], 0
+        while True:
+            r = get_sb().table("joint_master").select(col).range(off, off + 999).execute()
+            rows.extend(r.data or [])
+            if len(r.data or []) < 1000: break
+            off += 1000
+        seen, vals = set(), []
+        for r in rows:
+            v = r.get(col)
+            if v is not None and str(v) not in seen:
+                seen.add(str(v)); vals.append(v)
+        try:    vals.sort()
+        except: vals.sort(key=str)
+        return jsonify({"values": vals})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/joints", methods=["POST"])
 def api_joints_post():
