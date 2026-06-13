@@ -191,7 +191,7 @@ function _updateLoader(msg) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    checkAuthStatus();
+    await checkAuthStatus();
     showLoader(true);
     let _loadError = false;
     try {
