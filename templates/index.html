@@ -76,7 +76,7 @@
 
   <div class="page-body">
     <div class="page hidden" id="page-overview">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('overview')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div><div style="margin-left:auto;display:flex;gap:8px;align-items:center"><button id="signInBtn" onclick="openSignInModal()" style="padding:4px 12px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer">Sign In</button><span id="authUserBadge" style="display:none;font-size:11px;color:#94a3b8;align-items:center;gap:6px"><span id="authUserLabel"></span><button onclick="doLogout()" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid #475569;color:#94a3b8;border-radius:4px;cursor:pointer">Sign Out</button></span><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('overview')">&#128424; Print</button></div></div>
       <div class="grid-3">
         <div class="col">
           <div class="panel"><div class="panel-title">Overall Piping Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
@@ -563,7 +563,7 @@
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
-            <button class="btn-primary" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
+            <button class="btn-primary auth-write" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
             <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
@@ -734,7 +734,7 @@
           </select>
           <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
-            <button class="btn-primary" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>
+            <button class="btn-primary auth-write" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>
             <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('test_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
           </div>
@@ -799,5 +799,28 @@
   Chart.defaults.set('plugins.datalabels', { display: false });
 </script>
 <script src="/static/js/dashboard.js?v=7.28"></script>
+<!-- Sign In Modal -->
+<div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">
+    <div style="font-size:16px;font-weight:600;color:#f1f5f9;margin-bottom:20px">Sign In</div>
+    <div style="margin-bottom:12px">
+      <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px">Username</label>
+      <input id="authUsername" type="text" autocomplete="username"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:13px"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:11px;color:#94a3b8;display:block;margin-bottom:4px">Password</label>
+      <input id="authPassword" type="password" autocomplete="current-password"
+        style="width:100%;box-sizing:border-box;padding:8px 10px;background:#0f172a;border:1px solid #334155;border-radius:6px;color:#f1f5f9;font-size:13px"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="authError" style="display:none;color:#f87171;font-size:11px;margin-bottom:12px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button onclick="closeSignInModal()" style="padding:6px 14px;background:transparent;border:1px solid #475569;color:#94a3b8;border-radius:6px;cursor:pointer;font-size:12px">Cancel</button>
+      <button onclick="doLogin()" style="padding:6px 14px;background:#3b82f6;border:none;color:#fff;border-radius:6px;cursor:pointer;font-size:12px">Login</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
