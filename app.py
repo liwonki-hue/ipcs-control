@@ -8,7 +8,8 @@ import time
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session
+from functools import wraps
 from supabase import create_client
 
 # ── Load .env ─────────────────────────────────────────────────────────
@@ -36,6 +37,9 @@ app = Flask(__name__,
             static_folder=os.path.join(base_dir, "static"),
             static_url_path="/static")
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # ── Supabase (singleton) ───────────────────────────────────────────────
 from supabase import ClientOptions
@@ -43,6 +47,23 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 _sb = None
 _sb_lock = threading.Lock()
+
+# ── Auth decorators ────────────────────────────────────────────────────
+def login_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("role"):
+            return jsonify({"error": "Login required"}), 401
+        return f(*args, **kwargs)
+    return decorated
+
+def admin_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if session.get("role") != "admin":
+            return jsonify({"error": "Admin required"}), 403
+        return f(*args, **kwargs)
+    return decorated
 
 def get_sb():
     """Singleton Supabase client. Re-creates on connection error."""
@@ -799,6 +820,34 @@ def api_cache_clear():
             threading.Thread(target=_build, daemon=True).start()
     return jsonify({"status": "ok", "message": "All caches cleared, rebuild started"})
 
+# ── Auth endpoints ─────────────────────────────────────────────────────
+@app.route("/api/auth/status", methods=["GET"])
+def api_auth_status():
+    role = session.get("role")
+    return jsonify({"authenticated": bool(role), "role": role})
+
+@app.route("/api/auth/login", methods=["POST"])
+def api_auth_login():
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    password = (data.get("password") or "").strip()
+    admin_user = os.environ.get("AUTH_ADMIN_USER", "")
+    admin_pass = os.environ.get("AUTH_ADMIN_PASS", "")
+    editor_user = os.environ.get("AUTH_EDITOR_USER", "")
+    editor_pass = os.environ.get("AUTH_EDITOR_PASS", "")
+    if username == admin_user and password == admin_pass:
+        session["role"] = "admin"
+        return jsonify({"ok": True, "role": "admin"})
+    if username == editor_user and password == editor_pass:
+        session["role"] = "editor"
+        return jsonify({"ok": True, "role": "editor"})
+    return jsonify({"error": "Invalid credentials"}), 401
+
+@app.route("/api/auth/logout", methods=["POST"])
+def api_auth_logout():
+    session.clear()
+    return jsonify({"ok": True})
+
 @app.route("/api/meta", methods=["GET"])
 def api_meta():
     global _meta_cache, _building
@@ -1172,6 +1221,7 @@ def api_joints_filter_values():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/joints", methods=["POST"])
+@login_required
 def api_joints_post():
     try:
         res = get_sb().table("joint_master").insert(request.get_json()).execute()
@@ -1180,6 +1230,7 @@ def api_joints_post():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/joints/<int:jid>", methods=["PATCH"])
+@login_required
 def api_joints_patch(jid):
     try:
         get_sb().table("joint_master").update(request.get_json()).eq("id", jid).execute()
@@ -1188,6 +1239,7 @@ def api_joints_patch(jid):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/joints/<int:jid>", methods=["DELETE"])
+@admin_required
 def api_joints_delete(jid):
     try:
         get_sb().table("joint_master").delete().eq("id", jid).execute()
@@ -1598,6 +1650,7 @@ def api_welder_daily():
 
 # ── Sync Phase + Package from local Excel ─────────────────────────────
 @app.route("/api/joints/sync-phase-package", methods=["POST"])
+@login_required
 def api_joints_sync_phase_package():
     import openpyxl
     EXCEL_PATH = os.path.join(os.path.dirname(__file__), "Raw File", "BOP Piping Joint Master.xlsx")
@@ -2071,6 +2124,7 @@ def api_support_get():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/support-master", methods=["POST"])
+@login_required
 def api_support_post():
     try:
         res = get_sb().table("support_master").insert(request.get_json()).execute()
@@ -2079,6 +2133,7 @@ def api_support_post():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/support-master/<int:rid>", methods=["PATCH"])
+@login_required
 def api_support_patch(rid):
     try:
         get_sb().table("support_master").update(request.get_json()).eq("id", rid).execute()
@@ -2088,6 +2143,7 @@ def api_support_patch(rid):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/support-master/<int:rid>", methods=["DELETE"])
+@admin_required
 def api_support_delete(rid):
     try:
         get_sb().table("support_master").delete().eq("id", rid).execute()
@@ -2097,6 +2153,7 @@ def api_support_delete(rid):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/support-master/sync-phase-package", methods=["POST"])
+@login_required
 def api_support_sync_phase_package():
     """joint_master의 iso_drawing으로 phase/package를 매칭해 support_master에 업데이트."""
     try:
@@ -2242,6 +2299,7 @@ def api_testpkg_get():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/testpkg-master", methods=["POST"])
+@login_required
 def api_testpkg_post():
     try:
         res = get_sb().table("test_package_master").insert(request.get_json()).execute()
@@ -2250,6 +2308,7 @@ def api_testpkg_post():
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/testpkg-master/<int:rid>", methods=["PATCH"])
+@login_required
 def api_testpkg_patch(rid):
     try:
         get_sb().table("test_package_master").update(request.get_json()).eq("id", rid).execute()
@@ -2259,6 +2318,7 @@ def api_testpkg_patch(rid):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/testpkg-master/<int:rid>", methods=["DELETE"])
+@admin_required
 def api_testpkg_delete(rid):
     try:
         get_sb().table("test_package_master").delete().eq("id", rid).execute()
@@ -2268,6 +2328,7 @@ def api_testpkg_delete(rid):
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/testpkg-master/sync", methods=["POST"])
+@login_required
 def api_testpkg_sync():
     """joint_master의 distinct package를 test_package_master에 자동 등록 (중복 제외)"""
     try:
