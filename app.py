@@ -3,6 +3,7 @@ import os
 import gc
 import gzip
 import bisect
+import hmac
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -40,6 +41,7 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = not app.debug
 
 # ── Supabase (singleton) ───────────────────────────────────────────────
 from supabase import ClientOptions
@@ -60,7 +62,10 @@ def login_required(f):
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
-        if session.get("role") != "admin":
+        role = session.get("role")
+        if not role:
+            return jsonify({"error": "Login required"}), 401
+        if role != "admin":
             return jsonify({"error": "Admin required"}), 403
         return f(*args, **kwargs)
     return decorated
@@ -794,6 +799,7 @@ def get_cache(force=False):
 _meta_cache = {"time": 0, "data": None}
 
 @app.route("/api/cache/clear")
+@login_required
 def api_cache_clear():
     global _building
     with _lock:
@@ -835,10 +841,12 @@ def api_auth_login():
     admin_pass = os.environ.get("AUTH_ADMIN_PASS", "")
     editor_user = os.environ.get("AUTH_EDITOR_USER", "")
     editor_pass = os.environ.get("AUTH_EDITOR_PASS", "")
-    if username == admin_user and password == admin_pass:
+    def _safe_eq(a: str, b: str) -> bool:
+        return bool(a and b and hmac.compare_digest(a.encode(), b.encode()))
+    if _safe_eq(username, admin_user) and _safe_eq(password, admin_pass):
         session["role"] = "admin"
         return jsonify({"ok": True, "role": "admin"})
-    if username == editor_user and password == editor_pass:
+    if _safe_eq(username, editor_user) and _safe_eq(password, editor_pass):
         session["role"] = "editor"
         return jsonify({"ok": True, "role": "editor"})
     return jsonify({"error": "Invalid credentials"}), 401
