@@ -46,7 +46,7 @@ function closeSignInModal() {
 
 async function doLogin() {
   const username = document.getElementById('authUsername').value.trim();
-  const password = document.getElementById('authPassword').value.trim();
+  const password = document.getElementById('authPassword').value;
   const errEl = document.getElementById('authError');
   errEl.style.display = 'none';
   try {
@@ -1349,7 +1349,7 @@ function renderJMTable(rows){
             </td>
             <td style="white-space:nowrap">
                 <button type="button" class="btn-save-row auth-write" onclick="saveJointDate(${r.id})">Save</button>
-                <button type="button" class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
+                <button type="button" class="btn-clear-row auth-write" onclick="clearJointDate(${r.id})">Clear</button>
             </td>
         </tr>`;
     }).join("");
