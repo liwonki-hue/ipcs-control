@@ -1,5 +1,79 @@
 // dashboard.js Full frontend logic  v7.27
 
+// 인증 역할: null | 'editor' | 'admin'
+window.authRole = null;
+
+function applyAuthUI(role) {
+  window.authRole = role;
+  const isWrite = role === 'admin' || role === 'editor';
+  const isAdmin = role === 'admin';
+  document.querySelectorAll('.auth-write').forEach(el => {
+    el.style.display = isWrite ? '' : 'none';
+  });
+  document.querySelectorAll('.auth-admin').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
+  const signInBtn = document.getElementById('signInBtn');
+  const authBadge = document.getElementById('authUserBadge');
+  const authLabel = document.getElementById('authUserLabel');
+  if (signInBtn) signInBtn.style.display = role ? 'none' : '';
+  if (authBadge) authBadge.style.display = role ? 'flex' : 'none';
+  if (authLabel) authLabel.textContent = role ? ('👤 ' + role) : '';
+}
+
+async function checkAuthStatus() {
+  try {
+    const res = await fetch('/api/auth/status');
+    const data = await res.json();
+    applyAuthUI(data.role || null);
+  } catch(e) {
+    applyAuthUI(null);
+  }
+}
+
+function openSignInModal() {
+  document.getElementById('authUsername').value = '';
+  document.getElementById('authPassword').value = '';
+  document.getElementById('authError').style.display = 'none';
+  const modal = document.getElementById('signInModal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('authUsername').focus(), 50);
+}
+
+function closeSignInModal() {
+  document.getElementById('signInModal').style.display = 'none';
+}
+
+async function doLogin() {
+  const username = document.getElementById('authUsername').value.trim();
+  const password = document.getElementById('authPassword').value.trim();
+  const errEl = document.getElementById('authError');
+  errEl.style.display = 'none';
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeSignInModal();
+      applyAuthUI(data.role);
+    } else {
+      errEl.textContent = 'Invalid credentials';
+      errEl.style.display = 'block';
+    }
+  } catch(e) {
+    errEl.textContent = 'Network error';
+    errEl.style.display = 'block';
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/auth/logout', {method: 'POST'});
+  applyAuthUI(null);
+}
+
 const API = "";
 let charts = {};
 
@@ -117,6 +191,7 @@ function _updateLoader(msg) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    checkAuthStatus();
     showLoader(true);
     let _loadError = false;
     try {
@@ -1273,11 +1348,12 @@ function renderJMTable(rows){
                 </select>
             </td>
             <td style="white-space:nowrap">
-                <button type="button" class="btn-save-row" onclick="saveJointDate(${r.id})">Save</button>
+                <button type="button" class="btn-save-row auth-write" onclick="saveJointDate(${r.id})">Save</button>
                 <button type="button" class="btn-clear-row" onclick="clearJointDate(${r.id})">Clear</button>
             </td>
         </tr>`;
     }).join("");
+    applyAuthUI(window.authRole);
 }
 
 
@@ -1390,10 +1466,11 @@ function renderNdeTable(rows){
                 </select>
             </td>
             <td style="text-align:center">
-                <button class="btn-save-row" onclick="saveNdeRow(${r.id})">Save</button>
+                <button class="btn-save-row auth-write" onclick="saveNdeRow(${r.id})">Save</button>
             </td>
         </tr>`;
     }).join("");
+    applyAuthUI(window.authRole);
 }
 
 async function saveNdeRow(id){
@@ -2393,11 +2470,12 @@ function renderSMTable(rows) {
           <td><input class="cell-input" id="sm-welder-${r.id}" type="text" value="${r.welder||""}"></td>
           <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">
-            <button class="btn-save-row" onclick="saveSMRow(${r.id})">Save</button>
-            <button class="btn-clear-row" onclick="deleteSMItem(${r.id})">Del</button>
+            <button class="btn-save-row auth-write" onclick="saveSMRow(${r.id})">Save</button>
+            <button class="btn-clear-row auth-admin" onclick="deleteSMItem(${r.id})">Del</button>
           </td>
         </tr>`;
     }).join("");
+    applyAuthUI(window.authRole);
 }
 
 async function saveSMRow(id) {
@@ -2559,9 +2637,10 @@ function renderTPTable(rows) {
           <td style="text-align:center;font-size:11px">${pwhtDate||"-"}</td>
           <td style="text-align:center">${_tpResultBadge(r.pwht_result)}</td>
           <td style="text-align:center;font-weight:700;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
-          <td style="text-align:center"><button class="btn-save-row" style="padding:3px 8px;font-size:10px" onclick="saveTPVT(${r.id})">Save</button></td>
+          <td style="text-align:center"><button class="btn-save-row auth-write" style="padding:3px 8px;font-size:10px" onclick="saveTPVT(${r.id})">Save</button></td>
         </tr>`;
     }).join("");
+    applyAuthUI(window.authRole);
 }
 
 async function saveTPVT(id) {
@@ -2830,11 +2909,12 @@ function renderTMTable(data) {
                 </select>
             </td>
             <td style="text-align:center;white-space:nowrap">
-                <button class="btn-save-row" onclick="saveTMRow(${r.id})">Save</button>
-                <button class="btn-del-row"  onclick="deleteTMRow(${r.id})">Del</button>
+                <button class="btn-save-row auth-write" onclick="saveTMRow(${r.id})">Save</button>
+                <button class="btn-del-row auth-admin"  onclick="deleteTMRow(${r.id})">Del</button>
             </td>
         </tr>`;
     }).join("");
+    applyAuthUI(window.authRole);
 }
 
 async function saveTMRow(id) {
