@@ -1758,29 +1758,6 @@ def api_joints_sync_phase_package():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ── Packages by System ────────────────────────────────────────────────
-@app.route("/api/packages")
-def api_packages():
-    """시스템별 distinct Package 목록 반환 — Test PKG Master 드롭다운용"""
-    system = request.args.get("system", "").strip()
-    try:
-        sb = get_sb()
-        q  = sb.table("joint_master").select("package").not_.is_("package", "null")
-        if system:
-            q = q.eq("system", system)
-        pkgs = set()
-        off = 0
-        while True:
-            r = q.order("package").range(off, off + 999).execute()
-            for row in (r.data or []):
-                if row.get("package"):
-                    pkgs.add(row["package"])
-            if len(r.data or []) < 1000:
-                break
-            off += 1000
-        return jsonify(sorted(pkgs))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
 
 
 # ── Test Package Joints (joint-level inspection view) ──────────────────
