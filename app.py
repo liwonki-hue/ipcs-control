@@ -1073,6 +1073,8 @@ def api_refresh_db_cache():
         # 2. Flask 인메모리 캐시 초기화 → 다음 요청 시 DB cache 읽기 (1~2초)
         with _lock:
             _cache.clear()
+            _meta_cache["data"] = None
+            _meta_cache["time"] = 0
             _build_fail = False
             if not _building:
                 _building = True
@@ -1758,8 +1760,6 @@ def api_joints_sync_phase_package():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-
-
 # ── Test Package Joints (joint-level inspection view) ──────────────────
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
@@ -2122,7 +2122,9 @@ def api_support_post():
 def api_support_patch(rid):
     try:
         get_sb().table("support_master").update(request.get_json()).eq("id", rid).execute()
-        with _lock: _cache.clear()
+        with _lock:
+            _cache.clear()
+            _ep_sup_cache.clear()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2297,7 +2299,9 @@ def api_testpkg_post():
 def api_testpkg_patch(rid):
     try:
         get_sb().table("test_package_master").update(request.get_json()).eq("id", rid).execute()
-        with _lock: _cache.clear()
+        with _lock:
+            _cache.clear()
+            _pkg_stats_cache.clear()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
