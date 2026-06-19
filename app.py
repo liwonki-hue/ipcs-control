@@ -739,7 +739,13 @@ def _build():
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
             m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
             m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
-            m_sub   = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
+            # joint_master 직접 쿼리 — dashboard_cache 집계 데이터 오차 방지
+            try:
+                _sub_res = sb.table("joint_master").select("sub_area").execute()
+                m_sub = sorted(set(r["sub_area"] for r in (_sub_res.data or []) if r.get("sub_area")))
+                del _sub_res
+            except Exception:
+                m_sub = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
         except Exception as me:
             print(f"[cache] Meta extraction error: {me}")
             m_units, m_sys, m_area, m_sub = [], [], [], []
