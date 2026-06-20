@@ -1893,14 +1893,13 @@ let _selectedWelder = null;
 async function loadWelder() {
     _selectedWelder = null;
     try {
-        const [res, dailyRes, dashData] = await Promise.all([
+        const [res, dailyData, dashData] = await Promise.all([
             fetch("/api/welder-summary"),
-            fetch("/api/welder-daily"),
+            apiFetch("/api/welder-daily").catch(() => []),
             getDashData()
         ]);
         if (!res.ok) throw new Error("API error " + res.status);
         _welderData = await res.json();
-        const dailyData = dailyRes.ok ? await dailyRes.json() : [];
         renderWelder(_welderData, dashData);
         renderWelderDaily(dailyData, _welderData.weekly || []);
     } catch(e) {

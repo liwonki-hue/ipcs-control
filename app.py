@@ -287,6 +287,9 @@ _rt_cache: dict     = {"data": None, "time": 0}     # /api/rt-quality 캐시 (15
 _testpkg_all_cache: dict = {"data": None, "time": 0}  # /api/testpkg-master 전체목록 캐시 (10min)
 _sub_area_cache: dict = {"data": None, "time": 0}   # sub_area 드롭다운 24h 캐시 (50k rows 스캔 최소화)
 _daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 캐시
+_sup_test_cache: dict = {"data": None, "time": 0}   # support/testpkg 집계 2h 캐시
+_kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결과 1h 캐시
+_welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
 
 def _build_secondary_caches():
     """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats, pkg_list, filter-values 병렬 실행"""
@@ -567,42 +570,59 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
-        # ── Support & TestPkg: per-system 병렬 집계 + KPI 총계 동시 계산 ──
-        # 4개 별도 count 쿼리 대신 per-system 루프에서 합산하여 DB 왕복 4회 절약
+        # ── Support & TestPkg: per-system 집계 (2h 캐시) ──
+        global _sup_test_cache
         try:
-            def _fetch_support_breakdown():
-                tot = defaultdict(int); done = defaultdict(int)
-                off = 0
-                while True:
-                    r = sb.table("support_master").select("system,date_completed") \
-                          .range(off, off + 999).execute()
-                    for row in (r.data or []):
-                        s = row.get("system") or ""
-                        tot[s] += 1
-                        if row.get("date_completed"): done[s] += 1
-                    if len(r.data or []) < 1000: break
-                    off += 1000
-                return tot, done
+            with _lock:
+                _st_age  = time.time() - _sup_test_cache.get("time", 0)
+                _st_data = _sup_test_cache.get("data")
+            if _st_data is not None and _st_age < 7200:
+                _sup_s_tot  = _st_data["sup_tot"]
+                _sup_s_done = _st_data["sup_done"]
+                _tst_s_tot  = _st_data["tst_tot"]
+                _tst_s_done = _st_data["tst_done"]
+                print(f"[cache] Support/TestPkg cache HIT ({int(_st_age)}s old)")
+            else:
+                def _fetch_support_breakdown():
+                    tot = defaultdict(int); done = defaultdict(int)
+                    off = 0
+                    while True:
+                        r = sb.table("support_master").select("system,date_completed") \
+                              .range(off, off + 999).execute()
+                        for row in (r.data or []):
+                            s = row.get("system") or ""
+                            tot[s] += 1
+                            if row.get("date_completed"): done[s] += 1
+                        if len(r.data or []) < 1000: break
+                        off += 1000
+                    return dict(tot), dict(done)
 
-            def _fetch_test_breakdown():
-                tot = defaultdict(int); done = defaultdict(int)
-                off = 0
-                while True:
-                    r = sb.table("test_package_master").select("system,completed") \
-                          .range(off, off + 999).execute()
-                    for row in (r.data or []):
-                        s = row.get("system") or ""
-                        tot[s] += 1
-                        if row.get("completed"): done[s] += 1
-                    if len(r.data or []) < 1000: break
-                    off += 1000
-                return tot, done
+                def _fetch_test_breakdown():
+                    tot = defaultdict(int); done = defaultdict(int)
+                    off = 0
+                    while True:
+                        r = sb.table("test_package_master").select("system,completed") \
+                              .range(off, off + 999).execute()
+                        for row in (r.data or []):
+                            s = row.get("system") or ""
+                            tot[s] += 1
+                            if row.get("completed"): done[s] += 1
+                        if len(r.data or []) < 1000: break
+                        off += 1000
+                    return dict(tot), dict(done)
 
-            with ThreadPoolExecutor(max_workers=2) as _ex:
-                _fut_sup = _ex.submit(_fetch_support_breakdown)
-                _fut_tst = _ex.submit(_fetch_test_breakdown)
-                _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
-                _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+                with ThreadPoolExecutor(max_workers=2) as _ex:
+                    _fut_sup = _ex.submit(_fetch_support_breakdown)
+                    _fut_tst = _ex.submit(_fetch_test_breakdown)
+                    _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
+                    _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+
+                with _lock:
+                    _sup_test_cache["data"] = {
+                        "sup_tot":  _sup_s_tot,  "sup_done": _sup_s_done,
+                        "tst_tot":  _tst_s_tot,  "tst_done": _tst_s_done,
+                    }
+                    _sup_test_cache["time"] = time.time()
 
             s_total = sum(_sup_s_tot.values())
             s_comp  = sum(_sup_s_done.values())
@@ -631,63 +651,91 @@ def _build():
         except Exception as sp_e:
             print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
 
-        # ── KPI + weekly + breakdown override: 직접 joint_master에서 집계 ──
+        # ── KPI + weekly + breakdown override (1h 캐시, cache_hit 시 재사용) ──
         # v17 RPC/dashboard_cache의 과소 집계를 보정.
-        # date_completed IS NOT NULL 기준으로 직접 페이지네이션 집계.
-        # system/unit/area/sub_area 별 completed_di도 함께 덮어씌워
-        # Overview·Systems·Unit/Area 탭 수치를 Weekly 탭과 일치시킨다.
+        # cache_hit=True AND 1h 이내: 캐시 재사용 (7 API 호출 절약)
+        # cache_hit=False: 항상 재집계 (RPC 데이터가 방금 갱신됐으므로)
+        global _kpi_override_cache
         try:
-            wk_di_m    = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
-            sys_di_m   = defaultdict(float)  # per-system completed DI
-            unit_di_m  = defaultdict(float)  # per-unit completed DI
-            area_di_m  = defaultdict(float)  # per-area (MB #1 등) completed DI
-            sub_di_m   = defaultdict(float)  # per-sub_area (CCWPH #1 등) completed DI
+            with _lock:
+                _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
+                _ko_data = _kpi_override_cache.get("data")
+            _use_ko_cache = cache_hit and (_ko_data is not None) and (_ko_age < 3600)
 
-            # bisect 기반 O(log n) 주차 검색 (linear scan 대비 ~10x 빠름)
-            _wk_raw = raw.get("weeks") or []
-            _wk_sorted = sorted(
-                [(str(w.get("week_start_date") or w.get("week_start") or "")[:10],
-                  str(w.get("week_end_date")   or w.get("week_end")   or "")[:10],
-                  w.get("week_no"))
-                 for w in _wk_raw
-                 if (w.get("week_start_date") or w.get("week_start"))],
-                key=lambda x: x[0]
-            )
-            _wk_starts = [x[0] for x in _wk_sorted]
+            if _use_ko_cache:
+                c_di       = _ko_data["c_di"]
+                c_fab      = _ko_data["c_fab"]
+                c_erect    = _ko_data["c_erect"]
+                c_joints   = _ko_data["c_joints"]
+                wk_di_m    = _ko_data["wk_di_m"]
+                wk_fab_m   = _ko_data["wk_fab_m"]
+                wk_erect_m = _ko_data["wk_erect_m"]
+                sys_di_m   = _ko_data["sys_di_m"]
+                unit_di_m  = _ko_data["unit_di_m"]
+                area_di_m  = _ko_data["area_di_m"]
+                sub_di_m   = _ko_data["sub_di_m"]
+                print(f"[cache] KPI override cache HIT ({int(_ko_age)}s old, joints={c_joints})")
+            else:
+                wk_di_m    = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
+                sys_di_m   = defaultdict(float)
+                unit_di_m  = defaultdict(float)
+                area_di_m  = defaultdict(float)
+                sub_di_m   = defaultdict(float)
 
-            def _wkno_for(d):
-                idx = bisect.bisect_right(_wk_starts, d) - 1
-                if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
-                    return _wk_sorted[idx][2]
-                return None
+                # bisect 기반 O(log n) 주차 검색 (linear scan 대비 ~10x 빠름)
+                _wk_raw = raw.get("weeks") or []
+                _wk_sorted = sorted(
+                    [(str(w.get("week_start_date") or w.get("week_start") or "")[:10],
+                      str(w.get("week_end_date")   or w.get("week_end")   or "")[:10],
+                      w.get("week_no"))
+                     for w in _wk_raw
+                     if (w.get("week_start_date") or w.get("week_start"))],
+                    key=lambda x: x[0]
+                )
+                _wk_starts = [x[0] for x in _wk_sorted]
 
-            c_di = c_fab = c_erect = 0.0
-            c_joints = 0
-            off, bsz = 0, 1000
-            while True:
-                r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
-                      .not_.is_("date_completed", "null") \
-                      .order("id").range(off, off + bsz - 1).execute()
-                rows = r.data or []; del r
-                for row in rows:
-                    di  = float(row.get("di") or 0)
-                    sf  = (row.get("sf") or "").upper()
-                    dc  = str(row.get("date_completed") or "")[:10]
-                    wno = _wkno_for(dc)
-                    c_di += di
-                    if   sf in ("S", "SHOP"):  c_fab   += di
-                    elif sf in ("F", "FIELD"): c_erect += di
-                    sys_di_m[row.get("system")   or ""] += di
-                    unit_di_m[row.get("unit")    or ""] += di
-                    area_di_m[row.get("area")    or ""] += di
-                    sub_di_m[row.get("sub_area") or ""] += di
-                    if wno:
-                        wk_di_m[wno]    += di
-                        if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
-                        elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
-                c_joints += len(rows)
-                if len(rows) < bsz: break
-                off += bsz
+                def _wkno_for(d):
+                    idx = bisect.bisect_right(_wk_starts, d) - 1
+                    if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
+                        return _wk_sorted[idx][2]
+                    return None
+
+                c_di = c_fab = c_erect = 0.0
+                c_joints = 0
+                off, bsz = 0, 1000
+                while True:
+                    r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
+                          .not_.is_("date_completed", "null") \
+                          .order("id").range(off, off + bsz - 1).execute()
+                    rows = r.data or []; del r
+                    for row in rows:
+                        di  = float(row.get("di") or 0)
+                        sf  = (row.get("sf") or "").upper()
+                        dc  = str(row.get("date_completed") or "")[:10]
+                        wno = _wkno_for(dc)
+                        c_di += di
+                        if   sf in ("S", "SHOP"):  c_fab   += di
+                        elif sf in ("F", "FIELD"): c_erect += di
+                        sys_di_m[row.get("system")   or ""] += di
+                        unit_di_m[row.get("unit")    or ""] += di
+                        area_di_m[row.get("area")    or ""] += di
+                        sub_di_m[row.get("sub_area") or ""] += di
+                        if wno:
+                            wk_di_m[wno]    += di
+                            if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
+                            elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
+                    c_joints += len(rows)
+                    if len(rows) < bsz: break
+                    off += bsz
+
+                with _lock:
+                    _kpi_override_cache["data"] = {
+                        "c_di": c_di, "c_fab": c_fab, "c_erect": c_erect, "c_joints": c_joints,
+                        "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
+                        "sys_di_m":  dict(sys_di_m),  "unit_di_m": dict(unit_di_m),
+                        "area_di_m": dict(area_di_m), "sub_di_m":  dict(sub_di_m),
+                    }
+                    _kpi_override_cache["time"] = time.time()
 
             if c_joints > 0:
                 kpi_list = raw.get("kpi")
@@ -849,6 +897,12 @@ def api_cache_clear():
         _sub_area_cache["time"] = 0
         _daily_report_cache["data"] = None
         _daily_report_cache["time"] = 0
+        _sup_test_cache["data"] = None
+        _sup_test_cache["time"] = 0
+        _kpi_override_cache["data"] = None
+        _kpi_override_cache["time"] = 0
+        _welder_daily_cache["data"] = None
+        _welder_daily_cache["time"] = 0
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -1666,6 +1720,12 @@ def api_welder_summary():
 # ── Welder Daily Stats ─────────────────────────────────────────────────
 @app.route("/api/welder-daily")
 def api_welder_daily():
+    global _welder_daily_cache
+    with _lock:
+        _wd_age  = time.time() - _welder_daily_cache.get("time", 0)
+        _wd_data = _welder_daily_cache.get("data")
+    if _wd_data is not None and _wd_age < 900:
+        return jsonify(_wd_data)
     try:
         sb  = get_sb()
         cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
@@ -1676,7 +1736,7 @@ def api_welder_daily():
             .not_.is_("welder", "null") \
             .execute()
         rows = res.data or []
-        del res  # free response object immediately
+        del res
         daily = defaultdict(lambda: {"welders": set(), "total_di": 0.0})
         for row in rows:
             day = str(row.get("date_completed") or "")[:10]
@@ -1686,7 +1746,7 @@ def api_welder_daily():
             for w in [x.strip() for x in wl.split("/") if x.strip()]:
                 daily[day]["welders"].add(w)
             daily[day]["total_di"] += float(row.get("di") or 0)
-        del rows  # free raw data immediately
+        del rows
         result = []
         for day in sorted(daily.keys(), reverse=True):
             d   = daily[day]
@@ -1695,9 +1755,14 @@ def api_welder_daily():
             avg = round(tot / wc, 2) if wc > 0 else 0
             result.append({"day": day, "welder_count": wc, "total_di": tot, "avg_di_per_welder": avg})
         del daily
+        with _lock:
+            _welder_daily_cache["data"] = result
+            _welder_daily_cache["time"] = time.time()
         return jsonify(result)
     except Exception as e:
         print(f"[welder-daily] Error: {e}")
+        if _wd_data is not None:
+            return jsonify(_wd_data)
         return jsonify([]), 500
 
 
