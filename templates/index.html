@@ -6,8 +6,8 @@
 <title>BOP Piping Progress Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <link rel="stylesheet" href="/static/css/index.css?v=6.6">
 </head>
 <body>
@@ -33,6 +33,8 @@
   <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
   <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Pkg Master</button>
   <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Master</button>
+  <div class="nav-section">Report</div>
+  <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon">&#128203;</span> Daily Report</button>
   <div class="nav-section">Link</div>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128196;</span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128230;</span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
@@ -768,6 +770,57 @@
       </div>
     </div>
 
+    <!-- ═══════════ DAILY REPORT ═══════════ -->
+    <div class="page hidden" id="page-daily_report">
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Daily Report</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportDailyReportExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('daily_report')">&#128424; Print</button></div></div>
+
+      <!-- Daily Summary Table (날짜별 투입 용접사 수) -->
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title" style="font-size:13px">Daily Summary</div>
+        <div class="table-wrap">
+          <table class="data-table" id="drSummaryTable" style="table-layout:fixed;width:100%;font-size:12px">
+            <colgroup><col style="width:13%"><col style="width:10%"><col style="width:14%"><col style="width:14%"><col style="width:14%"><col style="width:10%"><col style="width:14%"></colgroup>
+            <thead>
+              <tr>
+                <th rowspan="2" style="vertical-align:middle;font-size:11px">Date</th>
+                <th colspan="4" style="text-align:center;background:rgba(37,99,235,0.15);border-bottom:1px solid var(--border);font-size:11px">PIPING GROUP</th>
+                <th colspan="2" style="text-align:center;background:rgba(34,211,161,0.12);border-bottom:1px solid var(--border);font-size:11px">SUPPORT GROUP</th>
+              </tr>
+              <tr>
+                <th style="font-size:11px">Welders</th><th style="font-size:11px">Fabrication</th><th style="font-size:11px">Erection</th><th style="font-size:11px">Completed</th>
+                <th style="background:rgba(34,211,161,0.06);font-size:11px">Welders</th><th style="background:rgba(34,211,161,0.06);font-size:11px">Completed</th>
+              </tr>
+            </thead>
+            <tbody id="drSummaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Row 2: By System + By Material -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+        <div class="panel">
+          <div class="panel-title" id="drSystemTitle">Breakdown &mdash; By System</div>
+          <div class="table-wrap"><table class="data-table" id="drSystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>System</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title" id="drMaterialTitle">Breakdown &mdash; By Material</div>
+          <div class="table-wrap"><table class="data-table" id="drMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Material</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+
+      <!-- Row 3: By Sub Area (1) + By Sub Area (2) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+        <div class="panel">
+          <div class="panel-title" id="drSubareaTitle">Breakdown &mdash; By Sub Area (1)</div>
+          <div class="table-wrap"><table class="data-table" id="drSubareaTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Sub Area</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+        <div class="panel">
+          <div class="panel-title" id="drSubareaTitle2">Breakdown &mdash; By Sub Area (2)</div>
+          <div class="table-wrap"><table class="data-table" id="drSubareaTable2" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Sub Area</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -793,12 +846,7 @@
 </style>
 
 
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-<script>
-  Chart.register(ChartDataLabels);
-  Chart.defaults.set('plugins.datalabels', { display: false });
-</script>
-<script src="/static/js/dashboard.js?v=7.28"></script>
+<script defer src="/static/js/dashboard.js?v=7.29"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

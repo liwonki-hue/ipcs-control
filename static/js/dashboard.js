@@ -1,4 +1,10 @@
-// dashboard.js Full frontend logic  v7.27
+// dashboard.js Full frontend logic  v7.29
+
+// Chart.js 초기화 — defer 로드 순서 보장 (chart.js → datalabels → this)
+if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+    Chart.register(ChartDataLabels);
+    Chart.defaults.set('plugins.datalabels', { display: false });
+}
 
 // 인증 역할: null | 'editor' | 'admin'
 window.authRole = null;
@@ -297,7 +303,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
@@ -327,6 +333,7 @@ function navigate(page) {
         case "nde_pwht":    loadNdePwht();      break;
         case "testpkg_master": loadTestPkgMaster(); break;
         case "test_master":    loadTestMaster();    break;
+        case "daily_report":   loadDailyReport();   break;
 
     }
 }
@@ -336,12 +343,24 @@ function navigate(page) {
 // ================================================================================
 //  API HELPERS
 // ================================================================================
-async function apiFetch(url) {
+const _apiCache = new Map();   // url → {data, exp}
+const _CACHE_TTL = 120_000;    // 2분 — 읽기전용 API 재사용 TTL
+const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master",
+                             "/api/nde-pwht", "/api/rt-quality", "/api/test-master"];
+
+async function apiFetch(url, { noCache = false } = {}) {
+    const useCache = !noCache && !_NO_CACHE_PATTERNS.some(p => url.startsWith(p));
+    if (useCache) {
+        const hit = _apiCache.get(url);
+        if (hit && hit.exp > Date.now()) return hit.data;
+    }
     const ts = new Date().getTime();
     const separator = url.includes("?") ? "&" : "?";
     const res = await fetch(API + url + separator + "_t=" + ts, { cache: "no-store" });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return res.json();
+    const data = await res.json();
+    if (useCache) _apiCache.set(url, { data, exp: Date.now() + _CACHE_TTL });
+    return data;
 }
 
 function pctColor(v) {
@@ -1653,6 +1672,22 @@ function chartOpts(yLabel){
     };
 }
 
+// SheetJS 지연 로딩 — 첫 Export 클릭 시 동적 로드 (초기 페이지에서 900KB 파싱 제거)
+let _xlsxPromise = null;
+function ensureXlsx() {
+    if (window.XLSX) return Promise.resolve();
+    if (!_xlsxPromise) {
+        _xlsxPromise = new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+            s.onload = () => resolve();
+            s.onerror = () => { _xlsxPromise = null; reject(new Error('SheetJS load failed')); };
+            document.head.appendChild(s);
+        });
+    }
+    return _xlsxPromise;
+}
+
 async function downloadWithPicker(wb,name){
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'}),blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
     if('showSaveFilePicker'in window){try{const handle=await window.showSaveFilePicker({suggestedName:name,types:[{description:'Excel File',accept:{'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':['.xlsx']}}]});const writable=await handle.createWritable();await writable.write(blob);await writable.close();return true;}catch(e){if(e.name==='AbortError')return false;console.warn("Picker failed, falling back",e);}}
@@ -1660,6 +1695,7 @@ async function downloadWithPicker(wb,name){
 }
 
 async function exportSystemBreakdown() {
+    await ensureXlsx();
     if (!_dashData?.systems?.length) { toast("No system data", "error"); return; }
     const rows = _dashData.systems.map(s => {
         const pipPlan = s.total_di || s.plan_di || 0;
@@ -1685,6 +1721,7 @@ async function exportSystemBreakdown() {
 }
 
 async function exportSystemsExcel(type){
+    await ensureXlsx();
     if(!_dashData){toast("Data not loaded yet","error");return;}
     let exportData=[],fileName="";
     if(type==='system'){exportData=(_dashData.systems||[]).map(s=>{const tot=s.total_di||s.plan_di||0,done=s.completed_di||0;return {"System":s.system,"Total DI":tot,"Completed DI":done,"Remaining DI":s.remaining_di!=null?s.remaining_di:Math.max(0,tot-done),"Progress %":s.progress_pct};});fileName="System_Progress_Export.xlsx";}
@@ -1719,6 +1756,7 @@ async function _fetchAllFiltered(endpoint, params) {
 }
 
 async function exportJMExcel(){
+    await ensureXlsx();
     toast("데이터 로딩 중...", "info");
     const params = _readFilters([
         ["jm-unit","unit"],["jm-system","system"],["jm-status","status"],
@@ -1782,6 +1820,7 @@ async function printPage(pageId){
 
 // 렌더된 DOM 테이블들을 시트로 묶어 내보내는 공용 헬퍼 (specs: [elementId, sheetName][])
 async function exportTablesExcel(specs, fileName){
+    await ensureXlsx();
     const wb = XLSX.utils.book_new();
     for (const [id, name] of specs) {
         const el = document.getElementById(id);
@@ -1825,6 +1864,7 @@ async function exportRTExcel(){
 }
 
 async function exportUnitAreaExcel(){
+    await ensureXlsx();
     const dash = await getDashData();
     const units = (dash?.units || []).map(u => ({
         "Unit": u.unit, "Total DI": u.total_di, "Completed DI": u.completed_di,
@@ -2283,6 +2323,7 @@ function drillWelder(welderId) {
 }
 
 async function exportWelderExcel() {
+    await ensureXlsx();
     if (!_welderData || !_welderData.ranking.length) {
         toast("No welder data to export", "error"); return;
     }
@@ -2515,6 +2556,7 @@ async function deleteSMItem(id) {
 
 
 async function exportSMExcel() {
+    await ensureXlsx();
     toast("데이터 로딩 중...", "info");
     const params = _readFilters([["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-status","status"],["sm-phase","phase"],["sm-package","package"],["sm-iso","iso"]]);
     const data = await _fetchAllFiltered("/api/support-master", params);
@@ -2672,6 +2714,7 @@ async function syncSMPhasePackage() {
 }
 
 async function exportNDEExcel() {
+    await ensureXlsx();
     toast("데이터 로딩 중...", "info");
     const params = _readFilters([["nde-unit","unit"],["nde-system","system"],["nde-iso","iso"],["nde-insp","inspection"],["nde-welder","welder"]]);
     params.set("nde_only", "true");
@@ -2703,6 +2746,7 @@ async function exportNDEExcel() {
 }
 
 async function exportTPExcel() {
+    await ensureXlsx();
     toast("데이터 로딩 중...", "info");
     const params = _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]);
     const data = await _fetchAllFiltered("/api/testpkg-joints", params);
@@ -3256,6 +3300,7 @@ function _renderRtRepairList(repairList) {
 }
 
 async function exportTMExcel() {
+    await ensureXlsx();
     toast("데이터 로딩 중...", "info");
     const params = _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"]]);
     params.set("skip_readiness", "1");
@@ -3279,4 +3324,107 @@ async function exportTMExcel() {
     XLSX.utils.book_append_sheet(wb, ws, "TestMaster");
     const ok = await downloadWithPicker(wb, "Test_Master_Export.xlsx");
     if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+}
+
+// ================================================================================
+//  DAILY REPORT
+// ================================================================================
+async function loadDailyReport() {
+    try {
+        const res = await apiFetch("/api/daily-report");
+        const { daily = [], last_date = "", systems = [], subareas = [], materials = [] } = res;
+
+        // ── Daily Summary Table (PIPING GROUP + SUPPORT GROUP) ──
+        const summaryBody = document.getElementById("drSummaryBody");
+        if (summaryBody) {
+            let tFab = 0, tErect = 0, tComp = 0, tWeld = 0, tSuppWeld = 0, tSuppComp = 0;
+            let html = daily.map(r => {
+                tFab      += r.fab_di           || 0;
+                tErect    += r.erect_di         || 0;
+                tComp     += r.completed_di     || 0;
+                tWeld     += r.welder_count     || 0;
+                tSuppWeld += r.supp_welder_count|| 0;
+                tSuppComp += r.supp_completed   || 0;
+                return `<tr>
+                    <td style="color:var(--accent)">${r.date}</td>
+                    <td>${r.welder_count || 0}</td>
+                    <td>${fmtNum(r.fab_di, 1)}</td>
+                    <td>${fmtNum(r.erect_di, 1)}</td>
+                    <td style="color:var(--accent)">${fmtNum(r.completed_di, 1)}</td>
+                    <td style="color:#22d3a1">${r.supp_welder_count || 0}</td>
+                    <td style="color:#22d3a1">${r.supp_completed || 0}</td>
+                </tr>`;
+            }).join("");
+            html += `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+                <td style="font-weight:700;color:var(--accent)">Total</td>
+                <td style="font-weight:700">${tWeld}</td>
+                <td style="font-weight:700">${fmtNum(tFab, 1)}</td>
+                <td style="font-weight:700">${fmtNum(tErect, 1)}</td>
+                <td style="font-weight:700;color:var(--accent)">${fmtNum(tComp, 1)}</td>
+                <td style="font-weight:700;color:#22d3a1">${tSuppWeld}</td>
+                <td style="font-weight:700;color:#22d3a1">${tSuppComp}</td>
+            </tr>`;
+            summaryBody.innerHTML = html;
+        }
+
+        // ── Breakdown 공통 렌더 헬퍼 ──
+        const label = last_date ? `[${last_date}]` : "";
+        const drEl = id => document.getElementById(id);
+        if (drEl("drMaterialTitle")) drEl("drMaterialTitle").textContent = `${label} Breakdown — By Material`;
+        if (drEl("drSystemTitle"))   drEl("drSystemTitle").textContent   = `${label} Breakdown — By System`;
+        if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area (1)`;
+        if (drEl("drSubareaTitle2")) drEl("drSubareaTitle2").textContent = `${label} Breakdown — By Sub Area (2)`;
+
+        const mkDataRows = (arr, nameKey) => arr.map(r => `<tr>
+            <td style="color:var(--accent)">${r[nameKey] || ""}</td>
+            <td>${fmtNum(r.fab_di || 0, 1)}</td>
+            <td>${fmtNum(r.erect_di || 0, 1)}</td>
+            <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
+        </tr>`).join("");
+
+        const mkTotalRow = arr => {
+            const tF = arr.reduce((s, r) => s + (r.fab_di || 0), 0);
+            const tE = arr.reduce((s, r) => s + (r.erect_di || 0), 0);
+            const tC = arr.reduce((s, r) => s + (r.completed_di || 0), 0);
+            return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+                <td style="font-weight:700;color:var(--accent)">Total</td>
+                <td style="font-weight:700">${fmtNum(tF, 1)}</td>
+                <td style="font-weight:700">${fmtNum(tE, 1)}</td>
+                <td style="font-weight:700;color:var(--accent)">${fmtNum(tC, 1)}</td>
+            </tr>`;
+        };
+
+        const sysBody = document.querySelector("#drSystemTable tbody");
+        if (sysBody) sysBody.innerHTML = mkDataRows(systems, "system") + mkTotalRow(systems);
+
+        const matBody = document.querySelector("#drMaterialTable tbody");
+        if (matBody) matBody.innerHTML = mkDataRows(materials, "mat") + mkTotalRow(materials);
+
+        const mid = Math.ceil(subareas.length / 2);
+        const subBody1 = document.querySelector("#drSubareaTable tbody");
+        const subBody2 = document.querySelector("#drSubareaTable2 tbody");
+        // Sub Area (1): Total 없음 / Sub Area (2): 전체(1+2) Total
+        if (subBody1) subBody1.innerHTML = mkDataRows(subareas.slice(0, mid), "sub_area");
+        if (subBody2) subBody2.innerHTML = mkDataRows(subareas.slice(mid), "sub_area") + mkTotalRow(subareas);
+
+    } catch(e) { console.error("Daily Report failed", e); }
+}
+
+async function exportDailyReportExcel() {
+    await ensureXlsx();
+    const res = await apiFetch("/api/daily-report");
+    const { summary = [] } = res;
+    if (!summary.length) { toast("No data"); return; }
+    const rows = summary.map(r => ({
+        "Date":        r.date,
+        "Welder":      r.welder,
+        "Fabrication": r.fab_di,
+        "Erection":    r.erect_di,
+        "Completed":   r.completed_di,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DailyReport");
+    const ok = await downloadWithPicker(wb, "Daily_Report_Export.xlsx");
+    if (ok) toast(`✓ ${summary.length.toLocaleString()}행 내보내기 완료`);
 }

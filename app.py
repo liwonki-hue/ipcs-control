@@ -284,6 +284,9 @@ _wkbd_cache: dict  = {"time": 0, "data": None}      # /api/weekly-last-breakdown
 _jm_fv_cache: dict = {}                             # /api/joints/filter-values 컬럼별 캐시 (1h)
 _welder_cache: dict = {"data": None, "time": 0}     # /api/welder-summary 캐시 (15min, 필터 없을 때)
 _rt_cache: dict     = {"data": None, "time": 0}     # /api/rt-quality 캐시 (15min)
+_testpkg_all_cache: dict = {"data": None, "time": 0}  # /api/testpkg-master 전체목록 캐시 (10min)
+_sub_area_cache: dict = {"data": None, "time": 0}   # sub_area 드롭다운 24h 캐시 (50k rows 스캔 최소화)
+_daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 캐시
 
 def _build_secondary_caches():
     """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats, pkg_list, filter-values 병렬 실행"""
@@ -739,19 +742,30 @@ def _build():
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
             m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
             m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
-            # joint_master 직접 쿼리 — dashboard_cache 집계 데이터 오차 방지 (페이지네이션)
-            try:
-                _sub_set = set(); _soff = 0
-                while True:
-                    _sr = sb.table("joint_master").select("sub_area").range(_soff, _soff + 999).execute()
-                    for r in (_sr.data or []):
-                        if r.get("sub_area"): _sub_set.add(r["sub_area"])
-                    if len(_sr.data or []) < 1000: break
-                    _soff += 1000
-                m_sub = sorted(_sub_set)
-                del _sub_set
-            except Exception:
-                m_sub = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
+            # sub_area 드롭다운 목록 — 24h 캐시 (50k rows × 51 API 호출을 하루 1회로 압축)
+            with _lock:
+                _sa_age = time.time() - _sub_area_cache.get("time", 0)
+                _sa_cached = _sub_area_cache.get("data")
+            if _sa_cached is not None and _sa_age < 86400:
+                m_sub = _sa_cached
+                print(f"[cache] sub_area cache HIT ({int(_sa_age)}s old, {len(m_sub)} values)")
+            else:
+                try:
+                    _sub_set = set(); _soff = 0
+                    while True:
+                        _sr = sb.table("joint_master").select("sub_area").range(_soff, _soff + 999).execute()
+                        for r in (_sr.data or []):
+                            if r.get("sub_area"): _sub_set.add(r["sub_area"])
+                        if len(_sr.data or []) < 1000: break
+                        _soff += 1000
+                    m_sub = sorted(_sub_set)
+                    del _sub_set
+                    with _lock:
+                        _sub_area_cache["data"] = m_sub
+                        _sub_area_cache["time"] = time.time()
+                    print(f"[cache] sub_area scan done: {len(m_sub)} distinct values")
+                except Exception:
+                    m_sub = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
         except Exception as me:
             print(f"[cache] Meta extraction error: {me}")
             m_units, m_sys, m_area, m_sub = [], [], [], []
@@ -831,6 +845,10 @@ def api_cache_clear():
         _welder_cache["time"] = 0
         _rt_cache["data"] = None
         _rt_cache["time"] = 0
+        _sub_area_cache["data"] = None
+        _sub_area_cache["time"] = 0
+        _daily_report_cache["data"] = None
+        _daily_report_cache["time"] = 0
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -1596,7 +1614,7 @@ def api_welder_summary():
     use_cache = not (date_from or date_to or sys_ or wld)
     if use_cache:
         with _lock:
-            cached_w = _welder_cache.get("data")
+            cached_w  = _welder_cache.get("data")
             cached_age = time.time() - _welder_cache.get("time", 0)
         if cached_w and cached_age < 900:
             return jsonify(cached_w)
@@ -1610,14 +1628,27 @@ def api_welder_summary():
             "f_welder":    wld
         }).execute()
         data = res.data
-        if isinstance(data, dict) and data:
+        if not (isinstance(data, dict) and data):
+            raise ValueError("RPC returned empty or unexpected result")
+
+        # _add_fab_erect: 필터 없는 경우 캐시 데이터 재사용 — 2차 풀스캔 방지
+        if use_cache and cached_w:
+            # 이미 캐시된 데이터에서 fab/erect 복사 (ranking welder 기준 매핑)
+            fab_map   = {r["welder"]: r.get("fab_di",   0) for r in cached_w.get("ranking", [])}
+            erect_map = {r["welder"]: r.get("erect_di", 0) for r in cached_w.get("ranking", [])}
+            for r in data.get("ranking", []):
+                w = r.get("welder", "")
+                r.setdefault("fab_di",   fab_map.get(w,   0))
+                r.setdefault("erect_di", erect_map.get(w, 0))
+            result = data
+        else:
             result = _add_fab_erect(data)
-            if use_cache:
-                with _lock:
-                    _welder_cache["data"] = result
-                    _welder_cache["time"] = time.time()
-            return jsonify(result)
-        raise ValueError("RPC returned empty or unexpected result")
+
+        if use_cache:
+            with _lock:
+                _welder_cache["data"] = result
+                _welder_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as rpc_err:
         print(f"[welder-summary] RPC failed ({rpc_err}), using Python fallback")
         try:
@@ -1884,17 +1915,56 @@ def api_rt_quality():
                 break
             offset_ += 1000
 
-        # KPI 집계
-        total      = len(rows)
-        first_pass = sum(1 for r in rows if r.get("rt_result") == "PASS")
-        repair     = sum(1 for r in rows if r.get("rt_result") not in ("PASS", None, ""))
-        second_pass = sum(1 for r in rows
-                         if r.get("rt_result") not in ("PASS", None, "")
-                         and r.get("rt_2_result") == "PASS")
-        second_fail = repair - second_pass
-
         def pct(n, d):
             return round(n / d * 100, 1) if d else 0.0
+
+        BASE_SYSTEMS = ["AS", "CCP", "CCW", "FG", "FW", "GT", "HP", "HRSG", "HW", "LP", "RW", "ST"]
+
+        # 단일 패스로 KPI / 용접사 / 시스템 / 월별 / 불량항목 / 상세목록 동시 집계
+        total = first_pass = repair = second_pass = remaining_total = 0
+        w_tot  = defaultdict(int); w_pass = defaultdict(int)
+        w_rep  = defaultdict(int); w_rem  = defaultdict(int)
+        s_tot  = defaultdict(int); s_pass = defaultdict(int)
+        s_rep  = defaultdict(int); s_rem  = defaultdict(int)
+        m_tot  = defaultdict(int); m_rep  = defaultdict(int)
+        f_count = defaultdict(int)
+        repair_list = []
+
+        for r in rows:
+            rt_res   = r.get("rt_result")
+            is_repair = rt_res not in ("PASS", None, "")
+            is_rem    = is_repair and not r.get("rt_2_date")
+            total    += 1
+            if not is_repair:           first_pass      += 1
+            if is_repair:               repair          += 1
+            if is_repair and r.get("rt_2_result") == "PASS": second_pass += 1
+            if is_rem:                  remaining_total += 1
+
+            welders = [w.strip() for w in (r.get("welder") or "UNKNOWN").split("/") if w.strip()] or ["UNKNOWN"]
+            for w in welders:
+                w_tot[w] += 1
+                if not is_repair: w_pass[w] += 1
+                if is_repair:     w_rep[w]  += 1
+                if is_rem:        w_rem[w]  += 1
+
+            sys = r.get("system") or "—"
+            s_tot[sys] += 1
+            if not is_repair: s_pass[sys] += 1
+            if is_repair:     s_rep[sys]  += 1
+            if is_rem:        s_rem[sys]  += 1
+
+            dt = (r.get("rt_date") or "")[:7]
+            if dt:
+                m_tot[dt] += 1
+                if is_repair: m_rep[dt] += 1
+
+            if is_repair:
+                f_count[(r.get("rt_finding") or "Unknown").strip() or "Unknown"] += 1
+                repair_list.append({k: r.get(k) for k in
+                    ("id","system","sub_area","iso_drawing","joint_no","welder","sf",
+                     "rt_date","rt_result","rt_finding","rt_2_date","rt_2_result")})
+
+        del rows
 
         kpi = {
             "total_rt":     total,
@@ -1902,33 +1972,10 @@ def api_rt_quality():
             "repair":       repair,
             "repair_rate":  pct(repair, total),
             "second_pass":  second_pass,
-            "second_fail":  second_fail,
+            "second_fail":  repair - second_pass,
+            "remaining":    remaining_total,
+            "welder_count": len(w_tot),
         }
-
-        # Remaining: repair 후 2nd RT 미촬영 건수
-        remaining_total = sum(
-            1 for r in rows
-            if r.get("rt_result") not in ("PASS", None, "")
-            and not r.get("rt_2_date")
-        )
-        kpi["remaining"] = remaining_total
-
-        # 용접사별 집계 (Repair 건수 내림차순)
-        w_tot  = defaultdict(int)
-        w_pass = defaultdict(int)
-        w_rep  = defaultdict(int)
-        w_rem  = defaultdict(int)
-        for r in rows:
-            welders = [w.strip() for w in (r.get("welder") or "UNKNOWN").split("/") if w.strip()]
-            if not welders:
-                welders = ["UNKNOWN"]
-            is_repair = r.get("rt_result") not in ("PASS", None, "")
-            is_rem    = is_repair and not r.get("rt_2_date")
-            for w in welders:
-                w_tot[w]  += 1
-                if not is_repair: w_pass[w] += 1
-                if is_repair:     w_rep[w]  += 1
-                if is_rem:        w_rem[w]  += 1
         by_welder = sorted(
             [{"welder": w, "total": w_tot[w], "pass": w_pass[w],
               "repair": w_rep[w], "remaining": w_rem[w],
@@ -1936,27 +1983,6 @@ def api_rt_quality():
              for w in w_tot],
             key=lambda x: (-x["repair"], -x["repair_rate"])
         )
-        welder_count = len(w_tot)
-
-        # KPI에 welder_count 추가
-        kpi["welder_count"] = welder_count
-
-        # 기본 시스템 목록 (RT 데이터 없는 시스템도 포함)
-        BASE_SYSTEMS = ["AS", "CCP", "CCW", "FG", "FW", "GT", "HP", "HRSG", "HW", "LP", "RW", "ST"]
-
-        # 시스템별 집계 (Repair 건수 내림차순)
-        s_tot  = defaultdict(int)
-        s_pass = defaultdict(int)
-        s_rep  = defaultdict(int)
-        s_rem  = defaultdict(int)
-        for r in rows:
-            sys = r.get("system") or "—"
-            is_repair = r.get("rt_result") not in ("PASS", None, "")
-            is_rem    = is_repair and not r.get("rt_2_date")
-            s_tot[sys]  += 1
-            if not is_repair: s_pass[sys] += 1
-            if is_repair:     s_rep[sys]  += 1
-            if is_rem:        s_rem[sys]  += 1
         all_sys = set(s_tot.keys()) | set(BASE_SYSTEMS)
         by_system = sorted(
             [{"system": s, "total": s_tot.get(s, 0), "pass": s_pass.get(s, 0),
@@ -1965,41 +1991,15 @@ def api_rt_quality():
              for s in all_sys],
             key=lambda x: (-x["repair"], x["system"])
         )
-
-        # 월별 집계
-        m_tot = defaultdict(int)
-        m_rep = defaultdict(int)
-        for r in rows:
-            dt = (r.get("rt_date") or "")[:7]  # YYYY-MM
-            if not dt:
-                continue
-            m_tot[dt] += 1
-            if r.get("rt_result") not in ("PASS", None, ""):
-                m_rep[dt] += 1
         by_month = [
             {"month": m, "total": m_tot[m], "repair": m_rep[m],
              "repair_rate": pct(m_rep[m], m_tot[m])}
             for m in sorted(m_tot)
         ]
-
-        # 불량 항목별 집계 (rt_finding, repair 건만)
-        f_count = defaultdict(int)
-        for r in rows:
-            if r.get("rt_result") not in ("PASS", None, ""):
-                finding = (r.get("rt_finding") or "Unknown").strip() or "Unknown"
-                f_count[finding] += 1
         by_finding = sorted(
             [{"finding": f, "count": c} for f, c in f_count.items()],
             key=lambda x: -x["count"]
         )
-
-        # Repair 상세 목록 (rt_result != PASS)
-        repair_list = [
-            {k: r.get(k) for k in
-             ("id","system","sub_area","iso_drawing","joint_no","welder","sf",
-              "rt_date","rt_result","rt_finding","rt_2_date","rt_2_result")}
-            for r in rows if r.get("rt_result") not in ("PASS", None, "")
-        ]
 
         result = {
             "kpi":         kpi,
@@ -2224,6 +2224,7 @@ def api_support_sync_phase_package():
 # ── Test Package Master CRUD ──────────────────────────────────────────
 @app.route("/api/testpkg-master", methods=["GET"])
 def api_testpkg_get():
+    global _testpkg_all_cache
     try:
         sb      = get_sb()
         limit   = int(request.args.get("limit",  100))
@@ -2234,6 +2235,16 @@ def api_testpkg_get():
         status   = request.args.get("status",      "").strip()
         search   = request.args.get("q",           "").strip()
         skip_readiness = request.args.get("skip_readiness", "0") == "1"
+
+        # 필터없는 전체 목록(드롭다운용) 캐시 — 10분 TTL
+        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search])
+        if is_all_req and limit >= 1000:
+            with _lock:
+                cached = _testpkg_all_cache.get("data")
+                age    = time.time() - _testpkg_all_cache.get("time", 0)
+            if cached is not None and age < 600:
+                return jsonify(cached)
+
         q = sb.table("test_package_master").select("*", count="exact")
         if system:  q = q.eq("system",      system)
         if subarea: q = q.eq("sub_area",    subarea)
@@ -2293,7 +2304,12 @@ def api_testpkg_get():
                 row["support_total"]     = s.get("support_total",    0)
                 row["support_installed"] = s.get("support_installed",0)
 
-        return jsonify({"data": rows, "count": res.count})
+        result = {"data": rows, "count": res.count}
+        if is_all_req and limit >= 1000:
+            with _lock:
+                _testpkg_all_cache["data"] = result
+                _testpkg_all_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2314,6 +2330,7 @@ def api_testpkg_patch(rid):
         with _lock:
             _cache.clear()
             _pkg_stats_cache.clear()
+            _testpkg_all_cache["data"] = None
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2370,6 +2387,163 @@ def api_testpkg_sync():
     except Exception as e:
         print(f"[testpkg-sync] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/daily-report")
+def api_daily_report():
+    """Daily 실적 — 최근 5 작업일 날짜×용접사 집계 + 마지막 날 시스템/자재/서브에어리어 breakdown"""
+    global _daily_report_cache
+    with _lock:
+        _dr_cached = _daily_report_cache.get("data")
+        _dr_age    = time.time() - _daily_report_cache.get("time", 0)
+    if _dr_cached is not None and _dr_age < 300:
+        return jsonify(_dr_cached)
+    try:
+        # 1. 최근 5 작업일 추출
+        dates_res = _sb_exec(lambda sb: sb.table("joint_master")
+            .select("date_completed")
+            .not_.is_("date_completed", "null")
+            .gt("di", 0)
+            .order("date_completed", desc=True)
+            .limit(500).execute())
+        all_dates = dates_res.data or []
+        del dates_res
+
+        distinct = sorted(set(
+            str(r["date_completed"])[:10] for r in all_dates if r.get("date_completed")
+        ))
+        del all_dates
+
+        if not distinct:
+            return jsonify({"summary": [], "daily": [], "systems": [], "subareas": [], "materials": [], "last_date": ""})
+
+        last_5 = distinct[-5:]
+        range_start, range_end = last_5[0], last_5[-1]
+
+        # 2. 해당 기간 joint_master 조회 (welder, di, sf, system, sub_area, mat, size_inch)
+        joints = []
+        _q = get_sb().table("joint_master") \
+            .select("date_completed,welder,di,sf,system,sub_area,mat,size_inch") \
+            .gte("date_completed", range_start) \
+            .lte("date_completed", range_end) \
+            .not_.is_("date_completed", "null")
+        _off = 0
+        while True:
+            _page = _q.range(_off, _off + 999).execute().data or []
+            joints.extend(_page)
+            if len(_page) < 1000:
+                break
+            _off += 1000
+
+        # 3. 날짜별 piping 집계 (welders, fab, erect, completed)
+        daily: dict = {}
+        for j in joints:
+            dc = str(j.get("date_completed") or "")[:10]
+            if dc not in last_5:
+                continue
+            di    = float(j.get("di") or 0)
+            sf    = (j.get("sf") or "").upper().strip()
+            weld  = (j.get("welder") or "").strip()
+            is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
+            is_erect = sf in ("F", "FIELD") or sf.startswith("F")
+            if dc not in daily:
+                daily[dc] = {"fab": 0.0, "erect": 0.0, "total": 0.0, "welders": set()}
+            daily[dc]["total"] += di
+            if is_fab:    daily[dc]["fab"]   += di
+            elif is_erect: daily[dc]["erect"] += di
+            if weld:
+                for w in [x.strip() for x in weld.split("/") if x.strip()]:
+                    daily[dc]["welders"].add(w)
+
+        # 4. support_master — 날짜별 투입 용접사 수 + 완료 건수
+        supp_res = _sb_exec(lambda sb: sb.table("support_master")
+            .select("date_completed,welder")
+            .not_.is_("date_completed", "null")
+            .gte("date_completed", range_start)
+            .lte("date_completed", range_end)
+            .execute())
+        supp_rows = supp_res.data or []
+        del supp_res
+        supp_daily: dict = {}
+        for s in supp_rows:
+            dc = str(s.get("date_completed") or "")[:10]
+            if dc not in last_5:
+                continue
+            weld = (s.get("welder") or "").strip()
+            if dc not in supp_daily:
+                supp_daily[dc] = {"count": 0, "welders": set()}
+            supp_daily[dc]["count"] += 1
+            if weld:
+                for w in [x.strip() for x in weld.split("/") if x.strip()]:
+                    supp_daily[dc]["welders"].add(w)
+        del supp_rows
+
+        daily_rows = [
+            {"date": dc,
+             "welder_count":      len(v["welders"]),
+             "fab_di":            round(v["fab"], 1),
+             "erect_di":          round(v["erect"], 1),
+             "completed_di":      round(v["total"], 1),
+             "supp_welder_count": len(supp_daily.get(dc, {}).get("welders", set())),
+             "supp_completed":    supp_daily.get(dc, {}).get("count", 0)}
+            for dc, v in sorted(daily.items())
+        ]
+
+        # 5. 마지막 작업일 breakdown (system / sub_area / mat) — size_inch 기준 DI
+        last_date = last_5[-1]
+        sys_map: dict = {}
+        sub_map: dict = {}
+        mat_map: dict = {}
+        for j in joints:
+            dc = str(j.get("date_completed") or "")[:10]
+            if dc != last_date:
+                continue
+            sf  = (j.get("sf") or "").upper().strip()
+            di  = float(j.get("size_inch") or j.get("di") or 0)
+            is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
+            is_erect = sf in ("F", "FIELD") or sf.startswith("F")
+            for label, mapping in [
+                (j.get("system") or "-",   sys_map),
+                (j.get("sub_area") or "-", sub_map),
+                (j.get("mat") or "-",      mat_map),
+            ]:
+                if label not in mapping:
+                    mapping[label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+                mapping[label]["completed_di"] += di
+                if is_fab:    mapping[label]["fab_di"]   += di
+                elif is_erect: mapping[label]["erect_di"] += di
+
+        for always_mat in ("ALLOY (P91)", "ALLOY (P22)"):
+            if always_mat not in mat_map:
+                mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+
+        def to_list(mapping, key_field):
+            return sorted(
+                [{key_field: k,
+                  "fab_di": round(v["fab_di"], 1),
+                  "erect_di": round(v["erect_di"], 1),
+                  "completed_di": round(v["completed_di"], 1)}
+                 for k, v in mapping.items()],
+                key=lambda x: x[key_field]
+            )
+
+        del joints
+        result = {
+            "daily":     daily_rows,
+            "last_date": last_date,
+            "systems":   to_list(sys_map,  "system"),
+            "subareas":  to_list(sub_map,  "sub_area"),
+            "materials": to_list(mat_map,  "mat"),
+        }
+        with _lock:
+            _daily_report_cache["data"] = result
+            _daily_report_cache["time"] = time.time()
+        return jsonify(result)
+    except Exception as e:
+        print(f"[daily-report] Error: {e}")
+        if _dr_cached is not None:
+            return jsonify(_dr_cached)
+        return jsonify({"summary": [], "daily": [], "systems": [], "subareas": [], "materials": [], "last_date": ""}), 500
 
 
 @app.after_request
