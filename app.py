@@ -2578,7 +2578,7 @@ def api_daily_report():
                 if is_fab:    mapping[label]["fab_di"]   += di
                 elif is_erect: mapping[label]["erect_di"] += di
 
-        for always_mat in ("ALLOY (P91)", "ALLOY (P22)"):
+        for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
             if always_mat not in mat_map:
                 mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
 
