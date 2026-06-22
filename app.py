@@ -2625,5 +2625,11 @@ def compress_response(resp):
     return resp
 
 
+# 모듈 임포트 시점(gunicorn/python 모두)에 캐시 프리웜 시작
+with _lock:
+    if not _building:
+        _building = True
+        threading.Thread(target=_build, daemon=True).start()
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5005, debug=False)

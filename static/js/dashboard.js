@@ -625,6 +625,27 @@ async function renderOverview(kpi, wkData, units, systems) {
         });
 
         const scurveLabels = wkData.map(w => w.week_label);
+
+        const dateBar = document.getElementById("scurveDateBar");
+        if (dateBar && wkData.length > 0) {
+            const fmt = d => d ? d.replace(/-/g, ".") : "—";
+            const startDate = fmt(wkData[0].week_start);
+            const midWk = wkData[Math.floor((wkData.length - 1) / 2)];
+            const midDate = fmt(midWk.week_start);
+            const lastWk = wkData[wkData.length - 1];
+            const lastWithDate = [...wkData].reverse().find(w => w.week_end || w.week_start);
+            const endDate = fmt(lastWk.week_end || lastWk.week_start || (lastWithDate && (lastWithDate.week_end || lastWithDate.week_start)));
+            const item = (icon, label, date, align) =>
+                `<span style="display:flex;flex-direction:column;align-items:${align};gap:1px;min-width:0">` +
+                `<span style="font-size:9px;opacity:0.7;white-space:nowrap">${icon} ${label}</span>` +
+                `<span style="font-size:10px;color:#2563eb;white-space:nowrap">${date}</span>` +
+                `</span>`;
+            dateBar.innerHTML =
+                item("▶", "Start", startDate, "flex-start") +
+                item("◆", "Mid",   midDate,   "center")     +
+                item("◀", "End",   endDate,   "flex-end");
+        }
+
         const scurveEl = document.getElementById("scurveChart");
         if (!scurveEl) { console.warn("[BOP] scurveChart canvas not found"); return; }
         charts["scurveChart"] = new Chart(scurveEl.getContext("2d"), {
@@ -673,10 +694,10 @@ async function renderOverview(kpi, wkData, units, systems) {
 // ================================================================================
 async function loadEarlyPower() {
     const data = await getDashData();
-    renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly, data.kpi);
+    renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly, data.kpi, data.weekly);
 }
 
-async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
+async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeekly) {
     if(!d) return;
     try {
         // ep_sys 합산을 우선 사용 → 게이지와 테이블 물량 일치
@@ -866,6 +887,35 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi) {
             // EP Target = week 40 (2026-12-30). Show all weeks 1-40 on x-axis.
             const EP_TARGET_WK = 40;
             const wkView = weekly.slice(0, EP_TARGET_WK); // weeks 1..40
+
+            const epDateBar = document.getElementById("epScurveDateBar");
+            if (epDateBar && wkView.length > 0) {
+                const fmt = d => d ? d.replace(/-/g, ".") : null;
+                // mainWeekly에서 week_no → 날짜 매핑
+                const wkDateMap = {};
+                (mainWeekly || []).forEach(w => { if (w.week_no) wkDateMap[w.week_no] = w; });
+                const getDate = wk => {
+                    const m = wkDateMap[wk.week_no];
+                    return m ? fmt(m.week_end || m.week_start) : null;
+                };
+                // 날짜가 있는 마지막 주 탐색
+                let lastDateWk = null;
+                for (let i = wkView.length - 1; i >= 0; i--) {
+                    if (getDate(wkView[i])) { lastDateWk = wkView[i]; break; }
+                }
+                const startDate = getDate(wkView[0]);
+                const midDate   = getDate(wkView[Math.floor((wkView.length - 1) / 2)]);
+                const endDate   = getDate(wkView[wkView.length - 1]) || (lastDateWk ? getDate(lastDateWk) : null);
+                const epItem = (icon, label, date, align) =>
+                    `<span style="display:flex;flex-direction:column;align-items:${align};gap:1px;min-width:0">` +
+                    `<span style="font-size:9px;opacity:0.7;white-space:nowrap">${icon} ${label}</span>` +
+                    `<span style="font-size:10px;color:#2563eb;white-space:nowrap">${date || "—"}</span>` +
+                    `</span>`;
+                epDateBar.innerHTML =
+                    epItem("▶", "Start", startDate, "flex-start") +
+                    epItem("◆", "Mid",   midDate,   "center")     +
+                    epItem("◀", "End",   endDate,   "flex-end");
+            }
             const lastEpActIdx = wkView.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
             // Cumulative actual: show up to last active week, null after
             const cumulData = wkView.map((w, i) => i <= lastEpActIdx ? w.cumul_actual : null);
