@@ -6,6 +6,7 @@ import bisect
 import hmac
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -844,7 +845,7 @@ def _build():
             _build_fail = True
             _build_fail_time = time.time()
         print(f"[cache] CRITICAL BUILD ERROR: {e}")
-        import traceback; traceback.print_exc()
+        traceback.print_exc()
     finally:
         with _lock:
             _building = False
@@ -909,6 +910,8 @@ def api_cache_clear():
         _kpi_override_cache["time"] = 0
         _welder_daily_cache["data"] = None
         _welder_daily_cache["time"] = 0
+        _testpkg_all_cache["data"] = None
+        _testpkg_all_cache["time"] = 0
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -2207,6 +2210,8 @@ def api_support_patch(rid):
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
+            _sup_test_cache["data"] = None
+            _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2216,7 +2221,11 @@ def api_support_patch(rid):
 def api_support_delete(rid):
     try:
         get_sb().table("support_master").delete().eq("id", rid).execute()
-        with _lock: _cache.clear()
+        with _lock:
+            _cache.clear()
+            _ep_sup_cache.clear()
+            _sup_test_cache["data"] = None
+            _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -2391,7 +2400,6 @@ def api_support_sync_drawing():
                 "sub_area":        jm.get("sub_area"),
                 "phase":           jm.get("phase"),
                 "package":         jm.get("package"),
-                "completed":       False,
             })
 
         inserted = 0
@@ -2535,7 +2543,11 @@ def api_testpkg_patch(rid):
 def api_testpkg_delete(rid):
     try:
         get_sb().table("test_package_master").delete().eq("id", rid).execute()
-        with _lock: _cache.clear()
+        with _lock:
+            _cache.clear()
+            _pkg_stats_cache.clear()
+            _testpkg_all_cache["data"] = None
+            _testpkg_all_cache["time"] = 0
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
