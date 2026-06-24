@@ -383,9 +383,12 @@ def _build_secondary_caches():
         f1 = ex.submit(_load_pkg_stats)
         f2 = ex.submit(_load_pkg_list)
         f3 = ex.submit(_load_jm_filter_values)
-        f1.result()
-        f2.result()
-        f3.result()
+        try: f1.result(timeout=30)
+        except Exception: pass
+        try: f2.result(timeout=30)
+        except Exception: pass
+        try: f3.result(timeout=30)
+        except Exception: pass
 
 
 def _extract_d17(d17, raw):
@@ -618,11 +621,25 @@ def _build():
                         done[s] = int(row.get("completed") or 0)
                     return tot, done
 
-                with ThreadPoolExecutor(max_workers=2) as _ex:
-                    _fut_sup = _ex.submit(_fetch_support_breakdown)
-                    _fut_tst = _ex.submit(_fetch_test_breakdown)
-                    _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
-                    _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+                _sup_ex = ThreadPoolExecutor(max_workers=2)
+                try:
+                    _fut_sup = _sup_ex.submit(_fetch_support_breakdown)
+                    _fut_tst = _sup_ex.submit(_fetch_test_breakdown)
+                    try:
+                        _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
+                    except Exception as _se:
+                        print(f"[cache] support breakdown failed: {_se}")
+                        _sup_s_tot, _sup_s_done = {}, {}
+                    try:
+                        _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+                    except Exception as _te:
+                        print(f"[cache] testpkg breakdown failed: {_te}")
+                        _tst_s_tot, _tst_s_done = {}, {}
+                finally:
+                    try:
+                        _sup_ex.shutdown(wait=False, cancel_futures=True)
+                    except TypeError:
+                        _sup_ex.shutdown(wait=False)
 
                 with _lock:
                     _sup_test_cache["data"] = {
@@ -839,7 +856,7 @@ def _build():
             _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
-        _build_secondary_caches()  # 빌드 완료 전 동기 실행 — 첫 요청부터 캐시 히트
+        threading.Thread(target=_build_secondary_caches, daemon=True).start()
     except Exception as e:
         with _lock:
             _build_fail = True
