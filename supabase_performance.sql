@@ -1,5 +1,9 @@
--- 성능 개선용 Supabase RPC 함수 2개
+-- 성능 개선용 Supabase RPC 함수 + 스키마 마이그레이션
 -- Supabase SQL 에디터에서 실행 후 app.py 재시작 필요
+
+-- ★ support_master 스키마 변경 (최초 1회 실행)
+ALTER TABLE construction.support_master ADD COLUMN IF NOT EXISTS type TEXT;
+ALTER TABLE construction.support_master DROP COLUMN IF EXISTS welder;
 
 -- 1. Test Master readiness 계산용 — joint_master 47페이지 페이지네이션 → 단일 쿼리
 CREATE OR REPLACE FUNCTION construction.get_pkg_readiness_stats_v1()
@@ -66,7 +70,37 @@ AS $$
 $$;
 
 
--- 4. Joint Master ���� ��ӹڽ��� distinct �� ? 21�� ���������̼� �� ���� RPC ȣ��
+-- 4. support_master 시스템별 집계 — 22페이지 페이지네이션 → 단일 쿼리
+CREATE OR REPLACE FUNCTION construction.get_support_breakdown_v1()
+RETURNS TABLE(system TEXT, total BIGINT, completed BIGINT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+    SELECT
+        COALESCE(system, '') AS system,
+        COUNT(*)              AS total,
+        COUNT(date_completed) AS completed
+    FROM construction.support_master
+    GROUP BY system;
+$$;
+
+-- 5. test_package_master 시스템별 집계 — 페이지네이션 → 단일 쿼리
+CREATE OR REPLACE FUNCTION construction.get_test_breakdown_v1()
+RETURNS TABLE(system TEXT, total BIGINT, completed BIGINT)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+    SELECT
+        COALESCE(system, '') AS system,
+        COUNT(*)              AS total,
+        COUNT(CASE WHEN completed THEN 1 END) AS completed
+    FROM construction.test_package_master
+    GROUP BY system;
+$$;
+
+-- 6. Joint Master 드롭다운 distinct 값 — 21회 개별 RPC 호출 → 단일 RPC 호출
 CREATE OR REPLACE FUNCTION construction.get_jm_filter_values()
 RETURNS json
 LANGUAGE sql

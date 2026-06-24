@@ -1836,7 +1836,7 @@ async function printPage(pageId){
         },
         "support_master": {
             endpoint: "/api/support-master",
-            params: () => _readFilters([["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-status","status"],["sm-phase","phase"],["sm-package","package"],["sm-iso","iso"]]),
+            params: () => _readFilters([["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-type","type"],["sm-iso","iso"]]),
             render: d => renderSMTable(d), restore: () => renderSMTable(smData)
         },
         "nde_pwht": {
@@ -2427,7 +2427,7 @@ async function loadSupportMaster() {
     const unit    = document.getElementById("sm-unit")?.value    || "";
     const system  = document.getElementById("sm-system")?.value  || "";
     const subarea = document.getElementById("sm-subarea")?.value || "";
-    const status  = document.getElementById("sm-status")?.value  || "";
+    const smtype  = document.getElementById("sm-type")?.value?.trim() || "";
     const phase   = document.getElementById("sm-phase")?.value   || "";
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
     const iso     = document.getElementById("sm-iso")?.value?.trim() || "";
@@ -2438,7 +2438,7 @@ async function loadSupportMaster() {
         if (unit)    params.set("unit",     unit);
         if (system)  params.set("system",   system);
         if (subarea) params.set("sub_area", subarea);
-        if (status)  params.set("status",   status);
+        if (smtype)  params.set("type",     smtype);
         if (phase)   params.set("phase",    phase);
         if (pkg)     params.set("package",  pkg);
         if (iso)     params.set("iso",      iso);
@@ -2540,7 +2540,7 @@ function smPage(dir) { smGoto(smCurrentPage + dir); }
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:20px">No data. Add items or import from Excel.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:20px">No data.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -2554,10 +2554,10 @@ function renderSMTable(rows) {
           <td>${r.area||""}</td>
           <td>${r.sub_area||""}</td>
           <td>${r.support_drawing||""}</td>
+          <td style="text-align:center">${r.type||""}</td>
           <td>${r.revision||""}</td>
           <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td>${r.line_no||""}</td>
-          <td><input class="cell-input" id="sm-welder-${r.id}" type="text" value="${r.welder||""}"></td>
           <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">
             <button class="btn-save-row auth-write" onclick="saveSMRow(${r.id})">Save</button>
@@ -2570,7 +2570,6 @@ function renderSMTable(rows) {
 
 async function saveSMRow(id) {
     let dateVal = _fullDateVal(`sm-date-${id}`);
-    let welder  = document.getElementById(`sm-welder-${id}`)?.value?.trim() || "";
     let phase   = document.getElementById(`sm-phase-${id}`)?.value?.trim() || "";
     let pkg     = document.getElementById(`sm-pkg-${id}`)?.value?.trim() || "";
 
@@ -2582,7 +2581,6 @@ async function saveSMRow(id) {
             body: JSON.stringify({
                 date_completed: dateVal || null,
                 completed: !!dateVal,
-                welder: welder || null,
                 phase: phase || null,
                 package: pkg || null
             })
@@ -2607,21 +2605,21 @@ async function deleteSMItem(id) {
 async function exportSMExcel() {
     await ensureXlsx();
     toast("데이터 로딩 중...", "info");
-    const params = _readFilters([["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-status","status"],["sm-phase","phase"],["sm-package","package"],["sm-iso","iso"]]);
+    const params = _readFilters([["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-type","type"],["sm-iso","iso"]]);
     const data = await _fetchAllFiltered("/api/support-master", params);
     if (!data.length) { toast("No data", "error"); return; }
     const rows = data.map(r => ({
-        "NO. ": r.id,
+        "NO.": r.id,
         "PHASE": r.phase || "",
         "UNIT": r.unit || "",
         "SYSTEM": r.system || "",
         "AREA": r.area || "",
         "SUB AREA": r.sub_area || "",
         "SUPPORT DRAWING": r.support_drawing || "",
+        "TYPE": r.type || "",
         "REVISION": r.revision || "",
         "ISO DRAWING": r.iso_drawing || "",
         "LINE NO": r.line_no || "",
-        "WELDER": r.welder || "",
         "ACTUAL DATE": r.date_completed ? r.date_completed.substring(0,10) : "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -2760,6 +2758,22 @@ async function syncSMPhasePackage() {
         toast(`✓ ${d.updated}건 업데이트 완료`);
         loadSupportMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
+}
+
+async function syncSMFromDrawing() {
+    if (!confirm("Drawing DB 기준으로 Support Master를 업데이트합니다.\n• 기존: Type/Revision 업데이트\n• 신규: JM 매칭 항목 추가\n\n계속하시겠습니까?")) return;
+    const btn = document.querySelector('[onclick="syncSMFromDrawing()"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Syncing..."; }
+    toast("Drawing DB 동기화 중... (최대 30초 소요)", "info");
+    try {
+        const r = await fetch("/api/support-master/sync-drawing", {method:"POST"});
+        const d = await r.json();
+        if (!d.ok) throw new Error(d.error);
+        toast(`✓ 업데이트 ${d.updated}건 / 신규 추가 ${d.inserted}건 완료`);
+        loadSupportMaster();
+        fetch("/api/cache/clear");
+    } catch(e) { toast(`✗ ${e.message}`, "error"); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = "⟳ Sync from Drawing"; } }
 }
 
 async function exportNDEExcel() {
@@ -3386,21 +3400,23 @@ async function loadDailyReport() {
         // ── Daily Summary Table (PIPING GROUP + SUPPORT GROUP) ──
         const summaryBody = document.getElementById("drSummaryBody");
         if (summaryBody) {
-            let tFab = 0, tErect = 0, tComp = 0, tWeld = 0, tSuppWeld = 0, tSuppComp = 0;
+            let tFab = 0, tErect = 0, tComp = 0, tWeld = 0, tSuppSpecial = 0, tSuppTypical = 0, tSuppComp = 0;
             let html = daily.map(r => {
-                tFab      += r.fab_di           || 0;
-                tErect    += r.erect_di         || 0;
-                tComp     += r.completed_di     || 0;
-                tWeld     += r.welder_count     || 0;
-                tSuppWeld += r.supp_welder_count|| 0;
-                tSuppComp += r.supp_completed   || 0;
+                tFab        += r.fab_di        || 0;
+                tErect      += r.erect_di      || 0;
+                tComp       += r.completed_di  || 0;
+                tWeld       += r.welder_count  || 0;
+                tSuppSpecial += r.supp_special || 0;
+                tSuppTypical += r.supp_typical || 0;
+                tSuppComp   += r.supp_completed|| 0;
                 return `<tr>
                     <td style="color:var(--accent)">${r.date}</td>
                     <td>${r.welder_count || 0}</td>
                     <td>${fmtNum(r.fab_di, 1)}</td>
                     <td>${fmtNum(r.erect_di, 1)}</td>
                     <td style="color:var(--accent)">${fmtNum(r.completed_di, 1)}</td>
-                    <td style="color:#22d3a1">${r.supp_welder_count || 0}</td>
+                    <td style="color:#22d3a1">${r.supp_special || 0}</td>
+                    <td style="color:#22d3a1">${r.supp_typical || 0}</td>
                     <td style="color:#22d3a1">${r.supp_completed || 0}</td>
                 </tr>`;
             }).join("");
@@ -3410,7 +3426,8 @@ async function loadDailyReport() {
                 <td style="font-weight:700">${fmtNum(tFab, 1)}</td>
                 <td style="font-weight:700">${fmtNum(tErect, 1)}</td>
                 <td style="font-weight:700;color:var(--accent)">${fmtNum(tComp, 1)}</td>
-                <td style="font-weight:700;color:#22d3a1">${tSuppWeld}</td>
+                <td style="font-weight:700;color:#22d3a1">${tSuppSpecial}</td>
+                <td style="font-weight:700;color:#22d3a1">${tSuppTypical}</td>
                 <td style="font-weight:700;color:#22d3a1">${tSuppComp}</td>
             </tr>`;
             summaryBody.innerHTML = html;

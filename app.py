@@ -50,6 +50,22 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 _sb = None
 _sb_lock = threading.Lock()
 
+# ── Drawing DB (ipcs-drawing-v1, 별도 Supabase 프로젝트) ──────────────
+DRAWING_SUPABASE_URL = os.environ.get("DRAWING_SUPABASE_URL", "")
+DRAWING_SUPABASE_KEY = os.environ.get("DRAWING_SUPABASE_KEY", "")
+_draw_sb = None
+_draw_sb_lock = threading.Lock()
+
+def get_draw_sb():
+    global _draw_sb
+    with _draw_sb_lock:
+        if _draw_sb is None:
+            if not DRAWING_SUPABASE_URL or not DRAWING_SUPABASE_KEY:
+                raise RuntimeError("DRAWING_SUPABASE_URL / DRAWING_SUPABASE_KEY 환경변수 미설정")
+            options = ClientOptions(schema="drawing", postgrest_client_timeout=120)
+            _draw_sb = create_client(DRAWING_SUPABASE_URL, DRAWING_SUPABASE_KEY, options=options)
+    return _draw_sb
+
 # ── Auth decorators ────────────────────────────────────────────────────
 def login_required(f):
     @wraps(f)
@@ -584,32 +600,22 @@ def _build():
                 print(f"[cache] Support/TestPkg cache HIT ({int(_st_age)}s old)")
             else:
                 def _fetch_support_breakdown():
-                    tot = defaultdict(int); done = defaultdict(int)
-                    off = 0
-                    while True:
-                        r = sb.table("support_master").select("system,date_completed") \
-                              .range(off, off + 999).execute()
-                        for row in (r.data or []):
-                            s = row.get("system") or ""
-                            tot[s] += 1
-                            if row.get("date_completed"): done[s] += 1
-                        if len(r.data or []) < 1000: break
-                        off += 1000
-                    return dict(tot), dict(done)
+                    r = sb.rpc("get_support_breakdown_v1", {}).execute()
+                    tot = {}; done = {}
+                    for row in (r.data or []):
+                        s = row.get("system") or ""
+                        tot[s]  = int(row.get("total") or 0)
+                        done[s] = int(row.get("completed") or 0)
+                    return tot, done
 
                 def _fetch_test_breakdown():
-                    tot = defaultdict(int); done = defaultdict(int)
-                    off = 0
-                    while True:
-                        r = sb.table("test_package_master").select("system,completed") \
-                              .range(off, off + 999).execute()
-                        for row in (r.data or []):
-                            s = row.get("system") or ""
-                            tot[s] += 1
-                            if row.get("completed"): done[s] += 1
-                        if len(r.data or []) < 1000: break
-                        off += 1000
-                    return dict(tot), dict(done)
+                    r = sb.rpc("get_test_breakdown_v1", {}).execute()
+                    tot = {}; done = {}
+                    for row in (r.data or []):
+                        s = row.get("system") or ""
+                        tot[s]  = int(row.get("total") or 0)
+                        done[s] = int(row.get("completed") or 0)
+                    return tot, done
 
                 with ThreadPoolExecutor(max_workers=2) as _ex:
                     _fut_sup = _ex.submit(_fetch_support_breakdown)
@@ -2164,7 +2170,7 @@ def api_support_get():
         system  = request.args.get("system",   "").strip()
         area    = request.args.get("area",     "").strip()
         subarea = request.args.get("sub_area", "").strip()
-        status  = request.args.get("status",   "").strip()
+        smtype  = request.args.get("type",     "").strip()
         phase   = request.args.get("phase",    "").strip()
         pkg     = request.args.get("package", "").strip()
         iso     = request.args.get("iso",      "").strip()
@@ -2175,11 +2181,10 @@ def api_support_get():
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
         if pkg:     q = q.ilike("package",  f"%{pkg}%")
+        if smtype:  q = q.ilike("type",     f"%{smtype}%")
         if iso:
             iso_s = iso.replace(",", "").replace("(", "").replace(")", "")
             q = q.or_(f"iso_drawing.ilike.%{iso_s}%,support_drawing.ilike.%{iso_s}%")
-        if status == "completed": q = q.not_.is_("date_completed", "null")
-        if status == "pending":   q = q.is_("date_completed",      "null")
         res = q.order("id").range(offset, offset + limit - 1).execute()
         return jsonify({"data": res.data, "count": res.count})
     except Exception as e:
@@ -2283,6 +2288,131 @@ def api_support_sync_phase_package():
         return jsonify({"ok": True, "updated": updated, "iso_matched": len(iso_map)})
     except Exception as e:
         print(f"[sm-sync-phase-pkg] Error: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/support-master/sync-drawing", methods=["POST"])
+@admin_required
+def api_support_sync_drawing():
+    """drawing.support_latest 기준으로 type/revision 업데이트 + 누락 support 추가."""
+    try:
+        sb      = get_sb()
+        draw_sb = get_draw_sb()
+
+        # 1. drawing.support_latest 전체 수집
+        draw_rows = []
+        _doff = 0
+        while True:
+            r = draw_sb.table("support_latest") \
+                .select("support_drawing,type,revision,iso_drawing,line_no,system") \
+                .range(_doff, _doff + 999).execute()
+            draw_rows.extend(r.data or [])
+            if len(r.data or []) < 1000: del r; break
+            del r
+            _doff += 1000
+
+        draw_map = {row["support_drawing"].strip(): row for row in draw_rows if row.get("support_drawing")}
+        del draw_rows
+
+        # 2. construction.support_master 전체 수집
+        sm_rows = []
+        _soff = 0
+        while True:
+            r = sb.table("support_master") \
+                .select("id,support_drawing,revision,type") \
+                .range(_soff, _soff + 999).execute()
+            sm_rows.extend(r.data or [])
+            if len(r.data or []) < 1000: del r; break
+            del r
+            _soff += 1000
+
+        sm_map = {row["support_drawing"].strip(): row for row in sm_rows if row.get("support_drawing")}
+        del sm_rows
+
+        # 3. joint_master iso_drawing → phase/package/unit/system/area/sub_area 맵
+        jm_map = {}
+        _joff = 0
+        while True:
+            r = sb.table("joint_master") \
+                .select("iso_drawing,phase,package,unit,system,area,sub_area") \
+                .not_.is_("iso_drawing", "null").range(_joff, _joff + 999).execute()
+            for row in (r.data or []):
+                iso = (row.get("iso_drawing") or "").strip()
+                if iso and iso not in jm_map:
+                    jm_map[iso] = row
+            if len(r.data or []) < 1000: del r; break
+            del r
+            _joff += 1000
+
+        # 4. 기존 행 — type/revision 업데이트
+        update_batch = []
+        for sd_key, draw in draw_map.items():
+            if sd_key not in sm_map:
+                continue
+            sm  = sm_map[sd_key]
+            patch = {"id": sm["id"]}
+            if draw.get("type")     and draw["type"]     != sm.get("type"):     patch["type"]     = draw["type"]
+            if draw.get("revision") and draw["revision"] != sm.get("revision"): patch["revision"] = draw["revision"]
+            if len(patch) > 1:
+                update_batch.append(patch)
+
+        updated = 0
+        for i in range(0, len(update_batch), 500):
+            sb.table("support_master").upsert(update_batch[i:i+500]).execute()
+            updated += len(update_batch[i:i+500])
+        del update_batch
+
+        # 5. 누락 행 추가 (Typical 제외, JM 매칭 가능한 것만)
+        TYPICAL_PREFIXES = ("Typical ", "typical ")
+        insert_batch = []
+        skipped_typical = 0
+        skipped_no_jm   = 0
+
+        for sd_key, draw in draw_map.items():
+            if sd_key in sm_map:
+                continue
+            iso = (draw.get("iso_drawing") or "").strip()
+            if any(iso.startswith(p) for p in TYPICAL_PREFIXES):
+                skipped_typical += 1
+                continue
+            if iso not in jm_map:
+                skipped_no_jm += 1
+                continue
+            jm = jm_map[iso]
+            insert_batch.append({
+                "support_drawing": draw.get("support_drawing", "").strip(),
+                "type":            draw.get("type"),
+                "revision":        draw.get("revision"),
+                "iso_drawing":     iso or None,
+                "line_no":         draw.get("line_no"),
+                "system":          jm.get("system"),
+                "unit":            jm.get("unit"),
+                "area":            jm.get("area"),
+                "sub_area":        jm.get("sub_area"),
+                "phase":           jm.get("phase"),
+                "package":         jm.get("package"),
+                "completed":       False,
+            })
+
+        inserted = 0
+        for i in range(0, len(insert_batch), 500):
+            sb.table("support_master").insert(insert_batch[i:i+500]).execute()
+            inserted += len(insert_batch[i:i+500])
+        del insert_batch
+
+        with _lock:
+            _cache.clear()
+            _ep_sup_cache.clear()
+
+        return jsonify({
+            "ok": True,
+            "updated":          updated,
+            "inserted":         inserted,
+            "skipped_typical":  skipped_typical,
+            "skipped_no_jm":    skipped_no_jm,
+        })
+    except Exception as e:
+        print(f"[sm-sync-drawing] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
@@ -2520,9 +2650,9 @@ def api_daily_report():
                 for w in [x.strip() for x in weld.split("/") if x.strip()]:
                     daily[dc]["welders"].add(w)
 
-        # 4. support_master — 날짜별 투입 용접사 수 + 완료 건수
+        # 4. support_master — 날짜별 Special/Typical/완료 건수
         supp_res = _sb_exec(lambda sb: sb.table("support_master")
-            .select("date_completed,welder")
+            .select("date_completed,type")
             .not_.is_("date_completed", "null")
             .gte("date_completed", range_start)
             .lte("date_completed", range_end)
@@ -2534,23 +2664,23 @@ def api_daily_report():
             dc = str(s.get("date_completed") or "")[:10]
             if dc not in last_5:
                 continue
-            weld = (s.get("welder") or "").strip()
             if dc not in supp_daily:
-                supp_daily[dc] = {"count": 0, "welders": set()}
-            supp_daily[dc]["count"] += 1
-            if weld:
-                for w in [x.strip() for x in weld.split("/") if x.strip()]:
-                    supp_daily[dc]["welders"].add(w)
+                supp_daily[dc] = {"special": 0, "typical": 0}
+            if (s.get("type") or "").strip().upper() == "SPECIAL":
+                supp_daily[dc]["special"] += 1
+            else:
+                supp_daily[dc]["typical"] += 1
         del supp_rows
 
         daily_rows = [
             {"date": dc,
-             "welder_count":      len(v["welders"]),
-             "fab_di":            round(v["fab"], 1),
-             "erect_di":          round(v["erect"], 1),
-             "completed_di":      round(v["total"], 1),
-             "supp_welder_count": len(supp_daily.get(dc, {}).get("welders", set())),
-             "supp_completed":    supp_daily.get(dc, {}).get("count", 0)}
+             "welder_count":   len(v["welders"]),
+             "fab_di":         round(v["fab"], 1),
+             "erect_di":       round(v["erect"], 1),
+             "completed_di":   round(v["total"], 1),
+             "supp_special":   supp_daily.get(dc, {}).get("special", 0),
+             "supp_typical":   supp_daily.get(dc, {}).get("typical", 0),
+             "supp_completed": supp_daily.get(dc, {}).get("special", 0) + supp_daily.get(dc, {}).get("typical", 0)}
             for dc, v in sorted(daily.items())
         ]
 
