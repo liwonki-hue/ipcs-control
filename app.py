@@ -379,16 +379,20 @@ def _build_secondary_caches():
         except Exception as e:
             print(f"[secondary_cache] jm_filter RPC failed: {e}")
 
-    with ThreadPoolExecutor(max_workers=3) as ex:
-        f1 = ex.submit(_load_pkg_stats)
-        f2 = ex.submit(_load_pkg_list)
-        f3 = ex.submit(_load_jm_filter_values)
-        try: f1.result(timeout=30)
-        except Exception: pass
-        try: f2.result(timeout=30)
-        except Exception: pass
-        try: f3.result(timeout=30)
-        except Exception: pass
+    ex = ThreadPoolExecutor(max_workers=3)
+    f1 = ex.submit(_load_pkg_stats)
+    f2 = ex.submit(_load_pkg_list)
+    f3 = ex.submit(_load_jm_filter_values)
+    try: f1.result(timeout=30)
+    except Exception as _e: print(f"[secondary_cache] pkg_stats timeout/error: {_e}")
+    try: f2.result(timeout=30)
+    except Exception as _e: print(f"[secondary_cache] pkg_list timeout/error: {_e}")
+    try: f3.result(timeout=30)
+    except Exception as _e: print(f"[secondary_cache] jm_filter timeout/error: {_e}")
+    try:
+        ex.shutdown(wait=False, cancel_futures=True)
+    except TypeError:
+        ex.shutdown(wait=False)
 
 
 def _extract_d17(d17, raw):
@@ -604,49 +608,54 @@ def _build():
                 print(f"[cache] Support/TestPkg cache HIT ({int(_st_age)}s old)")
             else:
                 def _fetch_support_breakdown():
-                    r = sb.rpc("get_support_breakdown_v1", {}).execute()
+                    r = _sb_exec(lambda _c: _c.rpc("get_support_breakdown_v1", {}).execute())
                     tot = {}; done = {}
                     for row in (r.data or []):
-                        s = row.get("system") or ""
-                        tot[s]  = int(row.get("total") or 0)
-                        done[s] = int(row.get("completed") or 0)
+                        _sys = row.get("system") or ""
+                        tot[_sys]  = int(row.get("total") or 0)
+                        done[_sys] = int(row.get("completed") or 0)
                     return tot, done
 
                 def _fetch_test_breakdown():
-                    r = sb.rpc("get_test_breakdown_v1", {}).execute()
+                    r = _sb_exec(lambda _c: _c.rpc("get_test_breakdown_v1", {}).execute())
                     tot = {}; done = {}
                     for row in (r.data or []):
-                        s = row.get("system") or ""
-                        tot[s]  = int(row.get("total") or 0)
-                        done[s] = int(row.get("completed") or 0)
+                        _sys = row.get("system") or ""
+                        tot[_sys]  = int(row.get("total") or 0)
+                        done[_sys] = int(row.get("completed") or 0)
                     return tot, done
 
                 _sup_ex = ThreadPoolExecutor(max_workers=2)
+                _sup_ok = _tst_ok = False
                 try:
                     _fut_sup = _sup_ex.submit(_fetch_support_breakdown)
                     _fut_tst = _sup_ex.submit(_fetch_test_breakdown)
+                    _t0 = time.time()
                     try:
                         _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
+                        _sup_ok = True
                     except Exception as _se:
                         print(f"[cache] support breakdown failed: {_se}")
                         _sup_s_tot, _sup_s_done = {}, {}
+                    _remaining = max(1.0, 60 - (time.time() - _t0))
                     try:
-                        _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=60)
+                        _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=_remaining)
+                        _tst_ok = True
                     except Exception as _te:
                         print(f"[cache] testpkg breakdown failed: {_te}")
                         _tst_s_tot, _tst_s_done = {}, {}
                 finally:
-                    try:
-                        _sup_ex.shutdown(wait=False, cancel_futures=True)
-                    except TypeError:
-                        _sup_ex.shutdown(wait=False)
+                    _sup_ex.shutdown(wait=False)
 
-                with _lock:
-                    _sup_test_cache["data"] = {
-                        "sup_tot":  _sup_s_tot,  "sup_done": _sup_s_done,
-                        "tst_tot":  _tst_s_tot,  "tst_done": _tst_s_done,
-                    }
-                    _sup_test_cache["time"] = time.time()
+                if _sup_ok or _tst_ok:
+                    with _lock:
+                        _sup_test_cache["data"] = {
+                            "sup_tot":  _sup_s_tot,  "sup_done": _sup_s_done,
+                            "tst_tot":  _tst_s_tot,  "tst_done": _tst_s_done,
+                        }
+                        _sup_test_cache["time"] = time.time()
+                else:
+                    print("[cache] support/testpkg both failed — skipping cache write")
 
             s_total = sum(_sup_s_tot.values())
             s_comp  = sum(_sup_s_done.values())
@@ -673,7 +682,8 @@ def _build():
                 _item["testpkg_comp"]  = _tst_s_done.get(_s, 0)
             print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}, systems={len(raw.get('systems', []))}")
         except Exception as sp_e:
-            print(f"[cache] support/testpkg agg error (non-critical): {sp_e}")
+            print(f"[cache] support/testpkg agg error: {sp_e}")
+            traceback.print_exc()
 
         # ── KPI + weekly + breakdown override (1h 캐시, cache_hit 시 재사용) ──
         # v17 RPC/dashboard_cache의 과소 집계를 보정.
@@ -856,7 +866,13 @@ def _build():
             _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
-        threading.Thread(target=_build_secondary_caches, daemon=True).start()
+        def _run_secondary():
+            try:
+                _build_secondary_caches()
+            except Exception as _sce:
+                print(f"[secondary_cache] CRITICAL: {_sce}")
+                traceback.print_exc()
+        threading.Thread(target=_run_secondary, daemon=True).start()
     except Exception as e:
         with _lock:
             _build_fail = True
