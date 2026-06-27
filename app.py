@@ -309,7 +309,7 @@ _kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결
 _welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
 
 def _build_secondary_caches():
-    """_build() 완료 후 보조 캐시 사전 로딩 — pkg_stats, pkg_list, filter-values 병렬 실행"""
+    """_build() 완료 후 보조 캐시 백그라운드 로딩 — KPI override, sub_area 스캔, pkg_stats 등 병렬 실행"""
     global _pkg_stats_cache, _pkg_cache
 
     def _load_pkg_stats():
@@ -379,16 +379,144 @@ def _build_secondary_caches():
         except Exception as e:
             print(f"[secondary_cache] jm_filter RPC failed: {e}")
 
-    ex = ThreadPoolExecutor(max_workers=3)
+    def _load_kpi_override():
+        """joint_master completed 행 집계 → _cache["data"] KPI/weekly/system 인플레이스 업데이트"""
+        global _kpi_override_cache
+        with _lock:
+            _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
+            _ko_data = _kpi_override_cache.get("data")
+        if _ko_data is not None and _ko_age < 3600:
+            print(f"[secondary_cache] kpi_override HIT ({int(_ko_age)}s old)")
+            _apply_kpi_override(_ko_data)
+            return
+        try:
+            sb = get_sb()
+            with _lock:
+                cur_data = _cache.get("data")
+            if not cur_data:
+                return
+            _wk_sorted = sorted(
+                [(str(w.get("week_start") or "")[:10],
+                  str(w.get("week_end") or "")[:10],
+                  int(w.get("week_no") or 0))
+                 for w in (cur_data.get("weekly") or [])
+                 if w.get("week_start") and w.get("week_no")],
+                key=lambda x: x[0]
+            )
+            _wk_starts = [x[0] for x in _wk_sorted]
+            def _wkno_for(d):
+                idx = bisect.bisect_right(_wk_starts, d) - 1
+                if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
+                    return _wk_sorted[idx][2]
+                return None
+            wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
+            sys_di_m = defaultdict(float); unit_di_m = defaultdict(float)
+            area_di_m = defaultdict(float); sub_di_m = defaultdict(float)
+            c_di = c_fab = c_erect = 0.0; c_joints = 0
+            off, bsz = 0, 1000
+            while True:
+                r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
+                      .not_.is_("date_completed", "null").order("id").range(off, off + bsz - 1).execute()
+                rows = r.data or []; del r
+                for row in rows:
+                    di = float(row.get("di") or 0); sf = (row.get("sf") or "").upper()
+                    dc = str(row.get("date_completed") or "")[:10]; wno = _wkno_for(dc)
+                    c_di += di
+                    if   sf in ("S", "SHOP"):  c_fab   += di
+                    elif sf in ("F", "FIELD"): c_erect += di
+                    sys_di_m[row.get("system") or ""] += di; unit_di_m[row.get("unit") or ""] += di
+                    area_di_m[row.get("area") or ""] += di;  sub_di_m[row.get("sub_area") or ""] += di
+                    if wno:
+                        wk_di_m[wno] += di
+                        if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
+                        elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
+                c_joints += len(rows)
+                if len(rows) < bsz: break
+                off += bsz
+            if c_joints == 0:
+                return
+            ko = {
+                "c_di": c_di, "c_fab": c_fab, "c_erect": c_erect, "c_joints": c_joints,
+                "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
+                "sys_di_m":  dict(sys_di_m),   "unit_di_m": dict(unit_di_m),
+                "area_di_m": dict(area_di_m),  "sub_di_m":  dict(sub_di_m),
+            }
+            with _lock:
+                _kpi_override_cache["data"] = ko
+                _kpi_override_cache["time"] = time.time()
+            _apply_kpi_override(ko)
+            print(f"[secondary_cache] kpi_override done: DI={c_di:.1f}, joints={c_joints}")
+        except Exception as _e:
+            print(f"[secondary_cache] kpi_override error: {_e}")
+
+    def _apply_kpi_override(ko):
+        c_di = ko["c_di"]; c_fab = ko["c_fab"]; c_erect = ko["c_erect"]; c_joints = ko["c_joints"]
+        wk_di_m = ko["wk_di_m"]; wk_fab_m = ko["wk_fab_m"]; wk_erect_m = ko["wk_erect_m"]
+        sys_di_m = ko["sys_di_m"]; unit_di_m = ko["unit_di_m"]
+        area_di_m = ko["area_di_m"]; sub_di_m = ko["sub_di_m"]
+        with _lock:
+            cur = _cache.get("data")
+            if not cur or c_joints == 0:
+                return
+            kpi = cur.get("kpi") or {}
+            kpi["completed_di"] = c_di; kpi["completed_joints"] = c_joints
+            kpi["fab_completed_di"] = c_fab; kpi["erect_completed_di"] = c_erect
+            for item in (cur.get("weekly") or []):
+                wno = int(item.get("week_no") or 0)
+                if wno in wk_di_m:
+                    item["completed_di"] = round(wk_di_m[wno], 2)
+                    item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
+                    item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
+            for item in (cur.get("systems") or []):
+                s = item.get("system") or ""
+                if s in sys_di_m: item["completed_di"] = round(sys_di_m[s], 2)
+            for item in (cur.get("units") or []):
+                u = item.get("unit") or ""
+                if u in unit_di_m: item["completed_di"] = round(unit_di_m[u], 2)
+            for item in (cur.get("areas") or []):
+                a = item.get("area") or ""
+                if a in area_di_m: item["completed_di"] = round(area_di_m[a], 2)
+            for item in (cur.get("subareas") or []):
+                s = item.get("sub_area") or item.get("area") or ""
+                if s in sub_di_m: item["completed_di"] = round(sub_di_m[s], 2)
+
+    def _load_sub_areas():
+        """joint_master 전체 스캔 → sub_area 완전한 distinct 목록 확보"""
+        global _sub_area_cache
+        with _lock:
+            _sa_age    = time.time() - _sub_area_cache.get("time", 0)
+            _sa_cached = _sub_area_cache.get("data")
+        if _sa_cached is not None and _sa_age < 86400:
+            return
+        try:
+            sb = get_sb()
+            _sub_set = set(); _soff = 0
+            while True:
+                _sr = sb.table("joint_master").select("sub_area").range(_soff, _soff + 999).execute()
+                for r in (_sr.data or []):
+                    if r.get("sub_area"): _sub_set.add(r["sub_area"])
+                if len(_sr.data or []) < 1000: break
+                _soff += 1000
+            m_sub = sorted(_sub_set); del _sub_set
+            with _lock:
+                _sub_area_cache["data"] = m_sub
+                _sub_area_cache["time"] = time.time()
+                if _meta_cache.get("data"):
+                    _meta_cache["data"]["sub_areas"] = m_sub
+                    _meta_cache["time"] = time.time()
+            print(f"[secondary_cache] sub_area scan: {len(m_sub)} values")
+        except Exception as _e:
+            print(f"[secondary_cache] sub_area scan error: {_e}")
+
+    ex = ThreadPoolExecutor(max_workers=5)
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
-    try: f1.result(timeout=30)
-    except Exception as _e: print(f"[secondary_cache] pkg_stats timeout/error: {_e}")
-    try: f2.result(timeout=30)
-    except Exception as _e: print(f"[secondary_cache] pkg_list timeout/error: {_e}")
-    try: f3.result(timeout=30)
-    except Exception as _e: print(f"[secondary_cache] jm_filter timeout/error: {_e}")
+    f4 = ex.submit(_load_kpi_override)
+    f5 = ex.submit(_load_sub_areas)
+    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas")]:
+        try: f.result(timeout=120)
+        except Exception as _e: print(f"[secondary_cache] {name} timeout/error: {_e}")
     try:
         ex.shutdown(wait=False, cancel_futures=True)
     except TypeError:
@@ -685,135 +813,6 @@ def _build():
             print(f"[cache] support/testpkg agg error: {sp_e}")
             traceback.print_exc()
 
-        # ── KPI + weekly + breakdown override (1h 캐시, cache_hit 시 재사용) ──
-        # v17 RPC/dashboard_cache의 과소 집계를 보정.
-        # cache_hit=True AND 1h 이내: 캐시 재사용 (7 API 호출 절약)
-        # cache_hit=False: 항상 재집계 (RPC 데이터가 방금 갱신됐으므로)
-        global _kpi_override_cache
-        try:
-            with _lock:
-                _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
-                _ko_data = _kpi_override_cache.get("data")
-            _use_ko_cache = cache_hit and (_ko_data is not None) and (_ko_age < 3600)
-
-            if _use_ko_cache:
-                c_di       = _ko_data["c_di"]
-                c_fab      = _ko_data["c_fab"]
-                c_erect    = _ko_data["c_erect"]
-                c_joints   = _ko_data["c_joints"]
-                wk_di_m    = _ko_data["wk_di_m"]
-                wk_fab_m   = _ko_data["wk_fab_m"]
-                wk_erect_m = _ko_data["wk_erect_m"]
-                sys_di_m   = _ko_data["sys_di_m"]
-                unit_di_m  = _ko_data["unit_di_m"]
-                area_di_m  = _ko_data["area_di_m"]
-                sub_di_m   = _ko_data["sub_di_m"]
-                print(f"[cache] KPI override cache HIT ({int(_ko_age)}s old, joints={c_joints})")
-            else:
-                wk_di_m    = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
-                sys_di_m   = defaultdict(float)
-                unit_di_m  = defaultdict(float)
-                area_di_m  = defaultdict(float)
-                sub_di_m   = defaultdict(float)
-
-                # bisect 기반 O(log n) 주차 검색 (linear scan 대비 ~10x 빠름)
-                _wk_raw = raw.get("weeks") or []
-                _wk_sorted = sorted(
-                    [(str(w.get("week_start_date") or w.get("week_start") or "")[:10],
-                      str(w.get("week_end_date")   or w.get("week_end")   or "")[:10],
-                      w.get("week_no"))
-                     for w in _wk_raw
-                     if (w.get("week_start_date") or w.get("week_start"))],
-                    key=lambda x: x[0]
-                )
-                _wk_starts = [x[0] for x in _wk_sorted]
-
-                def _wkno_for(d):
-                    idx = bisect.bisect_right(_wk_starts, d) - 1
-                    if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
-                        return _wk_sorted[idx][2]
-                    return None
-
-                c_di = c_fab = c_erect = 0.0
-                c_joints = 0
-                off, bsz = 0, 1000
-                while True:
-                    r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
-                          .not_.is_("date_completed", "null") \
-                          .order("id").range(off, off + bsz - 1).execute()
-                    rows = r.data or []; del r
-                    for row in rows:
-                        di  = float(row.get("di") or 0)
-                        sf  = (row.get("sf") or "").upper()
-                        dc  = str(row.get("date_completed") or "")[:10]
-                        wno = _wkno_for(dc)
-                        c_di += di
-                        if   sf in ("S", "SHOP"):  c_fab   += di
-                        elif sf in ("F", "FIELD"): c_erect += di
-                        sys_di_m[row.get("system")   or ""] += di
-                        unit_di_m[row.get("unit")    or ""] += di
-                        area_di_m[row.get("area")    or ""] += di
-                        sub_di_m[row.get("sub_area") or ""] += di
-                        if wno:
-                            wk_di_m[wno]    += di
-                            if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
-                            elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
-                    c_joints += len(rows)
-                    if len(rows) < bsz: break
-                    off += bsz
-
-                with _lock:
-                    _kpi_override_cache["data"] = {
-                        "c_di": c_di, "c_fab": c_fab, "c_erect": c_erect, "c_joints": c_joints,
-                        "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
-                        "sys_di_m":  dict(sys_di_m),  "unit_di_m": dict(unit_di_m),
-                        "area_di_m": dict(area_di_m), "sub_di_m":  dict(sub_di_m),
-                    }
-                    _kpi_override_cache["time"] = time.time()
-
-            if c_joints > 0:
-                kpi_list = raw.get("kpi")
-                if isinstance(kpi_list, list) and kpi_list:
-                    kpi_list[0]["completed_di"]       = c_di
-                    kpi_list[0]["completed_joints"]   = c_joints
-                    kpi_list[0]["fab_completed_di"]   = c_fab
-                    kpi_list[0]["erect_completed_di"] = c_erect
-
-                if wk_di_m and raw.get("weekly"):
-                    for item in raw["weekly"]:
-                        wno = int(item.get("week_no") or 0)
-                        if wno in wk_di_m:
-                            item["completed_di"] = round(wk_di_m[wno], 2)
-                            item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
-                            item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
-
-                # 시스템별 completed_di 덮어쓰기 — Overview·Systems 탭 일치
-                for item in (raw.get("systems") or []):
-                    s = item.get("system") or ""
-                    if s in sys_di_m:
-                        item["completed_di"] = round(sys_di_m[s], 2)
-
-                # 유닛별 completed_di 덮어쓰기 — Unit/Area 탭 일치
-                for item in (raw.get("units") or []):
-                    u = item.get("unit") or ""
-                    if u in unit_di_m:
-                        item["completed_di"] = round(unit_di_m[u], 2)
-
-                # 에리어·서브에리어별 completed_di 덮어쓰기
-                for item in (raw.get("areas") or []):
-                    a = item.get("area") or ""
-                    if a in area_di_m:
-                        item["completed_di"] = round(area_di_m[a], 2)
-                for item in (raw.get("subareas") or []):
-                    s = item.get("sub_area") or item.get("area") or ""
-                    if s in sub_di_m:
-                        item["completed_di"] = round(sub_di_m[s], 2)
-
-            print(f"[cache] KPI override: DI={c_di:.1f}, fab={c_fab:.1f}, erect={c_erect:.1f}, joints={c_joints}, "
-                  f"systems={len(sys_di_m)}, units={len(unit_di_m)}, subareas={len(sub_di_m)}")
-        except Exception as _kpi_e:
-            print(f"[cache] KPI override error (non-critical): {_kpi_e}")
-
         data = _parse_rpc(raw)
 
         del raw  # free the large raw dict — only processed data needed
@@ -824,30 +823,21 @@ def _build():
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
             m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
             m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
-            # sub_area 드롭다운 목록 — 24h 캐시 (50k rows × 51 API 호출을 하루 1회로 압축)
+            # sub_area 드롭다운 — 캐시 있으면 재사용, 없으면 v17 subareas로 초기값 설정
+            # 전체 스캔(47k rows)은 _build_secondary_caches()에서 백그라운드 실행
             with _lock:
-                _sa_age = time.time() - _sub_area_cache.get("time", 0)
                 _sa_cached = _sub_area_cache.get("data")
+                _sa_age = time.time() - _sub_area_cache.get("time", 0)
             if _sa_cached is not None and _sa_age < 86400:
                 m_sub = _sa_cached
                 print(f"[cache] sub_area cache HIT ({int(_sa_age)}s old, {len(m_sub)} values)")
             else:
-                try:
-                    _sub_set = set(); _soff = 0
-                    while True:
-                        _sr = sb.table("joint_master").select("sub_area").range(_soff, _soff + 999).execute()
-                        for r in (_sr.data or []):
-                            if r.get("sub_area"): _sub_set.add(r["sub_area"])
-                        if len(_sr.data or []) < 1000: break
-                        _soff += 1000
-                    m_sub = sorted(_sub_set)
-                    del _sub_set
-                    with _lock:
-                        _sub_area_cache["data"] = m_sub
-                        _sub_area_cache["time"] = time.time()
-                    print(f"[cache] sub_area scan done: {len(m_sub)} distinct values")
-                except Exception:
-                    m_sub = sorted(list(set(a.get("sub_area") or a.get("subarea") or a.get("area") for a in (data.get("subareas") or []) if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area")))))
+                m_sub = sorted(set(
+                    a.get("sub_area") or a.get("subarea") or a.get("area") or ""
+                    for a in (data.get("subareas") or [])
+                    if isinstance(a, dict) and (a.get("sub_area") or a.get("subarea") or a.get("area"))
+                ))
+                print(f"[cache] sub_area from v17 subareas: {len(m_sub)} values (full scan deferred)")
         except Exception as me:
             print(f"[cache] Meta extraction error: {me}")
             m_units, m_sys, m_area, m_sub = [], [], [], []
