@@ -2729,33 +2729,33 @@ def api_daily_report():
             for dc, v in sorted(daily.items())
         ]
 
-        # 5. 마지막 작업일 breakdown (system / sub_area / mat) — size_inch 기준 DI
+        # 5. 날짜별 breakdown (system / sub_area / mat) — size_inch 기준 DI
         last_date = last_5[-1]
-        sys_map: dict = {}
-        sub_map: dict = {}
-        mat_map: dict = {}
+        breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_5}
         for j in joints:
             dc = str(j.get("date_completed") or "")[:10]
-            if dc != last_date:
+            if dc not in breakdowns:
                 continue
             sf  = (j.get("sf") or "").upper().strip()
             di  = float(j.get("size_inch") or j.get("di") or 0)
             is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
             is_erect = sf in ("F", "FIELD") or sf.startswith("F")
-            for label, mapping in [
-                (j.get("system") or "-",   sys_map),
-                (j.get("sub_area") or "-", sub_map),
-                (j.get("mat") or "-",      mat_map),
+            bd = breakdowns[dc]
+            for label, mk in [
+                (j.get("system") or "-",   "sys"),
+                (j.get("sub_area") or "-", "sub"),
+                (j.get("mat") or "-",      "mat"),
             ]:
-                if label not in mapping:
-                    mapping[label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-                mapping[label]["completed_di"] += di
-                if is_fab:    mapping[label]["fab_di"]   += di
-                elif is_erect: mapping[label]["erect_di"] += di
+                if label not in bd[mk]:
+                    bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+                bd[mk][label]["completed_di"] += di
+                if is_fab:    bd[mk][label]["fab_di"]   += di
+                elif is_erect: bd[mk][label]["erect_di"] += di
 
         for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
-            if always_mat not in mat_map:
-                mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+            for dc in last_5:
+                if always_mat not in breakdowns[dc]["mat"]:
+                    breakdowns[dc]["mat"][always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
 
         def to_list(mapping, key_field):
             return sorted(
@@ -2767,13 +2767,23 @@ def api_daily_report():
                 key=lambda x: x[key_field]
             )
 
+        breakdowns_out = {}
+        for dc in last_5:
+            bd = breakdowns[dc]
+            breakdowns_out[dc] = {
+                "systems":   to_list(bd["sys"], "system"),
+                "subareas":  to_list(bd["sub"], "sub_area"),
+                "materials": to_list(bd["mat"], "mat"),
+            }
+
         del joints
         result = {
-            "daily":     daily_rows,
-            "last_date": last_date,
-            "systems":   to_list(sys_map,  "system"),
-            "subareas":  to_list(sub_map,  "sub_area"),
-            "materials": to_list(mat_map,  "mat"),
+            "daily":      daily_rows,
+            "last_date":  last_date,
+            "systems":    breakdowns_out[last_date]["systems"],
+            "subareas":   breakdowns_out[last_date]["subareas"],
+            "materials":  breakdowns_out[last_date]["materials"],
+            "breakdowns": breakdowns_out,
         }
         with _lock:
             _daily_report_cache["data"] = result

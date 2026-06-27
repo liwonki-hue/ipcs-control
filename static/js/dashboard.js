@@ -128,6 +128,8 @@ let metaData = { units: [], systems: [] };
 let _dashData = null;
 let _epSupportData = null;
 let _epSupportDataTime = 0;
+let _drBreakdowns = {};
+let _drSelectedDate = "";
 
 async function getDashData(forceRefresh=false) {
     if (_dashData && !forceRefresh) return _dashData;
@@ -3395,7 +3397,10 @@ async function exportTMExcel() {
 async function loadDailyReport() {
     try {
         const res = await apiFetch("/api/daily-report");
-        const { daily = [], last_date = "", systems = [], subareas = [], materials = [] } = res;
+        const { daily = [], last_date = "", breakdowns = {} } = res;
+
+        _drBreakdowns = breakdowns;
+        _drSelectedDate = last_date;
 
         // ── Daily Summary Table (PIPING GROUP + SUPPORT GROUP) ──
         const summaryBody = document.getElementById("drSummaryBody");
@@ -3409,8 +3414,9 @@ async function loadDailyReport() {
                 tSuppSpecial += r.supp_special || 0;
                 tSuppTypical += r.supp_typical || 0;
                 tSuppComp   += r.supp_completed|| 0;
-                return `<tr>
-                    <td style="color:var(--accent)">${r.date}</td>
+                const isSelected = r.date === last_date;
+                return `<tr id="drRow_${r.date}" onclick="selectDailyDate('${r.date}')" style="cursor:pointer${isSelected ? ";background:rgba(37,99,235,0.18)" : ""}">
+                    <td style="color:var(--accent);font-weight:${isSelected?"700":"400"}">${r.date}</td>
                     <td>${r.welder_count || 0}</td>
                     <td>${fmtNum(r.fab_di, 1)}</td>
                     <td>${fmtNum(r.erect_di, 1)}</td>
@@ -3433,64 +3439,90 @@ async function loadDailyReport() {
             summaryBody.innerHTML = html;
         }
 
-        // ── Breakdown 공통 렌더 헬퍼 ──
-        const label = last_date ? `[${last_date}]` : "";
-        const drEl = id => document.getElementById(id);
-        if (drEl("drMaterialTitle")) drEl("drMaterialTitle").textContent = `${label} Breakdown — By Material`;
-        if (drEl("drSystemTitle"))   drEl("drSystemTitle").textContent   = `${label} Breakdown — By System`;
-        if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area (1)`;
-        if (drEl("drSubareaTitle2")) drEl("drSubareaTitle2").textContent = `${label} Breakdown — By Sub Area (2)`;
-
-        const mkDataRows = (arr, nameKey) => arr.map(r => `<tr>
-            <td style="color:var(--accent)">${r[nameKey] || ""}</td>
-            <td>${fmtNum(r.fab_di || 0, 1)}</td>
-            <td>${fmtNum(r.erect_di || 0, 1)}</td>
-            <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
-        </tr>`).join("");
-
-        const mkTotalRow = arr => {
-            const tF = arr.reduce((s, r) => s + (r.fab_di || 0), 0);
-            const tE = arr.reduce((s, r) => s + (r.erect_di || 0), 0);
-            const tC = arr.reduce((s, r) => s + (r.completed_di || 0), 0);
-            return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
-                <td style="font-weight:700;color:var(--accent)">Total</td>
-                <td style="font-weight:700">${fmtNum(tF, 1)}</td>
-                <td style="font-weight:700">${fmtNum(tE, 1)}</td>
-                <td style="font-weight:700;color:var(--accent)">${fmtNum(tC, 1)}</td>
-            </tr>`;
-        };
-
-        const sysBody = document.querySelector("#drSystemTable tbody");
-        if (sysBody) sysBody.innerHTML = mkDataRows(systems, "system") + mkTotalRow(systems);
-
-        const matBody = document.querySelector("#drMaterialTable tbody");
-        if (matBody) matBody.innerHTML = mkDataRows(materials, "mat") + mkTotalRow(materials);
-
-        const mid = Math.ceil(subareas.length / 2);
-        const subBody1 = document.querySelector("#drSubareaTable tbody");
-        const subBody2 = document.querySelector("#drSubareaTable2 tbody");
-        // Sub Area (1): Total 없음 / Sub Area (2): 전체(1+2) Total
-        if (subBody1) subBody1.innerHTML = mkDataRows(subareas.slice(0, mid), "sub_area");
-        if (subBody2) subBody2.innerHTML = mkDataRows(subareas.slice(mid), "sub_area") + mkTotalRow(subareas);
+        renderDrBreakdown(last_date);
 
     } catch(e) { console.error("Daily Report failed", e); }
+}
+
+function renderDrBreakdown(date) {
+    const bd = _drBreakdowns[date];
+    if (!bd) return;
+    const { systems = [], subareas = [], materials = [] } = bd;
+
+    const label = date ? `[${date}]` : "";
+    const drEl = id => document.getElementById(id);
+    if (drEl("drMaterialTitle")) drEl("drMaterialTitle").textContent = `${label} Breakdown — By Material`;
+    if (drEl("drSystemTitle"))   drEl("drSystemTitle").textContent   = `${label} Breakdown — By System`;
+    if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area (1)`;
+    if (drEl("drSubareaTitle2")) drEl("drSubareaTitle2").textContent = `${label} Breakdown — By Sub Area (2)`;
+
+    const mkDataRows = (arr, nameKey) => arr.map(r => `<tr>
+        <td style="color:var(--accent)">${r[nameKey] || ""}</td>
+        <td>${fmtNum(r.fab_di || 0, 1)}</td>
+        <td>${fmtNum(r.erect_di || 0, 1)}</td>
+        <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
+    </tr>`).join("");
+
+    const mkTotalRow = arr => {
+        const tF = arr.reduce((s, r) => s + (r.fab_di || 0), 0);
+        const tE = arr.reduce((s, r) => s + (r.erect_di || 0), 0);
+        const tC = arr.reduce((s, r) => s + (r.completed_di || 0), 0);
+        return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+            <td style="font-weight:700;color:var(--accent)">Total</td>
+            <td style="font-weight:700">${fmtNum(tF, 1)}</td>
+            <td style="font-weight:700">${fmtNum(tE, 1)}</td>
+            <td style="font-weight:700;color:var(--accent)">${fmtNum(tC, 1)}</td>
+        </tr>`;
+    };
+
+    const sysBody = document.querySelector("#drSystemTable tbody");
+    if (sysBody) sysBody.innerHTML = mkDataRows(systems, "system") + mkTotalRow(systems);
+
+    const matBody = document.querySelector("#drMaterialTable tbody");
+    if (matBody) matBody.innerHTML = mkDataRows(materials, "mat") + mkTotalRow(materials);
+
+    const mid = Math.ceil(subareas.length / 2);
+    const subBody1 = document.querySelector("#drSubareaTable tbody");
+    const subBody2 = document.querySelector("#drSubareaTable2 tbody");
+    if (subBody1) subBody1.innerHTML = mkDataRows(subareas.slice(0, mid), "sub_area");
+    if (subBody2) subBody2.innerHTML = mkDataRows(subareas.slice(mid), "sub_area") + mkTotalRow(subareas);
+}
+
+function selectDailyDate(date) {
+    if (_drSelectedDate) {
+        const prev = document.getElementById(`drRow_${_drSelectedDate}`);
+        if (prev) {
+            prev.style.background = "";
+            prev.querySelector("td").style.fontWeight = "400";
+        }
+    }
+    _drSelectedDate = date;
+    const row = document.getElementById(`drRow_${date}`);
+    if (row) {
+        row.style.background = "rgba(37,99,235,0.18)";
+        row.querySelector("td").style.fontWeight = "700";
+    }
+    renderDrBreakdown(date);
 }
 
 async function exportDailyReportExcel() {
     await ensureXlsx();
     const res = await apiFetch("/api/daily-report");
-    const { summary = [] } = res;
-    if (!summary.length) { toast("No data"); return; }
-    const rows = summary.map(r => ({
+    const { daily = [] } = res;
+    if (!daily.length) { toast("No data"); return; }
+    const rows = daily.map(r => ({
         "Date":        r.date,
-        "Welder":      r.welder,
+        "Welders":     r.welder_count,
         "Fabrication": r.fab_di,
         "Erection":    r.erect_di,
         "Completed":   r.completed_di,
+        "Supp Special":   r.supp_special,
+        "Supp Typical":   r.supp_typical,
+        "Supp Completed": r.supp_completed,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "DailyReport");
     const ok = await downloadWithPicker(wb, "Daily_Report_Export.xlsx");
-    if (ok) toast(`✓ ${summary.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${daily.length.toLocaleString()}행 내보내기 완료`);
 }
