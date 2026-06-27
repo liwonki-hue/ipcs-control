@@ -480,6 +480,23 @@ def _build_secondary_caches():
                 s = item.get("sub_area") or item.get("area") or ""
                 if s in sub_di_m: item["completed_di"] = round(sub_di_m[s], 2)
 
+    def _load_daily_report():
+        """서버 시작 직후 daily report 캐시 pre-warm — 첫 접속 시 빈 화면 방지"""
+        global _daily_report_cache
+        with _lock:
+            _dr_age  = time.time() - _daily_report_cache.get("time", 0)
+            _dr_data = _daily_report_cache.get("data")
+        if _dr_data is not None and _dr_age < 300:
+            return
+        try:
+            result = _compute_daily_report()
+            with _lock:
+                _daily_report_cache["data"] = result
+                _daily_report_cache["time"] = time.time()
+            print(f"[secondary_cache] daily_report: {len(result.get('daily', []))} days")
+        except Exception as _e:
+            print(f"[secondary_cache] daily_report error: {_e}")
+
     def _load_sub_areas():
         """joint_master 전체 스캔 → sub_area 완전한 distinct 목록 확보"""
         global _sub_area_cache
@@ -508,13 +525,14 @@ def _build_secondary_caches():
         except Exception as _e:
             print(f"[secondary_cache] sub_area scan error: {_e}")
 
-    ex = ThreadPoolExecutor(max_workers=5)
+    ex = ThreadPoolExecutor(max_workers=6)
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
     f4 = ex.submit(_load_kpi_override)
     f5 = ex.submit(_load_sub_areas)
-    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas")]:
+    f6 = ex.submit(_load_daily_report)
+    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas"),(f6,"daily_report")]:
         try: f.result(timeout=120)
         except Exception as _e: print(f"[secondary_cache] {name} timeout/error: {_e}")
     try:
@@ -2619,9 +2637,154 @@ def api_testpkg_sync():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def _compute_daily_report():
+    """Daily report 데이터 순수 계산 — 캐시 없음, Supabase 직접 조회"""
+    dates_res = _sb_exec(lambda sb: sb.table("joint_master")
+        .select("date_completed")
+        .not_.is_("date_completed", "null")
+        .gt("di", 0)
+        .order("date_completed", desc=True)
+        .limit(500).execute())
+    all_dates = dates_res.data or []
+    del dates_res
+
+    distinct = sorted(set(
+        str(r["date_completed"])[:10] for r in all_dates if r.get("date_completed")
+    ))
+    del all_dates
+
+    if not distinct:
+        return {"daily": [], "last_date": "", "systems": [], "subareas": [], "materials": [], "breakdowns": {}}
+
+    last_5 = distinct[-5:]
+    range_start, range_end = last_5[0], last_5[-1]
+
+    joints = []
+    _q = get_sb().table("joint_master") \
+        .select("date_completed,welder,di,sf,system,sub_area,mat,size_inch") \
+        .gte("date_completed", range_start) \
+        .lte("date_completed", range_end) \
+        .not_.is_("date_completed", "null")
+    _off = 0
+    while True:
+        _page = _q.range(_off, _off + 999).execute().data or []
+        joints.extend(_page)
+        if len(_page) < 1000:
+            break
+        _off += 1000
+
+    daily: dict = {}
+    for j in joints:
+        dc = str(j.get("date_completed") or "")[:10]
+        if dc not in last_5:
+            continue
+        di    = float(j.get("di") or 0)
+        sf    = (j.get("sf") or "").upper().strip()
+        weld  = (j.get("welder") or "").strip()
+        is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
+        is_erect = sf in ("F", "FIELD") or sf.startswith("F")
+        if dc not in daily:
+            daily[dc] = {"fab": 0.0, "erect": 0.0, "total": 0.0, "welders": set()}
+        daily[dc]["total"] += di
+        if is_fab:    daily[dc]["fab"]   += di
+        elif is_erect: daily[dc]["erect"] += di
+        if weld:
+            for w in [x.strip() for x in weld.split("/") if x.strip()]:
+                daily[dc]["welders"].add(w)
+
+    supp_res = _sb_exec(lambda sb: sb.table("support_master")
+        .select("date_completed,type")
+        .not_.is_("date_completed", "null")
+        .gte("date_completed", range_start)
+        .lte("date_completed", range_end)
+        .execute())
+    supp_rows = supp_res.data or []
+    del supp_res
+    supp_daily: dict = {}
+    for s in supp_rows:
+        dc = str(s.get("date_completed") or "")[:10]
+        if dc not in last_5:
+            continue
+        if dc not in supp_daily:
+            supp_daily[dc] = {"special": 0, "typical": 0}
+        if (s.get("type") or "").strip().upper() == "SPECIAL":
+            supp_daily[dc]["special"] += 1
+        else:
+            supp_daily[dc]["typical"] += 1
+    del supp_rows
+
+    daily_rows = [
+        {"date": dc,
+         "welder_count":   len(v["welders"]),
+         "fab_di":         round(v["fab"], 1),
+         "erect_di":       round(v["erect"], 1),
+         "completed_di":   round(v["total"], 1),
+         "supp_special":   supp_daily.get(dc, {}).get("special", 0),
+         "supp_typical":   supp_daily.get(dc, {}).get("typical", 0),
+         "supp_completed": supp_daily.get(dc, {}).get("special", 0) + supp_daily.get(dc, {}).get("typical", 0)}
+        for dc, v in sorted(daily.items())
+    ]
+
+    last_date = last_5[-1]
+    breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_5}
+    for j in joints:
+        dc = str(j.get("date_completed") or "")[:10]
+        if dc not in breakdowns:
+            continue
+        sf  = (j.get("sf") or "").upper().strip()
+        di  = float(j.get("size_inch") or j.get("di") or 0)
+        is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
+        is_erect = sf in ("F", "FIELD") or sf.startswith("F")
+        bd = breakdowns[dc]
+        for label, mk in [
+            (j.get("system") or "-",   "sys"),
+            (j.get("sub_area") or "-", "sub"),
+            (j.get("mat") or "-",      "mat"),
+        ]:
+            if label not in bd[mk]:
+                bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+            bd[mk][label]["completed_di"] += di
+            if is_fab:    bd[mk][label]["fab_di"]   += di
+            elif is_erect: bd[mk][label]["erect_di"] += di
+
+    for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
+        for dc in last_5:
+            if always_mat not in breakdowns[dc]["mat"]:
+                breakdowns[dc]["mat"][always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+
+    def _to_list(mapping, key_field):
+        return sorted(
+            [{key_field: k,
+              "fab_di": round(v["fab_di"], 1),
+              "erect_di": round(v["erect_di"], 1),
+              "completed_di": round(v["completed_di"], 1)}
+             for k, v in mapping.items()],
+            key=lambda x: x[key_field]
+        )
+
+    breakdowns_out = {}
+    for dc in last_5:
+        bd = breakdowns[dc]
+        breakdowns_out[dc] = {
+            "systems":   _to_list(bd["sys"], "system"),
+            "subareas":  _to_list(bd["sub"], "sub_area"),
+            "materials": _to_list(bd["mat"], "mat"),
+        }
+
+    del joints
+    return {
+        "daily":      daily_rows,
+        "last_date":  last_date,
+        "systems":    breakdowns_out[last_date]["systems"],
+        "subareas":   breakdowns_out[last_date]["subareas"],
+        "materials":  breakdowns_out[last_date]["materials"],
+        "breakdowns": breakdowns_out,
+    }
+
+
 @app.route("/api/daily-report")
 def api_daily_report():
-    """Daily 실적 — 최근 5 작업일 날짜×용접사 집계 + 마지막 날 시스템/자재/서브에어리어 breakdown"""
+    """Daily 실적 — 최근 5 작업일 날짜×용접사 집계 + 날짜별 시스템/자재/서브에어리어 breakdown"""
     global _daily_report_cache
     with _lock:
         _dr_cached = _daily_report_cache.get("data")
@@ -2629,152 +2792,7 @@ def api_daily_report():
     if _dr_cached is not None and _dr_age < 300:
         return jsonify(_dr_cached)
     try:
-        # 1. 최근 5 작업일 추출
-        dates_res = _sb_exec(lambda sb: sb.table("joint_master")
-            .select("date_completed")
-            .not_.is_("date_completed", "null")
-            .gt("di", 0)
-            .order("date_completed", desc=True)
-            .limit(500).execute())
-        all_dates = dates_res.data or []
-        del dates_res
-
-        distinct = sorted(set(
-            str(r["date_completed"])[:10] for r in all_dates if r.get("date_completed")
-        ))
-        del all_dates
-
-        if not distinct:
-            return jsonify({"summary": [], "daily": [], "systems": [], "subareas": [], "materials": [], "last_date": ""})
-
-        last_5 = distinct[-5:]
-        range_start, range_end = last_5[0], last_5[-1]
-
-        # 2. 해당 기간 joint_master 조회 (welder, di, sf, system, sub_area, mat, size_inch)
-        joints = []
-        _q = get_sb().table("joint_master") \
-            .select("date_completed,welder,di,sf,system,sub_area,mat,size_inch") \
-            .gte("date_completed", range_start) \
-            .lte("date_completed", range_end) \
-            .not_.is_("date_completed", "null")
-        _off = 0
-        while True:
-            _page = _q.range(_off, _off + 999).execute().data or []
-            joints.extend(_page)
-            if len(_page) < 1000:
-                break
-            _off += 1000
-
-        # 3. 날짜별 piping 집계 (welders, fab, erect, completed)
-        daily: dict = {}
-        for j in joints:
-            dc = str(j.get("date_completed") or "")[:10]
-            if dc not in last_5:
-                continue
-            di    = float(j.get("di") or 0)
-            sf    = (j.get("sf") or "").upper().strip()
-            weld  = (j.get("welder") or "").strip()
-            is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
-            is_erect = sf in ("F", "FIELD") or sf.startswith("F")
-            if dc not in daily:
-                daily[dc] = {"fab": 0.0, "erect": 0.0, "total": 0.0, "welders": set()}
-            daily[dc]["total"] += di
-            if is_fab:    daily[dc]["fab"]   += di
-            elif is_erect: daily[dc]["erect"] += di
-            if weld:
-                for w in [x.strip() for x in weld.split("/") if x.strip()]:
-                    daily[dc]["welders"].add(w)
-
-        # 4. support_master — 날짜별 Special/Typical/완료 건수
-        supp_res = _sb_exec(lambda sb: sb.table("support_master")
-            .select("date_completed,type")
-            .not_.is_("date_completed", "null")
-            .gte("date_completed", range_start)
-            .lte("date_completed", range_end)
-            .execute())
-        supp_rows = supp_res.data or []
-        del supp_res
-        supp_daily: dict = {}
-        for s in supp_rows:
-            dc = str(s.get("date_completed") or "")[:10]
-            if dc not in last_5:
-                continue
-            if dc not in supp_daily:
-                supp_daily[dc] = {"special": 0, "typical": 0}
-            if (s.get("type") or "").strip().upper() == "SPECIAL":
-                supp_daily[dc]["special"] += 1
-            else:
-                supp_daily[dc]["typical"] += 1
-        del supp_rows
-
-        daily_rows = [
-            {"date": dc,
-             "welder_count":   len(v["welders"]),
-             "fab_di":         round(v["fab"], 1),
-             "erect_di":       round(v["erect"], 1),
-             "completed_di":   round(v["total"], 1),
-             "supp_special":   supp_daily.get(dc, {}).get("special", 0),
-             "supp_typical":   supp_daily.get(dc, {}).get("typical", 0),
-             "supp_completed": supp_daily.get(dc, {}).get("special", 0) + supp_daily.get(dc, {}).get("typical", 0)}
-            for dc, v in sorted(daily.items())
-        ]
-
-        # 5. 날짜별 breakdown (system / sub_area / mat) — size_inch 기준 DI
-        last_date = last_5[-1]
-        breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_5}
-        for j in joints:
-            dc = str(j.get("date_completed") or "")[:10]
-            if dc not in breakdowns:
-                continue
-            sf  = (j.get("sf") or "").upper().strip()
-            di  = float(j.get("size_inch") or j.get("di") or 0)
-            is_fab   = sf in ("S", "SHOP") or sf.startswith("S")
-            is_erect = sf in ("F", "FIELD") or sf.startswith("F")
-            bd = breakdowns[dc]
-            for label, mk in [
-                (j.get("system") or "-",   "sys"),
-                (j.get("sub_area") or "-", "sub"),
-                (j.get("mat") or "-",      "mat"),
-            ]:
-                if label not in bd[mk]:
-                    bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-                bd[mk][label]["completed_di"] += di
-                if is_fab:    bd[mk][label]["fab_di"]   += di
-                elif is_erect: bd[mk][label]["erect_di"] += di
-
-        for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
-            for dc in last_5:
-                if always_mat not in breakdowns[dc]["mat"]:
-                    breakdowns[dc]["mat"][always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-
-        def to_list(mapping, key_field):
-            return sorted(
-                [{key_field: k,
-                  "fab_di": round(v["fab_di"], 1),
-                  "erect_di": round(v["erect_di"], 1),
-                  "completed_di": round(v["completed_di"], 1)}
-                 for k, v in mapping.items()],
-                key=lambda x: x[key_field]
-            )
-
-        breakdowns_out = {}
-        for dc in last_5:
-            bd = breakdowns[dc]
-            breakdowns_out[dc] = {
-                "systems":   to_list(bd["sys"], "system"),
-                "subareas":  to_list(bd["sub"], "sub_area"),
-                "materials": to_list(bd["mat"], "mat"),
-            }
-
-        del joints
-        result = {
-            "daily":      daily_rows,
-            "last_date":  last_date,
-            "systems":    breakdowns_out[last_date]["systems"],
-            "subareas":   breakdowns_out[last_date]["subareas"],
-            "materials":  breakdowns_out[last_date]["materials"],
-            "breakdowns": breakdowns_out,
-        }
+        result = _compute_daily_report()
         with _lock:
             _daily_report_cache["data"] = result
             _daily_report_cache["time"] = time.time()
@@ -2783,7 +2801,7 @@ def api_daily_report():
         print(f"[daily-report] Error: {e}")
         if _dr_cached is not None:
             return jsonify(_dr_cached)
-        return jsonify({"summary": [], "daily": [], "systems": [], "subareas": [], "materials": [], "last_date": ""}), 500
+        return jsonify({"daily": [], "systems": [], "subareas": [], "materials": [], "last_date": "", "breakdowns": {}}), 500
 
 
 @app.after_request
