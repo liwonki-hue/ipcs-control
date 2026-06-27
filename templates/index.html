@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=6.6">
+<link rel="stylesheet" href="/static/css/index.css?v=6.7">
 </head>
 <body>
 
@@ -133,7 +133,7 @@
     <div class="page hidden" id="page-early_power">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (EP) Overview<span style="font-size:12px;color:var(--text-dim);font-weight:400;margin-left:14px">Target Date: 2026-12-30</span></div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportEPExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('early_power')">&#128424; Print</button></div></div>
       <!-- Top row: Gauge + S-Curve -->
-      <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:12px">
+      <div class="rg-12" style="margin-bottom:12px">
         <div>
           <div class="panel"><div class="panel-title" style="margin-bottom:4px">EP DI Progress</div><div class="gauge-wrap" style="padding:2px 0"><svg viewBox="0 0 200 110" class="gauge-svg" style="max-height:86px"><path d="M16,104 A84,84,0,0,1,184,104" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="epGaugePath" d="M16,104 A84,84,0,0,1,184,104" fill="none" stroke="#22d3a1" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="epGaugeText" x="100" y="86" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="103" text-anchor="middle" class="gauge-label">EP PROGRESS</text></svg></div><div class="stat-list" id="epStats" style="margin-top:2px"></div></div>
         </div>
@@ -142,7 +142,7 @@
         </div>
       </div>
       <!-- Bottom: Piping 3-column table grid -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start">
+      <div class="rg3-12" style="align-items:start">
         <!-- Col 1: Piping EP System table -->
         <div class="panel">
           <div class="panel-title">Piping Progress by EP System</div>
@@ -196,7 +196,7 @@
         </div>
       </div>
       <!-- Support: 3-column table grid -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;align-items:start;margin-top:12px">
+      <div class="rg3-12" style="align-items:start;margin-top:12px">
         <!-- Col 1: Support EP System table -->
         <div class="panel">
           <div class="panel-title">Support Progress by EP System</div>
@@ -263,7 +263,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Overall Productivity</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWeeklyExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('weekly')">&#128424; Print</button></div></div>
 
       <!-- Row 1: Daily Trend + Weekly Trend + Monthly Trend -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div class="rg3">
         <div class="panel">
           <div class="panel-title" id="dailyTrendTitle">Daily Trend</div>
           <div style="position:relative;height:250px"><canvas id="dailyTrend"></canvas></div>
@@ -279,7 +279,7 @@
       </div>
 
       <!-- Row 2: Productivity Log (left) + By Material (right) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+      <div class="rg2" style="margin-top:14px;align-items:start">
         <div class="panel">
           <div class="panel-title">Overall Productivity Log</div>
           <div class="table-wrap"><table class="data-table" id="weeklyTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:18%"><col style="width:30%"><col style="width:17%"><col style="width:17%"><col style="width:18%"></colgroup><thead><tr><th>Week</th><th>Date</th><th>Fab</th><th>Erect</th><th>Completed</th></tr></thead><tbody></tbody></table></div>
@@ -291,7 +291,7 @@
       </div>
 
       <!-- Row 3: By System + By Sub Area (1) + By Sub Area (2) -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:14px;align-items:start">
+      <div class="rg3" style="margin-top:14px;align-items:start">
         <div class="panel" id="weeklySystemPanel">
           <div class="panel-title" id="weeklySystemTitle">Breakdown &mdash; By System</div>
           <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>System</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
@@ -414,7 +414,7 @@
       <!-- Welder Performance: dual-column table -->
       <div class="panel" style="margin-bottom:10px">
         <div class="panel-title">Welder Performance</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="rg2-10">
           <div class="table-wrap">
             <table class="data-table" style="font-size:11px;width:100%">
               <thead><tr><th style="min-width:42px;width:42px">No</th><th>Welder ID</th><th style="text-align:right">Joint</th><th style="text-align:right">Fab DI</th><th style="text-align:right">Erect DI</th><th style="text-align:right">Total DI</th><th style="text-align:right">Avg DI/Day</th></tr></thead>
@@ -470,7 +470,7 @@
 
       <!-- KPI 카드 -->
       <div class="panel" style="margin-bottom:10px">
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:10px" id="rtKpiRow">
+        <div class="rg7" id="rtKpiRow">
           <div class="kpi-card" style="border-top-color:#ef4444"><div class="kpi-label">Repair Rate</div><div class="kpi-value" id="rt-repair-rate" style="color:#ef4444">—</div><div style="font-size:10px;color:var(--text-dim);margin-top:2px">% of RT shots</div></div>
           <div class="kpi-card"><div class="kpi-label">Total RT Shots</div><div class="kpi-value" id="rt-total" style="color:var(--accent)">—</div></div>
           <div class="kpi-card"><div class="kpi-label">1st PASS</div><div class="kpi-value" id="rt-first-pass" style="color:var(--green)">—</div></div>
@@ -482,7 +482,7 @@
       </div>
 
       <!-- 차트 2개 -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <div class="rg2-10" style="margin-bottom:10px">
         <div class="panel" style="min-width:0">
           <div class="panel-title">Monthly RT Trend</div>
           <div style="position:relative;height:300px"><canvas id="rtMonthlyChart"></canvas></div>
@@ -802,7 +802,7 @@
       </div>
 
       <!-- Row 2: By System + By Material -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+      <div class="rg2" style="margin-top:14px;align-items:start">
         <div class="panel">
           <div class="panel-title" id="drSystemTitle">Breakdown &mdash; By System</div>
           <div class="table-wrap"><table class="data-table" id="drSystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>System</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
@@ -814,7 +814,7 @@
       </div>
 
       <!-- Row 3: By Sub Area (1) + By Sub Area (2) -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px;align-items:start">
+      <div class="rg2" style="margin-top:14px;align-items:start">
         <div class="panel">
           <div class="panel-title" id="drSubareaTitle">Breakdown &mdash; By Sub Area (1)</div>
           <div class="table-wrap"><table class="data-table" id="drSubareaTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:24%"><col style="width:24%"><col style="width:24%"></colgroup><thead><tr><th>Sub Area</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>

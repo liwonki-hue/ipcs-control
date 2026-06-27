@@ -363,3 +363,54 @@ input[type="date"].date-empty::-webkit-datetime-edit { color: transparent; }
 input[type="date"].date-empty::-webkit-datetime-edit-fields-wrapper { color: transparent; }
 input[type="date"].date-empty:focus::-webkit-datetime-edit { color: inherit; }
 input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { color: inherit; }
+
+/* ══ RESPONSIVE ═════════════════════════════════════════════════════ */
+.rg-12  { display:grid; grid-template-columns:1fr 2fr; gap:12px; }
+.rg2    { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.rg2-10 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.rg3    { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.rg3-12 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+.rg7    { display:grid; grid-template-columns:repeat(7,1fr); gap:10px; }
+
+/* 1400px — 폰트·여백 소폭 압축 */
+@media (max-width:1400px) {
+  .kpi-value { font-size:22px; }
+  .page-body { padding:8px 14px 10px; }
+}
+
+/* 1280px — 3열→2열, 7열→4열, KPI 6→3열 */
+@media (max-width:1280px) {
+  .kpi-row  { grid-template-columns:repeat(3,1fr); gap:8px; }
+  .kpi-value { font-size:20px; }
+  .rg3, .rg3-12 { grid-template-columns:1fr 1fr; }
+  .rg7      { grid-template-columns:repeat(4,1fr); }
+  .unit-card-row { grid-template-columns:1fr 1fr; }
+  .grid-4   { grid-template-columns:1fr 1fr; }
+  .grid-6   { grid-template-columns:repeat(3,1fr); }
+}
+
+/* 960px — 2열→1열, 사이드바 160px */
+@media (max-width:960px) {
+  :root { --sidebar-w:160px; }
+  .nav-btn  { font-size:11px; padding:8px 10px; }
+  .kpi-row  { grid-template-columns:repeat(2,1fr); gap:6px; padding:8px 12px; }
+  .kpi-value { font-size:18px; }
+  .rg-12, .rg2, .rg2-10 { grid-template-columns:1fr; }
+  .rg3, .rg3-12 { grid-template-columns:1fr; }
+  .rg7      { grid-template-columns:repeat(3,1fr); }
+  .grid-2   { grid-template-columns:1fr; }
+  .grid-4, .grid-6 { grid-template-columns:1fr 1fr; }
+  .unit-card-row { grid-template-columns:1fr; }
+}
+
+/* 768px — 사이드바 아이콘만(50px), 완전 1열 */
+@media (max-width:768px) {
+  :root { --sidebar-w:50px; }
+  .sidebar-logo { justify-content:center; padding:12px 8px; }
+  .logo-title, .logo-sub, .nav-section, .nav-version { display:none; }
+  .nav-btn  { padding:10px; justify-content:center; gap:0; font-size:0; }
+  .nav-btn .nav-icon { font-size:16px; width:auto; }
+  .rg7      { grid-template-columns:repeat(2,1fr); }
+  .kpi-row  { grid-template-columns:1fr 1fr; }
+  .grid-4, .grid-6 { grid-template-columns:1fr 1fr; }
+}
