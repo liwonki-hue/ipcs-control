@@ -1095,6 +1095,29 @@ async function loadWeekly() {
             options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
         });
 
+        // Monthly Trend: weekly 데이터를 월별로 집계
+        const monthMap={};
+        actWks.forEach(w=>{
+            const mo=(w.week_start||"").slice(0,7);
+            if(!mo) return;
+            if(!monthMap[mo]) monthMap[mo]={fab:0,erect:0,completed:0};
+            monthMap[mo].fab       += w.fab_di       || 0;
+            monthMap[mo].erect     += w.erect_di     || 0;
+            monthMap[mo].completed += w.completed_di || 0;
+        });
+        const monthlyData=Object.entries(monthMap).sort(([a],[b])=>a.localeCompare(b));
+        destroyChart("monthlyTrend");
+        const moEl=document.getElementById("monthlyTrend");
+        if(moEl && monthlyData.length){
+            charts["monthlyTrend"]=new Chart(moEl.getContext("2d"),{
+                type:"line",
+                data:{labels:monthlyData.map(([mo])=>mo.slice(5)),datasets:[
+                    {label:"Monthly DI",data:monthlyData.map(([,v])=>Math.round(v.completed)),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
+                ]},
+                options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
+            });
+        }
+
         const tbody=document.querySelector("#weeklyTable tbody");
         let totalFab=0, totalErect=0, totalComp=0;
         actWks.forEach(w=>{ totalFab+=w.fab_di||0; totalErect+=w.erect_di||0; totalComp+=w.completed_di||0; });
