@@ -1,6 +1,18 @@
 -- 성능 개선용 Supabase RPC 함수 + 스키마 마이그레이션
 -- Supabase SQL 에디터에서 실행 후 app.py 재시작 필요
 
+-- ★ support_master pipe_size 컬럼 추가 (line_no에서 인치 수치 추출, 정렬용)
+-- 예: "1"-AV-..." → 1, "12"-AV-..." → 12
+ALTER TABLE construction.support_master
+ADD COLUMN IF NOT EXISTS pipe_size NUMERIC
+GENERATED ALWAYS AS (
+  CASE
+    WHEN line_no ~ '^[0-9]+(\.[0-9]+)?"'
+    THEN SPLIT_PART(line_no, '"', 1)::NUMERIC
+    ELSE NULL
+  END
+) STORED;
+
 -- ★ support_master 스키마 변경 (최초 1회 실행)
 ALTER TABLE construction.support_master ADD COLUMN IF NOT EXISTS type TEXT;
 ALTER TABLE construction.support_master DROP COLUMN IF EXISTS welder;

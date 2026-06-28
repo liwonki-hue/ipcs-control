@@ -2343,7 +2343,11 @@ def api_support_get():
             else:
                 return jsonify({"data": [], "count": 0})
 
-        res = q.order("system").order("id").range(offset, offset + limit - 1).execute()
+        try:
+            res = q.order("system").order("pipe_size", desc=True, nullsfirst=False).order("id").range(offset, offset + limit - 1).execute()
+        except Exception:
+            # pipe_size 컬럼 미생성 환경 fallback
+            res = q.order("system").order("id").range(offset, offset + limit - 1).execute()
         sm_rows = res.data or []
 
         # 각 row에 piping_status 필드 추가 (캐시가 없으면 건너뜀)
