@@ -653,15 +653,15 @@ async function renderOverview(kpi, wkData, units, systems) {
         charts["scurveChart"] = new Chart(scurveEl.getContext("2d"), {
             type: "bar",
             data: { labels: scurveLabels, datasets: [
-                { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:false} },
+                { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:true, align:'end', anchor:'end', color:'#7ab3f0', font:{size:8,weight:'bold'}, offset:-2, formatter:(v)=>v>0?fmtNum(v,0):''} },
                 { label:"Plan S-Curve",type:"line", yAxisID:"yCum", data:planSCurve, borderColor:"rgba(180,185,195,0.55)", borderWidth:2, borderDash:[6,4], fill:false, pointRadius:0, pointHoverRadius:4, tension:0, order:2, datalabels:{display:false} },
-                { label:"Actual Cum.", type:"line", yAxisID:"yCum", data:cumulLine,  borderColor:"#2563eb", borderWidth:2, fill:false, pointRadius:0, pointHoverRadius:4, tension:0.3, order:1, spanGaps:false, datalabels:{display:false} }
+                { label:"Actual Cum.", type:"line", yAxisID:"yCum", data:cumulLine,  borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:0, pointHoverRadius:4, tension:0.3, order:1, spanGaps:false, datalabels:{display:false} }
             ]},
             options: { ...chartOpts("Weekly DI Progress"),
                 scales: {
                     x:{ ...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){if(index===0||index%5===4)return this.getLabelForValue(val);return "";}} },
                     yBar:{ type:"linear", position:"left",  beginAtZero:true, grid:{color:"rgba(255,255,255,0.05)"}, ticks:{color:"#4a6080",font:{size:9}}, title:{display:false} },
-                    yCum:{ type:"linear", position:"right", beginAtZero:true, grid:{display:false}, ticks:{color:"#2563eb",font:{size:9}}, title:{display:false} }
+                    yCum:{ type:"linear", position:"right", beginAtZero:true, grid:{display:false}, ticks:{color:"#22d3a1",font:{size:9}}, title:{display:false} }
                 },
                 plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
         });
@@ -2455,18 +2455,20 @@ async function loadSupportMaster() {
     const smtype  = document.getElementById("sm-type")?.value    || "";
     const phase   = document.getElementById("sm-phase")?.value   || "";
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
-    const search  = document.getElementById("sm-search")?.value?.trim() || "";
+    const search        = document.getElementById("sm-search")?.value?.trim() || "";
+    const pipingStatus  = document.getElementById("sm-piping-status")?.value || "";
     const offset  = smCurrentPage * SM_PAGE_SIZE;
     _tableLoading("smBody", 12);
     try {
         const params = new URLSearchParams({limit: SM_PAGE_SIZE, offset});
-        if (unit)    params.set("unit",     unit);
-        if (system)  params.set("system",   system);
-        if (subarea) params.set("sub_area", subarea);
-        if (smtype)  params.set("type",     smtype);
-        if (phase)   params.set("phase",    phase);
-        if (pkg)     params.set("package",  pkg);
-        if (search)  params.set("search",   search);
+        if (unit)         params.set("unit",          unit);
+        if (system)       params.set("system",         system);
+        if (subarea)      params.set("sub_area",       subarea);
+        if (smtype)       params.set("type",           smtype);
+        if (phase)        params.set("phase",          phase);
+        if (pkg)          params.set("package",        pkg);
+        if (search)       params.set("search",         search);
+        if (pipingStatus) params.set("piping_status",  pipingStatus);
 
         const res = await apiFetch(`/api/support-master?${params}`);
         smData = res.data;
@@ -2570,6 +2572,10 @@ function renderSMTable(rows) {
     }
     tbody.innerHTML = rows.map(r => {
         const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
+        const ps = r.piping_status;
+        const isoColor = ps === "completed" ? "color:#38bdf8;font-weight:600;"
+                       : ps === "ongoing"   ? "color:#4ade80;font-weight:600;"
+                       : "";
         return `<tr id="smrow-${r.id}">
           <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="width:100%;text-align:center;padding:2px 4px"></td>
           <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${r.package||""}" style="text-align:center"></td>
@@ -2580,7 +2586,7 @@ function renderSMTable(rows) {
           <td>${r.support_drawing||""}</td>
           <td style="text-align:center">${r.type||""}</td>
           <td>${r.revision||""}</td>
-          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all;${isoColor}" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td>${r.line_no||""}</td>
           <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">

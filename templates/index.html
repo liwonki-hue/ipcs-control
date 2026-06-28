@@ -566,6 +566,11 @@
           <select id="sm-subarea" class="filter-sel" style="min-width:145px;"><option value="">Sub Area</option></select>
           <select id="sm-system" class="filter-sel" style="min-width:145px;"><option value="">System</option></select>
           <select id="sm-type" class="filter-sel" onchange="smCurrentPage=0;loadSupportMaster()" style="min-width:140px;"><option value="">Type</option><option value="Special">Special</option><option value="G">G</option><option value="W">W</option><option value="U">U</option><option value="GS">GS</option><option value="WS">WS</option><option value="US">US</option></select>
+          <select id="sm-piping-status" class="filter-sel" onchange="smCurrentPage=0;loadSupportMaster()" style="min-width:150px;">
+            <option value="" color="#000">Piping Status</option>
+            <option value="ongoing" style="color:#000;background:#d1fae5">&#9679; Ongoing</option>
+            <option value="completed" style="color:#000;background:#dbeafe">&#9679; Completed</option>
+          </select>
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
@@ -850,7 +855,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.30"></script>
+<script defer src="/static/js/dashboard.js?v=7.31"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">
