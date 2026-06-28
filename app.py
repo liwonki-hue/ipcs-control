@@ -307,6 +307,55 @@ _daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 
 _sup_test_cache: dict = {"data": None, "time": 0}   # support/testpkg 집계 2h 캐시
 _kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결과 1h 캐시
 _welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
+_jm_iso_stats_cache: dict = {"data": None, "time": 0}  # ISO Drawing별 joint 완료 통계 5분 캐시
+_jm_iso_stats_building: bool = False  # 중복 빌드 방지 플래그
+
+def _get_jm_iso_stats(force: bool = False) -> dict:
+    """joint_master의 iso_drawing별 완료 통계를 반환 (total, completed). 5분 캐시.
+    force=False일 때 캐시가 없으면 백그라운드 빌드를 트리거한 뒤 빈 dict 반환."""
+    global _jm_iso_stats_building
+    with _lock:
+        cached = _jm_iso_stats_cache.get("data")
+        age = time.time() - _jm_iso_stats_cache.get("time", 0)
+    if cached is not None and age < 300:
+        return cached
+    if not force:
+        # 캐시 없으면 백그라운드 빌드 시작 후 빈 dict 반환
+        with _lock:
+            if not _jm_iso_stats_building:
+                _jm_iso_stats_building = True
+                threading.Thread(target=lambda: _get_jm_iso_stats(force=True), daemon=True).start()
+        return {}
+    # 페이지네이션으로 joint_master 전체 스캔
+    stats: dict = {}
+    try:
+        page_size = 1000
+        off = 0
+        while True:
+            res = _sb_exec(lambda sb, o=off: sb.table("joint_master")
+                           .select("iso_drawing,date_completed")
+                           .range(o, o + page_size - 1).execute())
+            rows = res.data or []
+            for row in rows:
+                iso = row.get("iso_drawing")
+                if not iso:
+                    continue
+                if iso not in stats:
+                    stats[iso] = {"total": 0, "completed": 0}
+                stats[iso]["total"] += 1
+                if row.get("date_completed"):
+                    stats[iso]["completed"] += 1
+            if len(rows) < page_size:
+                break
+            off += page_size
+        with _lock:
+            _jm_iso_stats_cache["data"] = stats
+            _jm_iso_stats_cache["time"] = time.time()
+        print(f"[jm_iso_stats] {len(stats)} ISO drawings indexed")
+    finally:
+        with _lock:
+            _jm_iso_stats_building = False
+    return stats
 
 def _build_secondary_caches():
     """_build() 완료 후 보조 캐시 백그라운드 로딩 — KPI override, sub_area 스캔, pkg_stats 등 병렬 실행"""
@@ -461,24 +510,53 @@ def _build_secondary_caches():
             kpi = cur.get("kpi") or {}
             kpi["completed_di"] = c_di; kpi["completed_joints"] = c_joints
             kpi["fab_completed_di"] = c_fab; kpi["erect_completed_di"] = c_erect
+            kpi["fab_di"]   = c_fab
+            kpi["erect_di"] = c_erect
+            tdi  = kpi.get("total_di", 0) or 0
+            ftdi = kpi.get("fab_total_di", 0) or 0
+            etdi = kpi.get("erect_total_di", 0) or 0
+            kpi["overall_pct"]  = round((c_di   / tdi)  * 100, 2) if tdi  > 0 else 0
+            kpi["progress_pct"] = kpi["overall_pct"]
+            kpi["remaining_di"] = tdi - c_di
+            kpi["fab_pct"]      = round((c_fab   / ftdi) * 100, 2) if ftdi > 0 else 0
+            kpi["erect_pct"]    = round((c_erect / etdi) * 100, 2) if etdi > 0 else 0
+            kpi["unified_readiness"] = round(
+                kpi["overall_pct"] * 0.7
+                + (kpi.get("support_pct") or 0) * 0.2
+                + (kpi.get("testpkg_pct") or 0) * 0.1, 2
+            )
             for item in (cur.get("weekly") or []):
                 wno = int(item.get("week_no") or 0)
                 if wno in wk_di_m:
                     item["completed_di"] = round(wk_di_m[wno], 2)
                     item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
                     item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
+            _cum = 0.0
+            for item in (cur.get("weekly") or []):
+                _cum += float(item.get("completed_di") or 0)
+                item["cumul_actual"] = round(_cum, 2)
+
+            def _repct(item, new_cdi):
+                item["completed_di"] = round(new_cdi, 2)
+                tdiv = item.get("total_di") or 0
+                new_pct = round(new_cdi / tdiv * 100, 2) if tdiv else 0
+                item["progress_pct"] = new_pct
+                sup_pct = item.get("support_pct") or 0
+                tst_pct = item.get("testpkg_pct") or 0
+                item["unified_readiness"] = round(new_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
+
             for item in (cur.get("systems") or []):
                 s = item.get("system") or ""
-                if s in sys_di_m: item["completed_di"] = round(sys_di_m[s], 2)
+                if s in sys_di_m: _repct(item, sys_di_m[s])
             for item in (cur.get("units") or []):
                 u = item.get("unit") or ""
-                if u in unit_di_m: item["completed_di"] = round(unit_di_m[u], 2)
+                if u in unit_di_m: _repct(item, unit_di_m[u])
             for item in (cur.get("areas") or []):
                 a = item.get("area") or ""
-                if a in area_di_m: item["completed_di"] = round(area_di_m[a], 2)
+                if a in area_di_m: _repct(item, area_di_m[a])
             for item in (cur.get("subareas") or []):
                 s = item.get("sub_area") or item.get("area") or ""
-                if s in sub_di_m: item["completed_di"] = round(sub_di_m[s], 2)
+                if s in sub_di_m: _repct(item, sub_di_m[s])
 
     def _load_daily_report():
         """서버 시작 직후 daily report 캐시 pre-warm — 첫 접속 시 빈 화면 방지"""
@@ -525,20 +603,31 @@ def _build_secondary_caches():
         except Exception as _e:
             print(f"[secondary_cache] sub_area scan error: {_e}")
 
-    ex = ThreadPoolExecutor(max_workers=6)
+    def _load_jm_iso_stats():
+        try:
+            _get_jm_iso_stats(force=True)
+        except Exception as e:
+            print(f"[secondary_cache] jm_iso_stats failed: {e}")
+
+    ex = ThreadPoolExecutor(max_workers=4)
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
     f4 = ex.submit(_load_kpi_override)
     f5 = ex.submit(_load_sub_areas)
     f6 = ex.submit(_load_daily_report)
-    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas"),(f6,"daily_report")]:
+    f7 = ex.submit(_load_jm_iso_stats)
+    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas"),(f6,"daily_report"),(f7,"jm_iso_stats")]:
         try: f.result(timeout=120)
         except Exception as _e: print(f"[secondary_cache] {name} timeout/error: {_e}")
     try:
         ex.shutdown(wait=False, cancel_futures=True)
     except TypeError:
         ex.shutdown(wait=False)
+    # kpi_override 실패 시 재시도 (소켓 오류 등 일시적 실패 대응)
+    if _kpi_override_cache.get("data") is None:
+        print("[secondary_cache] kpi_override retry...")
+        _load_kpi_override()
 
 
 def _extract_d17(d17, raw):
@@ -953,6 +1042,9 @@ def api_cache_clear():
         _welder_daily_cache["time"] = 0
         _testpkg_all_cache["data"] = None
         _testpkg_all_cache["time"] = 0
+        _jm_iso_stats_cache["data"] = None
+        _jm_iso_stats_cache["time"] = 0
+        _jm_iso_stats_building = False
     print("[cache] All caches cleared - starting background rebuild")
     with _lock:
         if not _building:
@@ -2217,7 +2309,8 @@ def api_support_get():
         smtype  = request.args.get("type",     "").strip()
         phase   = request.args.get("phase",    "").strip()
         pkg     = request.args.get("package", "").strip()
-        search  = request.args.get("search",   "").strip()
+        search        = request.args.get("search",        "").strip()
+        piping_status = request.args.get("piping_status", "").strip()
         q = sb.table("support_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
@@ -2233,8 +2326,38 @@ def api_support_get():
             elif smtype in ("G", "W", "U"):
                 q = q.ilike("type", f"({smtype}-%").not_.ilike("type", f"({smtype}S-%")
         if search:  q = q.or_(f"support_drawing.ilike.%{search}%,iso_drawing.ilike.%{search}%,line_no.ilike.%{search}%")
+
+        iso_stats = _get_jm_iso_stats(force=False)
+
+        # piping_status 필터: joint_master 완료 통계 기반으로 ISO Drawing 목록 제한 (캐시 없으면 건너뜀)
+        if piping_status in ("completed", "ongoing") and iso_stats:
+            qualifying = [
+                iso for iso, st in iso_stats.items()
+                if st["total"] > 0 and (
+                    (piping_status == "completed" and st["completed"] == st["total"]) or
+                    (piping_status == "ongoing"   and 0 < st["completed"] < st["total"])
+                )
+            ]
+            if qualifying:
+                q = q.in_("iso_drawing", qualifying)
+            else:
+                return jsonify({"data": [], "count": 0})
+
         res = q.order("system").order("id").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": res.data, "count": res.count})
+        sm_rows = res.data or []
+
+        # 각 row에 piping_status 필드 추가 (캐시가 없으면 건너뜀)
+        for r in sm_rows:
+            iso = r.get("iso_drawing")
+            st = iso_stats.get(iso) if (iso and iso_stats) else None
+            if not st or st["total"] == 0 or st["completed"] == 0:
+                r["piping_status"] = None
+            elif st["completed"] == st["total"]:
+                r["piping_status"] = "completed"
+            else:
+                r["piping_status"] = "ongoing"
+
+        return jsonify({"data": sm_rows, "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
