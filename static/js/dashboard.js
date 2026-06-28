@@ -1861,7 +1861,7 @@ async function printPage(pageId){
         },
         "support_master": {
             endpoint: "/api/support-master",
-            params: () => _readFilters([["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-type","type"],["sm-iso","iso"]]),
+            params: () => _readFilters([["sm-search","search"],["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-subarea","sub_area"],["sm-system","system"],["sm-type","type"]]),
             render: d => renderSMTable(d), restore: () => renderSMTable(smData)
         },
         "nde_pwht": {
@@ -2452,10 +2452,10 @@ async function loadSupportMaster() {
     const unit    = document.getElementById("sm-unit")?.value    || "";
     const system  = document.getElementById("sm-system")?.value  || "";
     const subarea = document.getElementById("sm-subarea")?.value || "";
-    const smtype  = document.getElementById("sm-type")?.value?.trim() || "";
+    const smtype  = document.getElementById("sm-type")?.value    || "";
     const phase   = document.getElementById("sm-phase")?.value   || "";
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
-    const iso     = document.getElementById("sm-iso")?.value?.trim() || "";
+    const search  = document.getElementById("sm-search")?.value?.trim() || "";
     const offset  = smCurrentPage * SM_PAGE_SIZE;
     _tableLoading("smBody", 12);
     try {
@@ -2466,15 +2466,15 @@ async function loadSupportMaster() {
         if (smtype)  params.set("type",     smtype);
         if (phase)   params.set("phase",    phase);
         if (pkg)     params.set("package",  pkg);
-        if (iso)     params.set("iso",      iso);
-        
+        if (search)  params.set("search",   search);
+
         const res = await apiFetch(`/api/support-master?${params}`);
         smData = res.data;
         document.getElementById("sm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
         _renderPageNums("sm-page-nav", smCurrentPage, res.count||0, SM_PAGE_SIZE, "smGoto");
 
         renderSMTable(smData);
-        updateSmIsoBulkPanel(iso, smData);
+        updateSmIsoBulkPanel(search, smData);
     } catch(e) { console.error("Support Master load failed", e); }
 }
 
@@ -2497,7 +2497,7 @@ function updateSmIsoBulkPanel(isoVal, rows) {
 }
 
 async function applySmBulkDate() {
-    const isoVal = document.getElementById("sm-iso")?.value?.trim();
+    const isoVal = document.getElementById("sm-search")?.value?.trim();
     const dateVal = _fullDateVal("sm-bulk-date");
     if (!isoVal) { toast("Please enter Search Drawing first", "error"); return; }
     if (!dateVal) { toast("날짜를 선택하세요", "error"); return; }
@@ -2532,7 +2532,7 @@ async function applySmBulkDate() {
 }
 
 async function clearSmBulkDate() {
-    const isoVal = document.getElementById("sm-iso")?.value?.trim();
+    const isoVal = document.getElementById("sm-search")?.value?.trim();
     if (!isoVal) { toast("Please enter Search Drawing first", "error"); return; }
     
     const targets = smData.filter(r => 
@@ -2565,13 +2565,12 @@ function smPage(dir) { smGoto(smCurrentPage + dir); }
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:20px">No data.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:20px">No data.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
         const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
         return `<tr id="smrow-${r.id}">
-          <td>${r.id}</td>
           <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="width:100%;text-align:center;padding:2px 4px"></td>
           <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${r.package||""}" style="text-align:center"></td>
           <td>${r.unit||""}</td>
@@ -2630,7 +2629,7 @@ async function deleteSMItem(id) {
 async function exportSMExcel() {
     await ensureXlsx();
     toast("데이터 로딩 중...", "info");
-    const params = _readFilters([["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-system","system"],["sm-subarea","sub_area"],["sm-type","type"],["sm-iso","iso"]]);
+    const params = _readFilters([["sm-search","search"],["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-subarea","sub_area"],["sm-system","system"],["sm-type","type"]]);
     const data = await _fetchAllFiltered("/api/support-master", params);
     if (!data.length) { toast("No data", "error"); return; }
     const rows = data.map(r => ({

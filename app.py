@@ -2217,7 +2217,7 @@ def api_support_get():
         smtype  = request.args.get("type",     "").strip()
         phase   = request.args.get("phase",    "").strip()
         pkg     = request.args.get("package", "").strip()
-        iso     = request.args.get("iso",      "").strip()
+        search  = request.args.get("search",   "").strip()
         q = sb.table("support_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
@@ -2225,11 +2225,15 @@ def api_support_get():
         if subarea: q = q.eq("sub_area",    subarea)
         if phase:   q = q.eq("phase",       phase)
         if pkg:     q = q.ilike("package",  f"%{pkg}%")
-        if smtype:  q = q.ilike("type",     f"%{smtype}%")
-        if iso:
-            iso_s = iso.replace(",", "").replace("(", "").replace(")", "")
-            q = q.or_(f"iso_drawing.ilike.%{iso_s}%,support_drawing.ilike.%{iso_s}%")
-        res = q.order("id").range(offset, offset + limit - 1).execute()
+        if smtype:
+            if smtype == "Special":
+                q = q.ilike("type", "%SPEC%")
+            elif smtype in ("GS", "WS", "US"):
+                q = q.ilike("type", f"({smtype}-%")
+            elif smtype in ("G", "W", "U"):
+                q = q.ilike("type", f"({smtype}-%").not_.ilike("type", f"({smtype}S-%")
+        if search:  q = q.or_(f"support_drawing.ilike.%{search}%,iso_drawing.ilike.%{search}%,line_no.ilike.%{search}%")
+        res = q.order("system").order("id").range(offset, offset + limit - 1).execute()
         return jsonify({"data": res.data, "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

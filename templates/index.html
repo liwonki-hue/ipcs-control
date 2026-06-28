@@ -559,13 +559,13 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <input id="sm-iso" class="filter-sel" type="text" placeholder="Search Drawing" oninput="loadSupportMaster()" style="width:160px;">
-          <select id="sm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
-          <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;loadSupportMaster()" style="width:120px;">
-          <select id="sm-unit" class="filter-sel" style="min-width:75px;"><option value="">Unit</option></select>
-          <select id="sm-system" class="filter-sel" style="min-width:95px;"><option value="">System</option></select>
-          <select id="sm-subarea" class="filter-sel" style="min-width:95px;"><option value="">Sub Area</option></select>
-          <input id="sm-type" class="filter-sel" type="text" placeholder="Type" oninput="smCurrentPage=0;loadSupportMaster()" style="width:100px;">
+          <input id="sm-search" class="filter-sel" type="text" placeholder="Search Drawing / ISO / Line No" oninput="smCurrentPage=0;loadSupportMaster()" style="width:280px;">
+          <select id="sm-phase" class="filter-sel" style="min-width:130px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
+          <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;loadSupportMaster()" style="width:170px;">
+          <select id="sm-unit" class="filter-sel" style="min-width:125px;"><option value="">Unit</option></select>
+          <select id="sm-subarea" class="filter-sel" style="min-width:145px;"><option value="">Sub Area</option></select>
+          <select id="sm-system" class="filter-sel" style="min-width:145px;"><option value="">System</option></select>
+          <select id="sm-type" class="filter-sel" onchange="smCurrentPage=0;loadSupportMaster()" style="min-width:140px;"><option value="">Type</option><option value="Special">Special</option><option value="G">G</option><option value="W">W</option><option value="U">U</option><option value="GS">GS</option><option value="WS">WS</option><option value="US">US</option></select>
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
@@ -587,8 +587,7 @@
           <table class="data-table" id="smTable" style="width:100% !important; min-width:1430px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th style="width:50px">NO.</th>
-                <th style="width:80px">PHASE</th>
+                <th style="width:90px">PHASE</th>
                 <th style="width:120px">PACKAGE</th>
                 <th style="width:40px">UNIT</th>
                 <th style="width:80px">SYSTEM</th>
@@ -599,7 +598,7 @@
                 <th style="width:45px">REV</th>
                 <th style="width:200px">ISO DRAWING</th>
                 <th style="width:180px">LINE NO</th>
-                <th style="width:100px">WORK DATE</th>
+                <th style="width:90px">WORK DATE</th>
                 <th style="width:120px">ACTION</th>
               </tr>
             </thead>

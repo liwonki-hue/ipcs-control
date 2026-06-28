@@ -5,6 +5,22 @@
 ALTER TABLE construction.support_master ADD COLUMN IF NOT EXISTS type TEXT;
 ALTER TABLE construction.support_master DROP COLUMN IF EXISTS welder;
 
+-- ★ support_master 전체 삭제 RPC (RLS 우회용 — SECURITY DEFINER, TRUNCATE 사용)
+CREATE OR REPLACE FUNCTION construction.clear_support_master()
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = construction
+AS $$
+DECLARE
+  cnt INTEGER;
+BEGIN
+  SELECT COUNT(*) INTO cnt FROM support_master;
+  TRUNCATE support_master RESTART IDENTITY;
+  RETURN cnt;
+END;
+$$;
+
 -- 1. Test Master readiness 계산용 — joint_master 47페이지 페이지네이션 → 단일 쿼리
 CREATE OR REPLACE FUNCTION construction.get_pkg_readiness_stats_v1()
 RETURNS TABLE(package TEXT, total BIGINT, completed BIGINT)
