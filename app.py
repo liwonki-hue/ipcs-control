@@ -161,7 +161,6 @@ def _parse_rpc(raw):
         kpi["remaining_di"]     = tdi - cdi
         kpi["report_date"]      = datetime.now().strftime("%Y-%m-%d")
         kpi["total_plan_joints"] = kpi.get("total_joints", 0)
-        kpi["completed_plan_di"] = cdi
 
         # Unified Readiness: D/I 70%, Support 20%, Test 10%
         s_pct = calc_pct(kpi.get("support_comp"), kpi.get("support_total"))
@@ -356,6 +355,76 @@ def _get_jm_iso_stats(force: bool = False) -> dict:
         with _lock:
             _jm_iso_stats_building = False
     return stats
+
+def _fast_kpi_sync():
+    """get_jm_kpi_v1 단일 RPC로 KPI 합계 + sys/unit/area/sub_area 완료 DI를 즉시 보정.
+    _build() 완료 직후 동기 호출 → cold-start 시 첫 요청부터 정확한 KPI 반환."""
+    try:
+        sb = get_sb()
+        res = sb.rpc("get_jm_kpi_v1", {}).execute()
+        d = res.data
+        if isinstance(d, list) and d: d = d[0]
+        if not isinstance(d, dict) or not d:
+            print("[fast_kpi] RPC returned empty — skipping")
+            return
+        c_di     = float(d.get("completed_di") or 0)
+        c_fab    = float(d.get("fab_di") or 0)
+        c_erect  = float(d.get("erect_di") or 0)
+        c_joints = int(d.get("completed_joints") or 0)
+        if c_joints == 0:
+            print("[fast_kpi] 0 completed joints — skipping")
+            return
+        sys_m  = {r["k"]: float(r["v"] or 0) for r in (d.get("by_system")  or []) if r.get("k")}
+        unit_m = {r["k"]: float(r["v"] or 0) for r in (d.get("by_unit")    or []) if r.get("k")}
+        area_m = {r["k"]: float(r["v"] or 0) for r in (d.get("by_area")    or []) if r.get("k")}
+        sub_m  = {r["k"]: float(r["v"] or 0) for r in (d.get("by_sub_area") or []) if r.get("k")}
+        with _lock:
+            cur = _cache.get("data")
+            if not cur:
+                return
+            kpi = cur.get("kpi") or {}
+            tdi  = kpi.get("total_di", 0) or 0
+            ftdi = kpi.get("fab_total_di", 0) or 0
+            etdi = kpi.get("erect_total_di", 0) or 0
+            kpi["completed_di"]       = c_di
+            kpi["completed_joints"]   = c_joints
+            kpi["fab_completed_di"]   = c_fab
+            kpi["erect_completed_di"] = c_erect
+            kpi["fab_di"]             = c_fab
+            kpi["erect_di"]           = c_erect
+            kpi["overall_pct"]        = round(c_di  / tdi  * 100, 2) if tdi  > 0 else 0
+            kpi["progress_pct"]       = kpi["overall_pct"]
+            kpi["remaining_di"]       = tdi - c_di
+            kpi["fab_pct"]            = round(c_fab   / ftdi * 100, 2) if ftdi > 0 else 0
+            kpi["erect_pct"]          = round(c_erect / etdi * 100, 2) if etdi > 0 else 0
+            kpi["unified_readiness"]  = round(
+                kpi["overall_pct"] * 0.7
+                + (kpi.get("support_pct") or 0) * 0.2
+                + (kpi.get("testpkg_pct") or 0) * 0.1, 2)
+            def _repct(item, new_cdi):
+                item["completed_di"] = round(new_cdi, 2)
+                tdiv = item.get("total_di") or 0
+                p = round(new_cdi / tdiv * 100, 2) if tdiv else 0
+                item["progress_pct"] = p
+                item["unified_readiness"] = round(
+                    p * 0.7 + (item.get("support_pct") or 0) * 0.2
+                    + (item.get("testpkg_pct") or 0) * 0.1, 2)
+            for item in (cur.get("systems")  or []):
+                s = item.get("system") or ""
+                if s in sys_m:  _repct(item, sys_m[s])
+            for item in (cur.get("units")    or []):
+                u = item.get("unit") or ""
+                if u in unit_m: _repct(item, unit_m[u])
+            for item in (cur.get("areas")    or []):
+                a = item.get("area") or ""
+                if a in area_m: _repct(item, area_m[a])
+            for item in (cur.get("subareas") or []):
+                s = item.get("sub_area") or item.get("area") or ""
+                if s in sub_m:  _repct(item, sub_m[s])
+        print(f"[fast_kpi] applied: DI={c_di:.1f}, joints={c_joints}")
+    except Exception as e:
+        print(f"[fast_kpi] error (non-critical): {e}")
+
 
 def _build_secondary_caches():
     """_build() 완료 후 보조 캐시 백그라운드 로딩 — KPI override, sub_area 스캔, pkg_stats 등 병렬 실행"""
@@ -963,6 +1032,7 @@ def _build():
             _build_fail = False
         gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
+        _fast_kpi_sync()  # cold-start 첫 요청 전에 KPI 정확값 즉시 보정
         def _run_secondary():
             try:
                 _build_secondary_caches()

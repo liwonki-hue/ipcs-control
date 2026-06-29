@@ -128,6 +128,47 @@ AS $$
     GROUP BY system;
 $$;
 
+-- 7. JM KPI 즉시 집계 — cold-start 시 kpi_override 백그라운드 완료 전 정확한 KPI 보정용
+--    단일 SQL 집계 (<1초). _fast_kpi_sync()에서 _build() 완료 직후 동기 호출.
+CREATE OR REPLACE FUNCTION construction.get_jm_kpi_v1()
+RETURNS json
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+SELECT json_build_object(
+    'completed_di',     COALESCE(SUM(di) FILTER (WHERE date_completed IS NOT NULL), 0),
+    'fab_di',           COALESCE(SUM(di) FILTER (WHERE date_completed IS NOT NULL AND UPPER(sf) IN ('S', 'SHOP')), 0),
+    'erect_di',         COALESCE(SUM(di) FILTER (WHERE date_completed IS NOT NULL AND UPPER(sf) IN ('F', 'FIELD')), 0),
+    'completed_joints', COUNT(*) FILTER (WHERE date_completed IS NOT NULL),
+    'by_system', (
+        SELECT COALESCE(json_agg(json_build_object('k', system, 'v', sum_di)), '[]'::json)
+        FROM (SELECT COALESCE(system,'') AS system, SUM(di) AS sum_di
+              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              GROUP BY system) s
+    ),
+    'by_unit', (
+        SELECT COALESCE(json_agg(json_build_object('k', unit, 'v', sum_di)), '[]'::json)
+        FROM (SELECT COALESCE(unit,'') AS unit, SUM(di) AS sum_di
+              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              GROUP BY unit) u
+    ),
+    'by_area', (
+        SELECT COALESCE(json_agg(json_build_object('k', area, 'v', sum_di)), '[]'::json)
+        FROM (SELECT COALESCE(area,'') AS area, SUM(di) AS sum_di
+              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              GROUP BY area) a
+    ),
+    'by_sub_area', (
+        SELECT COALESCE(json_agg(json_build_object('k', sub_area, 'v', sum_di)), '[]'::json)
+        FROM (SELECT COALESCE(sub_area,'') AS sub_area, SUM(di) AS sum_di
+              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              GROUP BY sub_area) sa
+    )
+)
+FROM construction.joint_master;
+$$;
+
 -- 6. Joint Master 드롭다운 distinct 값 — 21회 개별 RPC 호출 → 단일 RPC 호출
 CREATE OR REPLACE FUNCTION construction.get_jm_filter_values()
 RETURNS json
