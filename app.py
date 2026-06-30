@@ -645,32 +645,58 @@ def _build_secondary_caches():
             print(f"[secondary_cache] daily_report error: {_e}")
 
     def _load_sub_areas():
-        """joint_master 전체 스캔 → sub_area 완전한 distinct 목록 확보"""
+        """joint_master 단일 스캔 → sub_area 드롭다운 목록 + 진행률 집계 동시 수행."""
         global _sub_area_cache
         with _lock:
             _sa_age    = time.time() - _sub_area_cache.get("time", 0)
             _sa_cached = _sub_area_cache.get("data")
         if _sa_cached is not None and _sa_age < 86400:
             return
-        try:
-            sb = get_sb()
-            _sub_set = set(); _soff = 0
-            while True:
-                _sr = sb.table("joint_master").select("sub_area").range(_soff, _soff + 999).execute()
-                for r in (_sr.data or []):
-                    if r.get("sub_area"): _sub_set.add(r["sub_area"])
-                if len(_sr.data or []) < 1000: break
-                _soff += 1000
-            m_sub = sorted(_sub_set); del _sub_set
-            with _lock:
-                _sub_area_cache["data"] = m_sub
-                _sub_area_cache["time"] = time.time()
-                if _meta_cache.get("data"):
-                    _meta_cache["data"]["sub_areas"] = m_sub
-                    _meta_cache["time"] = time.time()
-            print(f"[secondary_cache] sub_area scan: {len(m_sub)} values")
-        except Exception as _e:
-            print(f"[secondary_cache] sub_area scan error: {_e}")
+        for _attempt in range(3):
+            try:
+                if _attempt:
+                    time.sleep(2 * _attempt)  # 2s, 4s 대기 후 재시도
+                    reset_sb()
+                sb = get_sb()
+                sub_total: dict = {}; sub_comp: dict = {}
+                _soff = 0
+                while True:
+                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").range(_soff, _soff + 999).execute()
+                    for r in (_sr.data or []):
+                        sa = r.get("sub_area") or ""
+                        if not sa:
+                            continue
+                        di = float(r.get("di") or 0)
+                        sub_total[sa] = sub_total.get(sa, 0) + di
+                        if r.get("date_completed"):
+                            sub_comp[sa] = sub_comp.get(sa, 0) + di
+                    if len(_sr.data or []) < 1000:
+                        break
+                    _soff += 1000
+                m_sub = sorted(sub_total.keys())
+                subareas = []
+                for sa in m_sub:
+                    t = sub_total[sa]; c = sub_comp.get(sa, 0)
+                    subareas.append({
+                        "sub_area":     sa,
+                        "total_di":     t,
+                        "completed_di": c,
+                        "remaining_di": t - c,
+                        "progress_pct": round(c / t * 100, 1) if t > 0 else 0.0,
+                    })
+                with _lock:
+                    _sub_area_cache["data"] = m_sub
+                    _sub_area_cache["time"] = time.time()
+                    if _meta_cache.get("data"):
+                        _meta_cache["data"]["sub_areas"] = m_sub
+                        _meta_cache["time"] = time.time()
+                    if _cache.get("data"):
+                        _cache["data"]["subareas"] = subareas
+                print(f"[secondary_cache] sub_area scan: {len(m_sub)} values, subareas: {len(subareas)} entries")
+                return
+            except Exception as _e:
+                print(f"[secondary_cache] sub_area scan attempt {_attempt+1} error: {_e}")
+        print("[secondary_cache] sub_area scan failed after 3 attempts")
 
     def _load_jm_iso_stats():
         try:
@@ -1158,8 +1184,14 @@ def api_meta():
     now   = time.time()
     force = False  # Disabled ?t= to prevent blocking Gunicorn thread
     if not force and _meta_cache.get("data") and (now - _meta_cache["time"]) < 3600:
-        return jsonify(_meta_cache["data"])
-    
+        resp = dict(_meta_cache["data"])
+        # _sub_area_cache는 joint_master 직접 스캔값 — v17 내부 캐시보다 신뢰
+        with _lock:
+            _sa = _sub_area_cache.get("data")
+        if _sa is not None:
+            resp["sub_areas"] = _sa
+        return jsonify(resp)
+
     # If not in cache, _build() will populate it eventually.
     # We should just return 202 instead of blocking the thread.
     return jsonify({"building": True, "message": "Meta data is building..."}), 202
