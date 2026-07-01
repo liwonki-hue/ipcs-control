@@ -457,7 +457,7 @@ function renderKPI(d, wkData) {
     const supportPct = d.support_pct   || 0;
     const testPct    = d.testpkg_pct   || 0;
     const weightedPct = parseFloat((d.unified_readiness || (pipingPct * 0.7 + supportPct * 0.2 + testPct * 0.1)).toFixed(2));
-    document.getElementById("kpi-overall").textContent     = `${weightedPct}%`;
+    document.getElementById("kpi-overall").textContent     = `${weightedPct.toFixed(2)}%`;
     document.getElementById("kpi-bar").style.width = `${Math.min(weightedPct, 100)}%`;
     const weightSubEl = document.getElementById("kpi-overall-weight-sub");
     if (weightSubEl) weightSubEl.textContent = `PIPING 70% · SUPPORT 20% · TEST 10%`;
@@ -518,7 +518,7 @@ async function renderOverview(kpi, wkData, units, systems) {
             const offset = Math.PI * 84 * (1 - Math.min(visP / 100, 1));
             gp.style.stroke          = p > 0 ? "#f97316" : "#374151";  // 0% = gray
             gp.style.strokeDashoffset = p > 0 ? offset : Math.PI * 84 * 0.98; // 0% = 2% arc
-            gt.textContent = `${p}%`;
+            gt.textContent = `${typeof p === 'number' ? p.toFixed(2) : p}%`;
             gt.style.fill  = p > 0 ? "#f97316" : "#6b7280";
         };
 
@@ -529,7 +529,7 @@ async function renderOverview(kpi, wkData, units, systems) {
         const stats = document.getElementById("overviewStats");
         const _remDI = Math.max(0, (d.total_plan_di||0) - (d.completed_di||0));
         if (stats) stats.innerHTML = _mkStats([
-            ["D/I Completion", `${d.overall_pct||0}%`],
+            ["D/I Completion", `${(d.overall_pct||0).toFixed(2)}%`],
             ["Total Plan DI",  fmtNum(d.total_plan_di,0)],
             ["Completed DI",   fmtNum(d.completed_di,0)],
             ["Remaining DI",   fmtNum(_remDI,0)]
@@ -542,7 +542,7 @@ async function renderOverview(kpi, wkData, units, systems) {
         if (sStats) {
             const sRem = Math.max(0, (d.support_total||0) - (d.support_comp||0));
             sStats.innerHTML = _mkStats([
-                ["Support Completion", `${sPct}%`],
+                ["Support Completion", `${sPct.toFixed(2)}%`],
                 ["Total Support (EA)", fmtNum(d.support_total||0,0)],
                 ["Completed (EA)",     fmtNum(d.support_comp||0,0)],
                 ["Remaining (EA)",     fmtNum(sRem,0)]
@@ -556,7 +556,7 @@ async function renderOverview(kpi, wkData, units, systems) {
         if (tStats) {
             const tRem = Math.max(0, (d.testpkg_total||0) - (d.testpkg_comp||0));
             tStats.innerHTML = _mkStats([
-                ["Test Pkg Completion", `${tPct}%`],
+                ["Test Pkg Completion", `${tPct.toFixed(2)}%`],
                 ["Total Test Pkg",      fmtNum(d.testpkg_total||0,0)],
                 ["Completed",           fmtNum(d.testpkg_comp||0,0)],
                 ["Remaining",           fmtNum(tRem,0)]
@@ -596,9 +596,9 @@ async function renderOverview(kpi, wkData, units, systems) {
                         <td style="text-align:center;color:var(--orange)">${fmtNum(pipRem,0)}</td>
                         <td style="text-align:center;color:var(--orange)">${_dash(supRem)}</td>
                         <td style="text-align:center;color:var(--orange)">${_dash(tstRem)}</td>
-                        <td style="text-align:center;color:${pctColor(pipPct)}">${pipPct}%</td>
-                        <td style="text-align:center;color:${pctColor(supPct)}">${supPct > 0 ? supPct+"%" : "—"}</td>
-                        <td style="text-align:center;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct+"%" : "—"}</td>
+                        <td style="text-align:center;color:${pctColor(pipPct)}">${pipPct.toFixed(2)}%</td>
+                        <td style="text-align:center;color:${pctColor(supPct)}">${supPct > 0 ? supPct.toFixed(2)+"%" : "—"}</td>
+                        <td style="text-align:center;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct.toFixed(2)+"%" : "—"}</td>
                         <td style="text-align:center;font-weight:700;color:${pctColor(totPct)}">${totPct.toFixed(2)}%</td>
                     </tr>`;
                 }).join("");
@@ -706,7 +706,7 @@ async function renderOverview(kpi, wkData, units, systems) {
 
         document.getElementById("unitOverview").innerHTML = units.map(u => {
             const p=u.progress_pct, c=pctColor(p);
-            return `<div style="margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div><div style="font-size:11px;font-weight:400">Unit ${u.unit}</div><div style="font-size:10px;color:var(--text-dim)">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:13px;font-weight:400;color:${c};font-family:'DM Mono',monospace">${p}%</div></div><div style="height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${Math.min(p,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:var(--text-dim);margin-top:2px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
+            return `<div style="margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div><div style="font-size:11px;font-weight:400">Unit ${u.unit}</div><div style="font-size:10px;color:var(--text-dim)">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:13px;font-weight:400;color:${c};font-family:'DM Mono',monospace">${p.toFixed(2)}%</div></div><div style="height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${Math.min(p,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:var(--text-dim);margin-top:2px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
         }).join("");
     } catch(e) { console.error("Overview failed", e); }
 }
@@ -807,23 +807,23 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
             const td = "padding:3px 5px;font-size:11px";
             const rowHtml = rows.map(row => {
                 const tot=row.total_di||0, comp=row.completed_di||0, rem=tot-comp;
-                const p=tot>0?Math.round(comp/tot*100):0, c=pctColor(p);
+                const p=tot>0?parseFloat((comp/tot*100).toFixed(2)):0, c=pctColor(p);
                 return `<tr>
                     <td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${row[nameKey]||""}</td>
                     <td style="${td}">${fmtNum(tot,0)}</td>
                     <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
                     <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
-                    <td style="${td};color:${c}">${p}%</td>
+                    <td style="${td};color:${c}">${p.toFixed(2)}%</td>
                 </tr>`;
             }).join("");
             if(!showTotal) return rowHtml;
-            const totRem = sumT-sumC, totP = sumT>0?Math.round(sumC/sumT*100):0, totC=pctColor(totP);
+            const totRem = sumT-sumC, totP = sumT>0?parseFloat((sumC/sumT*100).toFixed(2)):0, totC=pctColor(totP);
             return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
                 <td style="${td}">${fmtNum(sumT,0)}</td>
                 <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
                 <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
-                <td style="${td};color:${totC}">${totP}%</td>
+                <td style="${td};color:${totC}">${totP.toFixed(2)}%</td>
             </tr>`;
         }
 
@@ -1250,14 +1250,14 @@ async function loadUnitArea() {
         const allUnitsKpi = dash.units || [];
         document.getElementById("unitCards").innerHTML = allUnitsKpi.map(u => {
             const p=u.progress_pct, c=pctColor(p);
-            return `<div class="unit-card"><div class="unit-card-name">Unit ${u.unit}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(u.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(u.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-di">${(u.total_joints||0).toLocaleString()} joints</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
+            return `<div class="unit-card"><div class="unit-card-name">Unit ${u.unit}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(u.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(u.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p.toFixed(2)}% complete</div><div class="unit-card-di">${(u.total_joints||0).toLocaleString()} joints</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
         const _areaDisplayOrder = { "YD BLDG": 1, "YARD": 2, "MB #1": 3, "MB #2": 4 };
         const allAreasKpi = [...(dash.areas || [])].sort((a, b) => (_areaDisplayOrder[a.area]||99) - (_areaDisplayOrder[b.area]||99));
         document.getElementById("areaCards").innerHTML = allAreasKpi.map(a => {
             const p=a.progress_pct, c=pctColor(p);
-            return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${a.area}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
+            return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${a.area}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p.toFixed(2)}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
         // ── Unit Chart: Stacked (Completed DI + Remaining DI)
