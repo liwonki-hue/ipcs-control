@@ -356,9 +356,10 @@ def _get_jm_iso_stats(force: bool = False) -> dict:
             _jm_iso_stats_building = False
     return stats
 
-def _fast_kpi_sync():
+def _fast_kpi_sync(target=None):
     """get_jm_kpi_v1 단일 RPC로 KPI 합계 + sys/unit/area/sub_area 완료 DI를 즉시 보정.
-    _build() 완료 직후 동기 호출 → cold-start 시 첫 요청부터 정확한 KPI 반환."""
+    target이 주어지면 해당 dict에 직접 적용 (캐시 저장 전 호출용).
+    target=None이면 _cache["data"]에 적용 (런타임 보정용)."""
     try:
         sb = get_sb()
         res = sb.rpc("get_jm_kpi_v1", {}).execute()
@@ -378,49 +379,55 @@ def _fast_kpi_sync():
         unit_m = {r["k"]: float(r["v"] or 0) for r in (d.get("by_unit")    or []) if r.get("k")}
         area_m = {r["k"]: float(r["v"] or 0) for r in (d.get("by_area")    or []) if r.get("k")}
         sub_m  = {r["k"]: float(r["v"] or 0) for r in (d.get("by_sub_area") or []) if r.get("k")}
-        with _lock:
-            cur = _cache.get("data")
+
+        if target is not None:
+            # 로컬 dict — 캐시 미저장 상태이므로 락 불필요
+            cur = target
+        else:
+            with _lock:
+                cur = _cache.get("data")
             if not cur:
                 return
-            kpi = cur.get("kpi") or {}
-            tdi  = kpi.get("total_di", 0) or 0
-            ftdi = kpi.get("fab_total_di", 0) or 0
-            etdi = kpi.get("erect_total_di", 0) or 0
-            kpi["completed_di"]       = c_di
-            kpi["completed_joints"]   = c_joints
-            kpi["fab_completed_di"]   = c_fab
-            kpi["erect_completed_di"] = c_erect
-            kpi["fab_di"]             = c_fab
-            kpi["erect_di"]           = c_erect
-            kpi["overall_pct"]        = round(c_di  / tdi  * 100, 2) if tdi  > 0 else 0
-            kpi["progress_pct"]       = kpi["overall_pct"]
-            kpi["remaining_di"]       = tdi - c_di
-            kpi["fab_pct"]            = round(c_fab   / ftdi * 100, 2) if ftdi > 0 else 0
-            kpi["erect_pct"]          = round(c_erect / etdi * 100, 2) if etdi > 0 else 0
-            kpi["unified_readiness"]  = round(
-                kpi["overall_pct"] * 0.7
-                + (kpi.get("support_pct") or 0) * 0.2
-                + (kpi.get("testpkg_pct") or 0) * 0.1, 2)
-            def _repct(item, new_cdi):
-                item["completed_di"] = round(new_cdi, 2)
-                tdiv = item.get("total_di") or 0
-                p = round(new_cdi / tdiv * 100, 2) if tdiv else 0
-                item["progress_pct"] = p
-                item["unified_readiness"] = round(
-                    p * 0.7 + (item.get("support_pct") or 0) * 0.2
-                    + (item.get("testpkg_pct") or 0) * 0.1, 2)
-            for item in (cur.get("systems")  or []):
-                s = item.get("system") or ""
-                if s in sys_m:  _repct(item, sys_m[s])
-            for item in (cur.get("units")    or []):
-                u = item.get("unit") or ""
-                if u in unit_m: _repct(item, unit_m[u])
-            for item in (cur.get("areas")    or []):
-                a = item.get("area") or ""
-                if a in area_m: _repct(item, area_m[a])
-            for item in (cur.get("subareas") or []):
-                s = item.get("sub_area") or item.get("area") or ""
-                if s in sub_m:  _repct(item, sub_m[s])
+
+        kpi = cur.get("kpi") or {}
+        tdi  = kpi.get("total_di", 0) or 0
+        ftdi = kpi.get("fab_total_di", 0) or 0
+        etdi = kpi.get("erect_total_di", 0) or 0
+        kpi["completed_di"]       = c_di
+        kpi["completed_joints"]   = c_joints
+        kpi["fab_completed_di"]   = c_fab
+        kpi["erect_completed_di"] = c_erect
+        kpi["fab_di"]             = c_fab
+        kpi["erect_di"]           = c_erect
+        kpi["overall_pct"]        = round(c_di  / tdi  * 100, 2) if tdi  > 0 else 0
+        kpi["progress_pct"]       = kpi["overall_pct"]
+        kpi["remaining_di"]       = tdi - c_di
+        kpi["fab_pct"]            = round(c_fab   / ftdi * 100, 2) if ftdi > 0 else 0
+        kpi["erect_pct"]          = round(c_erect / etdi * 100, 2) if etdi > 0 else 0
+        kpi["unified_readiness"]  = round(
+            kpi["overall_pct"] * 0.7
+            + (kpi.get("support_pct") or 0) * 0.2
+            + (kpi.get("testpkg_pct") or 0) * 0.1, 2)
+        def _repct(item, new_cdi):
+            item["completed_di"] = round(new_cdi, 2)
+            tdiv = item.get("total_di") or 0
+            p = round(new_cdi / tdiv * 100, 2) if tdiv else 0
+            item["progress_pct"] = p
+            item["unified_readiness"] = round(
+                p * 0.7 + (item.get("support_pct") or 0) * 0.2
+                + (item.get("testpkg_pct") or 0) * 0.1, 2)
+        for item in (cur.get("systems")  or []):
+            s = item.get("system") or ""
+            if s in sys_m:  _repct(item, sys_m[s])
+        for item in (cur.get("units")    or []):
+            u = item.get("unit") or ""
+            if u in unit_m: _repct(item, unit_m[u])
+        for item in (cur.get("areas")    or []):
+            a = item.get("area") or ""
+            if a in area_m: _repct(item, area_m[a])
+        for item in (cur.get("subareas") or []):
+            s = item.get("sub_area") or item.get("area") or ""
+            if s in sub_m:  _repct(item, sub_m[s])
         print(f"[fast_kpi] applied: DI={c_di:.1f}, joints={c_joints}")
     except Exception as e:
         print(f"[fast_kpi] error (non-critical): {e}")
@@ -1018,8 +1025,7 @@ def _build():
         data = _parse_rpc(raw)
 
         del raw  # free the large raw dict — only processed data needed
-        kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
-        
+
         # Populate _meta_cache safely
         try:
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
@@ -1044,6 +1050,11 @@ def _build():
             print(f"[cache] Meta extraction error: {me}")
             m_units, m_sys, m_area, m_sub = [], [], [], []
         
+        # KPI 보정을 캐시 저장 전에 실행 — 첫 요청부터 정확한 값 반환
+        gc.collect()
+        _fast_kpi_sync(target=data)
+        kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
+
         global _meta_cache
         with _lock:
             _cache["data"] = data
@@ -1056,9 +1067,7 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             _build_fail = False
-        gc.collect()  # reclaim freed memory after cache build
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
-        _fast_kpi_sync()  # cold-start 첫 요청 전에 KPI 정확값 즉시 보정
         def _run_secondary():
             try:
                 _build_secondary_caches()
@@ -1180,10 +1189,8 @@ def api_auth_logout():
 
 @app.route("/api/meta", methods=["GET"])
 def api_meta():
-    global _meta_cache, _building
-    now   = time.time()
-    force = False  # Disabled ?t= to prevent blocking Gunicorn thread
-    if not force and _meta_cache.get("data") and (now - _meta_cache["time"]) < 3600:
+    global _meta_cache
+    if _meta_cache.get("data") and (time.time() - _meta_cache["time"]) < 3600:
         resp = dict(_meta_cache["data"])
         # _sub_area_cache는 joint_master 직접 스캔값 — v17 내부 캐시보다 신뢰
         with _lock:

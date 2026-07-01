@@ -653,8 +653,8 @@ async function renderOverview(kpi, wkData, units, systems) {
         charts["scurveChart"] = new Chart(scurveEl.getContext("2d"), {
             type: "bar",
             data: { labels: scurveLabels, datasets: [
-                { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:true, align:'end', anchor:'end', color:'#7ab3f0', font:{size:8,weight:'bold'}, offset:-2, formatter:(v)=>v>0?fmtNum(v,0):''} },
-                { label:"Plan S-Curve",type:"line", yAxisID:"yCum", data:planSCurve, borderColor:"rgba(180,185,195,0.55)", borderWidth:2, borderDash:[6,4], fill:false, pointRadius:0, pointHoverRadius:4, tension:0, order:2, datalabels:{display:false} },
+                { label:"Weekly DI",   type:"bar",  yAxisID:"yBar", data:wkData.map(w=>w.completed_di||null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"#2563eb", borderWidth:1, borderRadius:2, barPercentage:0.8, order:3, datalabels:{display:false} },
+                { label:"Plan S-Curve",type:"line", yAxisID:"yCum", data:planSCurve, borderColor:"rgba(255,82,82,0.55)", borderWidth:1.5, borderDash:[4,4], fill:false, pointRadius:0, pointHoverRadius:4, tension:0, order:2, datalabels:{display:false} },
                 { label:"Actual Cum.", type:"line", yAxisID:"yCum", data:cumulLine,  borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:0, pointHoverRadius:4, tension:0.3, order:1, spanGaps:false, datalabels:{display:false} }
             ]},
             options: { ...chartOpts("Weekly DI Progress"),
@@ -665,6 +665,26 @@ async function renderOverview(kpi, wkData, units, systems) {
                 },
                 plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
         });
+
+        // 마지막 작업주 기준 Plan/Actual/Diff 공정률 표시
+        const scurveKpiEl = document.getElementById("scurveKpi");
+        if (scurveKpiEl) {
+            if (lastActIdx >= 0 && totalPlanDI > 0) {
+                const planPct  = planSCurve[lastActIdx] / totalPlanDI * 100;
+                const actPct   = (cumulLine[lastActIdx] || 0) / totalPlanDI * 100;
+                const diffPct  = actPct - planPct;
+                const diffClr  = diffPct >= 0 ? "#60a5fa" : "#ef4444";
+                const diffSign = diffPct >= 0 ? "+" : "";
+                const wkLabel  = wkData[lastActIdx]?.week_label || `W${lastActIdx + 1}`;
+                scurveKpiEl.innerHTML =
+                    `<span style="opacity:0.55;font-size:9px">AS OF ${wkLabel}</span>` +
+                    `<span>PLAN <b style="color:#60a5fa">${planPct.toFixed(2)}%</b></span>` +
+                    `<span>ACTUAL <b style="color:#22d3a1">${actPct.toFixed(2)}%</b></span>` +
+                    `<span>DIFF <b style="color:${diffClr}">${diffSign}${diffPct.toFixed(2)}%</b></span>`;
+            } else {
+                scurveKpiEl.innerHTML = "";
+            }
+        }
 
         let latestPlanIdx = -1;
         for (let i=wkData.length-1; i>=0; i--) { if (wkData[i].completed_di>0) { latestPlanIdx=i; break; } }
@@ -936,7 +956,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                         { label:"EP Target DI",    type:"line", yAxisID:"yL", data:epPlanSCurve, borderColor:"rgba(255,82,82,0.55)", borderDash:[4,4], borderWidth:1.5, fill:false, pointRadius:0, tension:0, order:1, datalabels:{display:false} },
                         { label:"Cumulative Actual",type:"line", yAxisID:"yL", data:cumulData, borderColor:"#22d3a1", borderWidth:2, fill:false, pointRadius:3, pointBackgroundColor:"#22d3a1", pointHoverRadius:5, tension:0.1, order:2, spanGaps:false, datalabels:{display:false} },
                         { label:"Weekly DI",       type:"bar",  yAxisID:"yR", data:wkView.map(w=>w.completed_di>0?w.completed_di:null), backgroundColor:"rgba(37,99,235,0.5)", borderColor:"rgba(37,99,235,0.8)", borderWidth:1, borderRadius:2, barPercentage:0.8, categoryPercentage:0.9, order:3,
-                          datalabels:{display:true, align:"end", anchor:"end", offset:2, clamp:false, color:"#5b8def", font:{size:8,weight:"600"}, formatter:(v)=>v?fmtNum(v,0):""} }
+                          datalabels:{display:false} }
                     ]},
                     options: { ...chartOpts(""),
                         scales: {
@@ -951,6 +971,26 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                             tooltip:{...chartOpts("").plugins?.tooltip, callbacks:{label:(ctx)=>`${ctx.dataset.label}: ${fmtNum(ctx.parsed.y,0)}`}}},
                         animation:{duration:400} }
                 });
+
+                // 마지막 작업주 기준 EP Plan/Actual/Diff 공정률 표시
+                const epKpiEl = document.getElementById("epScurveKpi");
+                if (epKpiEl) {
+                    if (lastEpActIdx >= 0 && d_total_di > 0) {
+                        const planPct  = epPlanSCurve[lastEpActIdx] / d_total_di * 100;
+                        const actPct   = (cumulData[lastEpActIdx] || 0) / d_total_di * 100;
+                        const diffPct  = actPct - planPct;
+                        const diffClr  = diffPct >= 0 ? "#60a5fa" : "#ef4444";
+                        const diffSign = diffPct >= 0 ? "+" : "";
+                        const wkLabel  = wkView[lastEpActIdx] ? `W${wkView[lastEpActIdx].week_no}` : `W${lastEpActIdx + 1}`;
+                        epKpiEl.innerHTML =
+                            `<span style="opacity:0.55;font-size:9px">AS OF ${wkLabel}</span>` +
+                            `<span>PLAN <b style="color:#60a5fa">${planPct.toFixed(2)}%</b></span>` +
+                            `<span>ACTUAL <b style="color:#22d3a1">${actPct.toFixed(2)}%</b></span>` +
+                            `<span>DIFF <b style="color:${diffClr}">${diffSign}${diffPct.toFixed(2)}%</b></span>`;
+                    } else {
+                        epKpiEl.innerHTML = "";
+                    }
+                }
             }
         }
 
