@@ -537,6 +537,7 @@ def _build_secondary_caches():
             wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
             sys_di_m = defaultdict(float); unit_di_m = defaultdict(float)
             area_di_m = defaultdict(float); sub_di_m = defaultdict(float)
+            mo_di_m = defaultdict(float); mo_fab_m = defaultdict(float); mo_erect_m = defaultdict(float)
             c_di = c_fab = c_erect = 0.0; c_joints = 0
             off, bsz = 0, 10000
             while True:
@@ -555,6 +556,12 @@ def _build_secondary_caches():
                         wk_di_m[wno] += di
                         if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
                         elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
+                    # 실제 완료일(date_completed) 기준 월별 집계 — week_start 기준과 달리 월 경계에 걸친 주차도 정확히 귀속
+                    if len(dc) >= 7:
+                        mo = dc[:7]
+                        mo_di_m[mo] += di
+                        if   sf in ("S", "SHOP"):  mo_fab_m[mo]   += di
+                        elif sf in ("F", "FIELD"): mo_erect_m[mo] += di
                 c_joints += len(rows)
                 if len(rows) < bsz: break
                 off += bsz
@@ -565,6 +572,7 @@ def _build_secondary_caches():
                 "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
                 "sys_di_m":  dict(sys_di_m),   "unit_di_m": dict(unit_di_m),
                 "area_di_m": dict(area_di_m),  "sub_di_m":  dict(sub_di_m),
+                "mo_di_m":   dict(mo_di_m),    "mo_fab_m":  dict(mo_fab_m),  "mo_erect_m": dict(mo_erect_m),
             }
             with _lock:
                 _kpi_override_cache["data"] = ko
@@ -579,6 +587,7 @@ def _build_secondary_caches():
         wk_di_m = ko["wk_di_m"]; wk_fab_m = ko["wk_fab_m"]; wk_erect_m = ko["wk_erect_m"]
         sys_di_m = ko["sys_di_m"]; unit_di_m = ko["unit_di_m"]
         area_di_m = ko["area_di_m"]; sub_di_m = ko["sub_di_m"]
+        mo_di_m = ko.get("mo_di_m") or {}; mo_fab_m = ko.get("mo_fab_m") or {}; mo_erect_m = ko.get("mo_erect_m") or {}
         with _lock:
             cur = _cache.get("data")
             if not cur or c_joints == 0:
@@ -611,6 +620,13 @@ def _build_secondary_caches():
             for item in (cur.get("weekly") or []):
                 _cum += float(item.get("completed_di") or 0)
                 item["cumul_actual"] = round(_cum, 2)
+
+            # 실제 완료일(date_completed) 기준 월별 집계 — Monthly Trend에서 week_start 기반 오분류 방지
+            cur["monthly"] = [
+                {"month": mo, "completed_di": round(mo_di_m[mo], 2),
+                 "fab_di": round(mo_fab_m.get(mo, 0.0), 2), "erect_di": round(mo_erect_m.get(mo, 0.0), 2)}
+                for mo in sorted(mo_di_m.keys())
+            ]
 
             def _repct(item, new_cdi):
                 item["completed_di"] = round(new_cdi, 2)

@@ -1180,17 +1180,25 @@ async function loadWeekly() {
             options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
         });
 
-        // Monthly Trend: weekly 데이터를 월별로 집계
-        const monthMap={};
-        actWks.forEach(w=>{
-            const mo=(w.week_start||"").slice(0,7);
-            if(!mo) return;
-            if(!monthMap[mo]) monthMap[mo]={fab:0,erect:0,completed:0};
-            monthMap[mo].fab       += w.fab_di       || 0;
-            monthMap[mo].erect     += w.erect_di     || 0;
-            monthMap[mo].completed += w.completed_di || 0;
-        });
-        const monthlyData=Object.entries(monthMap).sort(([a],[b])=>a.localeCompare(b)).slice(-4);
+        // Monthly Trend: 실제 완료일(date_completed) 기준 월별 집계 우선 사용
+        // — 주(week) 단위 집계는 월 경계에 걸친 주차(예: 6/29~7/5)가 시작월로만 잡혀 최근월이 누락되는 문제가 있음
+        let monthlyData;
+        if (dash.monthly && dash.monthly.length) {
+            monthlyData = dash.monthly
+                .map(m => [m.month, {fab:m.fab_di||0, erect:m.erect_di||0, completed:m.completed_di||0}])
+                .sort(([a],[b])=>a.localeCompare(b)).slice(-4);
+        } else {
+            const monthMap={};
+            actWks.forEach(w=>{
+                const mo=(w.week_start||"").slice(0,7);
+                if(!mo) return;
+                if(!monthMap[mo]) monthMap[mo]={fab:0,erect:0,completed:0};
+                monthMap[mo].fab       += w.fab_di       || 0;
+                monthMap[mo].erect     += w.erect_di     || 0;
+                monthMap[mo].completed += w.completed_di || 0;
+            });
+            monthlyData = Object.entries(monthMap).sort(([a],[b])=>a.localeCompare(b)).slice(-4);
+        }
         destroyChart("monthlyTrend");
         const moEl=document.getElementById("monthlyTrend");
         if(moEl && monthlyData.length){
