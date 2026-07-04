@@ -229,6 +229,11 @@ select:focus, input:focus { border-color: var(--accent); }
 .stat-label { font-size: 10px; color: var(--text-dim); }
 .stat-value { font-size: 11px; color: var(--text); font-weight: 400; font-family: 'DM Mono', monospace; }
 
+/* EP DI/Support 게이지 패널 전용 — 통계 행 축소로 게이지 확대 공간 확보 */
+#epStats.stat-list .stat-row, #epSupportGaugeStats.stat-list .stat-row { padding: 1px 0; }
+#epStats.stat-list .stat-label, #epSupportGaugeStats.stat-list .stat-label { font-size: 9px; }
+#epStats.stat-list .stat-value, #epSupportGaugeStats.stat-list .stat-value { font-size: 10px; }
+
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 18px; font-size: 12px; color: var(--text); z-index: 9999; opacity: 0; transform: translateY(10px); transition: all 0.3s; pointer-events: none; max-width: 320px; }
 .toast.show { opacity: 1; transform: translateY(0); }
 

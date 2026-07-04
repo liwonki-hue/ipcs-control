@@ -789,6 +789,23 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         const gt = document.getElementById("epGaugeText");
         if(gt) { gt.textContent = `${pct.toFixed(2)}%`; gt.style.fill = gc; }
 
+        // ── EP Support Gauge ────────────────────────────────────────────
+        const supOffset = circ * (1 - Math.min(support_pct/100,1));
+        const supGc = support_pct>=80?"#22d3a1":support_pct>=50?"#f5c542":"#ff8c42";
+        const supGp = document.getElementById("epSupportGaugePath");
+        if(supGp) { supGp.style.stroke = supGc; supGp.style.strokeDashoffset = supOffset; }
+        const supGt = document.getElementById("epSupportGaugeText");
+        if(supGt) { supGt.textContent = `${support_pct.toFixed(2)}%`; supGt.style.fill = supGc; }
+        const supStats = document.getElementById("epSupportGaugeStats");
+        if(supStats) {
+            const supRem = Math.max(0, support_tot - support_comp);
+            supStats.innerHTML = [
+                ["Support Completion",       `${support_pct.toFixed(2)}%`],
+                ["Total Support (EA)",       fmtNum(support_tot,0)],
+                ["Completed / Remaining (EA)", `${fmtNum(support_comp,0)} / ${fmtNum(supRem,0)}`]
+            ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
+        }
+
         const stats = document.getElementById("epStats");
         if(stats) {
             stats.innerHTML = [
@@ -1000,6 +1017,17 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
 // ================================================================================
 //  SYSTEMS
 // ================================================================================
+const SYSTEM_FULL_NAMES = {
+    "RW": "Raw Water System", "FO": "Fuel Oil Supply System", "HW": "Hot Water Supply System",
+    "CCW": "Closed Cooling Water System", "AS": "Aux. Steam System", "FG": "Fuel Gas Supply System",
+    "SW": "Service Water System", "GT MISC": "GT Miscellaneous System", "DW": "Demi. Water System",
+    "CD": "Condensate System", "LO": "Lube Oil System", "IA": "Instrument Air System",
+    "SA": "Service Air System", "ATM": "Atmosphere Flash Tank System", "FGH": "Fuel Gas Performance Heater System",
+    "HP": "High Pressure Steam System", "LP": "Low Pressure Steam System", "N2": "N2 Gas System",
+    "PW": "Potable Water System", "SS": "Sampling System", "ST MISC": "ST Miscellaneous System",
+    "WWT": "Waste Water Transfer System", "FW": "Feed Water System"
+};
+
 async function loadSystems() {
     try {
         const dash = await getDashData(), data = dash.systems || [];
@@ -1018,7 +1046,7 @@ async function loadSystems() {
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
-                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.system} ${warn}</span>
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.system}${SYSTEM_FULL_NAMES[s.system] ? ` (${SYSTEM_FULL_NAMES[s.system]})` : ""} ${warn}</span>
                     <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">Ready: ${unified}%</span>
                 </div>
                 <!-- Triple Bar -->
@@ -1044,6 +1072,23 @@ async function loadSystems() {
 // ================================================================================
 //  SUB AREA
 // ================================================================================
+const SUBAREA_FULL_NAMES = {
+    "BSDG": "Black Start Diesel Generator", "CCWPH #1": "CCW Pump House #1", "CCWPH #2": "CCW Pump House #2",
+    "CEPH": "Condensate Extraction Pump House", "DOPS": "Diesel Oil Pump Station", "DOTK": "Diesel Oil Tank Area",
+    "DWTK": "Demi. Water Tank Area", "FFC #1": "Fin Fan Cooler #1", "FFC #2": "Fin Fan Cooler #2",
+    "FGSS": "Fuel Gas Supply Station", "GT #11": "GT #11 Area", "GT #12": "GT #12 Area",
+    "GT #21": "GT #21 Area", "GT #22": "GT #22 Area",
+    "HRSG #11 PR": "HRSG #11 Pipe Rack Area", "HRSG #12 PR": "HRSG #12 Pipe Rack Area",
+    "HRSG #21 PR": "HRSG #21 Pipe Rack Area", "HRSG #22 PR": "HRSG #22 Pipe Rack Area",
+    "HWPS": "Hot Water Pump Station", "LOPS": "Lube Oil Pump Station", "MB STR": "Main Building Structure",
+    "PR #1": "Pipe Rack #1 Area", "PR #2": "Pipe Rack #2 Area", "PR #3": "Pipe Rack #3 Area",
+    "PR #4": "Pipe Rack #4 Area", "PR #5": "Pipe Rack #5 Area", "PR #6": "Pipe Rack #6 Area", "PR #7": "Pipe Rack #7 Area",
+    "PWPS": "Potable Water Pump Station", "PWTK": "Potable Water Tank Area", "RWTK": "Raw & Fire Water Tank Area",
+    "RWPS": "Raw Water Pump Station",
+    "STG #1": "STG #1 Area", "STG #2": "STG #2 Area", "WDPS": "Water Distribution Pump Station",
+    "WORKSHOP": "Workshop Building", "SWTK": "Service Water Tank Area"
+};
+
 async function loadSubArea() {
     try {
         const dash = await getDashData(), data = dash.subareas || [];
@@ -1061,7 +1106,7 @@ async function loadSubArea() {
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
-                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.sub_area} ${warn}</span>
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.sub_area}${SUBAREA_FULL_NAMES[s.sub_area] ? ` (${SUBAREA_FULL_NAMES[s.sub_area]})` : ""} ${warn}</span>
                     <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">${unified}%</span>
                 </div>
                 <div class="triple-bar-container">
