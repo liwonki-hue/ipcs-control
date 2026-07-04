@@ -85,7 +85,7 @@
           <div class="panel" style="margin-top:8px"><div class="panel-title">Support Overall Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="supportGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="supportGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">SUPPORT PROGRESS</text></svg></div><div class="stat-list" id="supportStats"></div></div>
         </div>
         <div class="col col-wide">
-          <div class="panel"><div class="panel-title">Cumulative S-Curve &mdash; Plan vs Actual <span style="font-size:10px;font-weight:400;opacity:0.55">(Piping D/I 기준)</span></div><div id="scurveDateBar" style="display:flex;justify-content:space-between;padding:2px 8px 6px;color:#4a6080;font-family:'DM Mono',monospace;overflow:hidden;width:100%;box-sizing:border-box"></div><div style="position:relative;height:185px"><canvas id="scurveChart"></canvas></div><div id="scurveKpi" style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px 2px;color:#7a95b8;font-family:'DM Mono',monospace;font-size:10px;border-top:1px solid rgba(255,255,255,0.06);gap:8px"></div></div>
+          <div class="panel"><div class="panel-title">Cumulative S-Curve &mdash; Plan vs Actual <span style="font-size:10px;font-weight:400;opacity:0.55">(Piping D/I Basis)</span></div><div id="scurveDateBar" style="display:flex;justify-content:space-between;padding:2px 8px 6px;color:#4a6080;font-family:'DM Mono',monospace;overflow:hidden;width:100%;box-sizing:border-box"></div><div style="position:relative;height:185px"><canvas id="scurveChart"></canvas></div><div id="scurveKpi" style="display:flex;justify-content:space-between;align-items:center;padding:4px 8px 2px;color:#7a95b8;font-family:'DM Mono',monospace;font-size:10px;border-top:1px solid rgba(255,255,255,0.06);gap:8px"></div></div>
           <div class="panel"><div class="panel-title">Weekly DI Productivity</div><div style="position:relative;height:140px"><canvas id="weeklyBar"></canvas></div></div>
         </div>
         <div class="col">
@@ -574,8 +574,8 @@
           <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
-            <button class="btn-primary auth-write" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="ISO Drawing으로 Joint Master의 Phase/Package 매칭">&#8635; Sync Phase/Pkg</button>
-            <button class="btn-primary auth-admin" style="background:#7c3aed; padding:5px 10px; font-size:11px;" onclick="syncSMFromDrawing()" title="Drawing DB 기준으로 Type/Revision 업데이트 및 누락 Support 추가">&#8635; Sync from Drawing</button>
+            <button class="btn-primary auth-write" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="Match Phase/Package from Joint Master by ISO Drawing">&#8635; Sync Phase/Pkg</button>
+            <button class="btn-primary auth-admin" style="background:#7c3aed; padding:5px 10px; font-size:11px;" onclick="syncSMFromDrawing()" title="Update Type/Revision and add missing Support items based on Drawing DB">&#8635; Sync from Drawing</button>
             <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
@@ -745,7 +745,7 @@
           </select>
           <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
-            <button class="btn-primary auth-write" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Pkg Master의 package 목록을 자동 등록">&#8635; Sync from Pkg</button>
+            <button class="btn-primary auth-write" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Auto-register package list from Pkg Master">&#8635; Sync from Pkg</button>
             <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('test_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
           </div>

@@ -157,8 +157,8 @@ async function getDashData(forceRefresh=false) {
             const res = await fetchWithTimeout("/api/dashboard", TIMEOUT_MS);
             const elapsed = Math.round((Date.now() - _t0) / 1000);
             if (res.status === 202) {
-                const estMin = elapsed < 60 ? "1~2분" : elapsed < 150 ? "2~3분" : "잠시만";
-                _updateLoader(`서버 기동 중... ${elapsed}s · 예상 대기: ${estMin} (${i+1}/${MAX_ATTEMPTS})`);
+                const estMin = elapsed < 60 ? "1-2 min" : elapsed < 150 ? "2-3 min" : "a bit longer";
+                _updateLoader(`Server starting... ${elapsed}s · Estimated wait: ${estMin} (${i+1}/${MAX_ATTEMPTS})`);
                 await new Promise(r => setTimeout(r, RETRY_MS));
                 continue;
             }
@@ -250,7 +250,7 @@ function showLoader(show, msg) {
         el.innerHTML = `
           <div style="width:48px;height:48px;border:3px solid #1e2d45;border-top:3px solid #00d4ff;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:16px"></div>
           <div style="color:#00d4ff;font-size:14px;font-weight:600;letter-spacing:0.06em">LOADING DATA</div>
-          <div style="color:#7a95b8;font-size:11px;margin-top:6px;font-family:DM Mono,monospace">Cold start: 약 3~4분 소요 · 잠시 기다려 주세요...</div>
+          <div style="color:#7a95b8;font-size:11px;margin-top:6px;font-family:DM Mono,monospace">Cold start: takes about 3-4 min · please wait...</div>
           <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
         `;
         document.body.appendChild(el);
@@ -263,7 +263,7 @@ function showLoader(show, msg) {
           <div style="color:#ff5252;font-size:18px;margin-bottom:10px">&#9888; Load Failed</div>
           <div style="color:#e0e6ef;font-size:13px;text-align:center;max-width:480px;line-height:1.6">${msg}</div>
           <button onclick="location.reload()" style="margin-top:20px;padding:10px 28px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;letter-spacing:0.04em">&#8635; Retry</button>
-          <div style="color:#4a6080;font-size:11px;margin-top:10px">F5 또는 위 버튼으로 재시도</div>
+          <div style="color:#4a6080;font-size:11px;margin-top:10px">Press F5 or use the button above to retry</div>
           <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
         `;
         return;
@@ -1403,7 +1403,7 @@ async function applyIsoBulkDate(){
     const isoVal=document.getElementById("jm-iso")?.value?.trim();
     const dateVal=_fullDateVal("jm-bulk-date");
     if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
-    if(!dateVal){toast("날짜를 선택하세요","error");return;}
+    if(!dateVal){toast("Please select a date","error");return;}
     {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     const targets=jmData.filter(r=>r.iso_drawing===isoVal);
     if(targets.length===0){toast("No joints found for this ISO","error");return;}
@@ -1872,7 +1872,7 @@ async function _fetchAllFiltered(endpoint, params) {
 
 async function exportJMExcel(){
     await ensureXlsx();
-    toast("데이터 로딩 중...", "info");
+    toast("Loading data...", "info");
     const params = _readFilters([
         ["jm-unit","unit"],["jm-system","system"],["jm-status","status"],
         ["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]
@@ -1889,7 +1889,7 @@ async function exportJMExcel(){
         "REMARK":r.remark||""
     }));
     const ws=XLSX.utils.json_to_sheet(exportData),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"JointMaster");
-    const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+    const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast(`✓ ${data.length.toLocaleString()} rows exported`);
 }
 
 async function printPage(pageId){
@@ -1922,7 +1922,7 @@ async function printPage(pageId){
     };
     const cfg = _PRINT_TABS[pageId];
     if (cfg) {
-        toast("인쇄 데이터 로딩 중...", "info");
+        toast("Loading print data...", "info");
         const allData = await _fetchAllFiltered(cfg.endpoint, cfg.params());
         cfg.render(allData);
     }
@@ -2542,7 +2542,7 @@ async function applySmBulkDate() {
     const isoVal = document.getElementById("sm-search")?.value?.trim();
     const dateVal = _fullDateVal("sm-bulk-date");
     if (!isoVal) { toast("Please enter Search Drawing first", "error"); return; }
-    if (!dateVal) { toast("날짜를 선택하세요", "error"); return; }
+    if (!dateVal) { toast("Please select a date", "error"); return; }
     {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
 
     const targets = smData.filter(r =>
@@ -2674,7 +2674,7 @@ async function deleteSMItem(id) {
 
 async function exportSMExcel() {
     await ensureXlsx();
-    toast("데이터 로딩 중...", "info");
+    toast("Loading data...", "info");
     const params = _readFilters([["sm-search","search"],["sm-phase","phase"],["sm-package","package"],["sm-unit","unit"],["sm-subarea","sub_area"],["sm-system","system"],["sm-type","type"]]);
     const data = await _fetchAllFiltered("/api/support-master", params);
     if (!data.length) { toast("No data", "error"); return; }
@@ -2696,7 +2696,7 @@ async function exportSMExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "SupportMaster");
     const ok = await downloadWithPicker(wb, "Support_Master_Export.xlsx");
-    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${data.length.toLocaleString()} rows exported`);
 }
 
 // ================================================================================
@@ -2819,27 +2819,27 @@ async function saveTPVT(id) {
 
 
 async function syncSMPhasePackage() {
-    if (!confirm("Support Master의 ISO Drawing으로 Joint Master에서 Phase/Package를 매칭합니다.\n계속하시겠습니까?")) return;
+    if (!confirm("Match Phase/Package from Joint Master using Support Master's ISO Drawing.\nContinue?")) return;
     toast("Syncing...", "info");
     try {
         const r = await fetch("/api/support-master/sync-phase-package", {method:"POST"});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error);
-        toast(`✓ ${d.updated}건 업데이트 완료`);
+        toast(`✓ ${d.updated} row(s) updated`);
         loadSupportMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
 async function syncSMFromDrawing() {
-    if (!confirm("Drawing DB 기준으로 Support Master를 업데이트합니다.\n• 기존: Type/Revision 업데이트\n• 신규: JM 매칭 항목 추가\n\n계속하시겠습니까?")) return;
+    if (!confirm("Update Support Master based on Drawing DB.\n• Existing: update Type/Revision\n• New: add items matched from JM\n\nContinue?")) return;
     const btn = document.querySelector('[onclick="syncSMFromDrawing()"]');
     if (btn) { btn.disabled = true; btn.textContent = "Syncing..."; }
-    toast("Drawing DB 동기화 중... (최대 30초 소요)", "info");
+    toast("Syncing with Drawing DB... (up to 30s)", "info");
     try {
         const r = await fetch("/api/support-master/sync-drawing", {method:"POST"});
         const d = await r.json();
         if (!d.ok) throw new Error(d.error);
-        toast(`✓ 업데이트 ${d.updated}건 / 신규 추가 ${d.inserted}건 완료`);
+        toast(`✓ ${d.updated} updated / ${d.inserted} added`);
         loadSupportMaster();
         fetch("/api/cache/clear");
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
@@ -2848,7 +2848,7 @@ async function syncSMFromDrawing() {
 
 async function exportNDEExcel() {
     await ensureXlsx();
-    toast("데이터 로딩 중...", "info");
+    toast("Loading data...", "info");
     const params = _readFilters([["nde-unit","unit"],["nde-system","system"],["nde-iso","iso"],["nde-insp","inspection"],["nde-welder","welder"]]);
     params.set("nde_only", "true");
     const data = await _fetchAllFiltered("/api/joints", params);
@@ -2875,12 +2875,12 @@ async function exportNDEExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "NDE_PWHT");
     const ok = await downloadWithPicker(wb, "NDE_PWHT_Export.xlsx");
-    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${data.length.toLocaleString()} rows exported`);
 }
 
 async function exportTPExcel() {
     await ensureXlsx();
-    toast("데이터 로딩 중...", "info");
+    toast("Loading data...", "info");
     const params = _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]);
     const data = await _fetchAllFiltered("/api/testpkg-joints", params);
     if (!data.length) { toast("No data", "error"); return; }
@@ -2906,7 +2906,7 @@ async function exportTPExcel() {
     const ws = XLSX.utils.json_to_sheet(rows); const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestPkgMaster");
     const ok = await downloadWithPicker(wb, "TestPkg_Master_Export.xlsx");
-    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${data.length.toLocaleString()} rows exported`);
 }
 
 // ================================================================================
@@ -3015,7 +3015,7 @@ function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">데이터가 없습니다. "Sync from Pkg" 버튼으로 Pkg Master의 패키지를 불러오세요.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Pkg Master.</td></tr>`;
         return;
     }
     const iopt = v => v ? ` selected` : "";
@@ -3114,29 +3114,29 @@ async function saveTMRow(id) {
         });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
-        toast("저장 완료");
+        toast("Saved");
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }
 
 async function deleteTMRow(id) {
-    if (!confirm("이 Test Package를 삭제하시겠습니까?")) return;
+    if (!confirm("Delete this Test Package?")) return;
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, { method: "DELETE" });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Delete failed");
-        toast("삭제 완료");
+        toast("Deleted");
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }
 
 async function syncTestMaster() {
-    if (!confirm("Pkg Master의 패키지 목록을 Test Master에 자동 등록합니다.\n이미 등록된 패키지는 건너뜁니다. 계속하시겠습니까?")) return;
+    if (!confirm("Auto-register the package list from Pkg Master into Test Master.\nAlready-registered packages will be skipped. Continue?")) return;
     try {
         const res  = await fetch("/api/testpkg-master/sync", { method: "POST" });
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Sync failed");
-        toast(`Sync 완료: ${data.inserted}건 신규 등록 (전체 ${data.total}건)`);
+        toast(`Sync complete: ${data.inserted} newly registered (${data.total} total)`);
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }
@@ -3434,7 +3434,7 @@ function _renderRtRepairList(repairList) {
 
 async function exportTMExcel() {
     await ensureXlsx();
-    toast("데이터 로딩 중...", "info");
+    toast("Loading data...", "info");
     const params = _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"]]);
     params.set("skip_readiness", "1");
     const data = await _fetchAllFiltered("/api/testpkg-master", params);
@@ -3456,7 +3456,7 @@ async function exportTMExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "TestMaster");
     const ok = await downloadWithPicker(wb, "Test_Master_Export.xlsx");
-    if (ok) toast(`✓ ${data.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${data.length.toLocaleString()} rows exported`);
 }
 
 // ================================================================================
@@ -3592,5 +3592,5 @@ async function exportDailyReportExcel() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "DailyReport");
     const ok = await downloadWithPicker(wb, "Daily_Report_Export.xlsx");
-    if (ok) toast(`✓ ${daily.length.toLocaleString()}행 내보내기 완료`);
+    if (ok) toast(`✓ ${daily.length.toLocaleString()} rows exported`);
 }
