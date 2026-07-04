@@ -510,7 +510,7 @@ def _build_secondary_caches():
         with _lock:
             _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
             _ko_data = _kpi_override_cache.get("data")
-        if _ko_data is not None and _ko_age < 3600:
+        if _ko_data is not None and _ko_age < CACHE_TTL:
             print(f"[secondary_cache] kpi_override HIT ({int(_ko_age)}s old)")
             _apply_kpi_override(_ko_data)
             return
@@ -931,36 +931,65 @@ def _build():
         if not raw.get("kpi"):
             print("[cache] WARNING: kpi empty after all RPCs!")
 
-        # ── Support & TestPkg: per-system 집계 (2h 캐시) ──
+        # ── Support & TestPkg: system/unit/area/sub_area 전체 스캔 집계 (2h 캐시) ──
         global _sup_test_cache
         try:
             with _lock:
                 _st_age  = time.time() - _sup_test_cache.get("time", 0)
                 _st_data = _sup_test_cache.get("data")
             if _st_data is not None and _st_age < 7200:
-                _sup_s_tot  = _st_data["sup_tot"]
-                _sup_s_done = _st_data["sup_done"]
-                _tst_s_tot  = _st_data["tst_tot"]
-                _tst_s_done = _st_data["tst_done"]
+                _sup_s_tot  = _st_data["sup_sys_tot"];  _sup_s_done  = _st_data["sup_sys_done"]
+                _sup_u_tot  = _st_data["sup_unit_tot"]; _sup_u_done  = _st_data["sup_unit_done"]
+                _sup_a_tot  = _st_data["sup_area_tot"]; _sup_a_done  = _st_data["sup_area_done"]
+                _sup_sa_tot = _st_data["sup_sub_tot"];  _sup_sa_done = _st_data["sup_sub_done"]
+                _tst_s_tot  = _st_data["tst_sys_tot"];  _tst_s_done  = _st_data["tst_sys_done"]
+                _tst_sa_tot = _st_data["tst_sub_tot"];  _tst_sa_done = _st_data["tst_sub_done"]
                 print(f"[cache] Support/TestPkg cache HIT ({int(_st_age)}s old)")
             else:
                 def _fetch_support_breakdown():
-                    r = _sb_exec(lambda _c: _c.rpc("get_support_breakdown_v1", {}).execute())
-                    tot = {}; done = {}
-                    for row in (r.data or []):
-                        _sys = row.get("system") or ""
-                        tot[_sys]  = int(row.get("total") or 0)
-                        done[_sys] = int(row.get("completed") or 0)
-                    return tot, done
+                    """support_master 전체 스캔 — system/unit/area/sub_area 4개 차원 동시 집계"""
+                    sys_tot={}; sys_done={}; unit_tot={}; unit_done={}
+                    area_tot={}; area_done={}; sub_tot={}; sub_done={}
+                    off, bsz = 0, 1000
+                    while True:
+                        r = _sb_exec(lambda _c: _c.table("support_master")
+                                     .select("system,unit,area,sub_area,date_completed")
+                                     .range(off, off + bsz - 1).execute())
+                        rows = r.data or []
+                        for row in rows:
+                            done = 1 if row.get("date_completed") else 0
+                            for key, tot_m, done_m in (
+                                (row.get("system")   or "", sys_tot,  sys_done),
+                                (row.get("unit")      or "", unit_tot, unit_done),
+                                (row.get("area")       or "", area_tot, area_done),
+                                (row.get("sub_area")   or "", sub_tot,  sub_done),
+                            ):
+                                tot_m[key]  = tot_m.get(key, 0) + 1
+                                done_m[key] = done_m.get(key, 0) + done
+                        if len(rows) < bsz: break
+                        off += bsz
+                    return sys_tot, sys_done, unit_tot, unit_done, area_tot, area_done, sub_tot, sub_done
 
                 def _fetch_test_breakdown():
-                    r = _sb_exec(lambda _c: _c.rpc("get_test_breakdown_v1", {}).execute())
-                    tot = {}; done = {}
-                    for row in (r.data or []):
-                        _sys = row.get("system") or ""
-                        tot[_sys]  = int(row.get("total") or 0)
-                        done[_sys] = int(row.get("completed") or 0)
-                    return tot, done
+                    """test_package_master 전체 스캔 — system/sub_area 집계 (unit/area 컬럼 없음)"""
+                    sys_tot={}; sys_done={}; sub_tot={}; sub_done={}
+                    off, bsz = 0, 1000
+                    while True:
+                        r = _sb_exec(lambda _c: _c.table("test_package_master")
+                                     .select("system,sub_area,completed")
+                                     .range(off, off + bsz - 1).execute())
+                        rows = r.data or []
+                        for row in rows:
+                            done = 1 if row.get("completed") else 0
+                            for key, tot_m, done_m in (
+                                (row.get("system")   or "", sys_tot, sys_done),
+                                (row.get("sub_area") or "", sub_tot, sub_done),
+                            ):
+                                tot_m[key]  = tot_m.get(key, 0) + 1
+                                done_m[key] = done_m.get(key, 0) + done
+                        if len(rows) < bsz: break
+                        off += bsz
+                    return sys_tot, sys_done, sub_tot, sub_done
 
                 _sup_ex = ThreadPoolExecutor(max_workers=2)
                 _sup_ok = _tst_ok = False
@@ -969,26 +998,32 @@ def _build():
                     _fut_tst = _sup_ex.submit(_fetch_test_breakdown)
                     _t0 = time.time()
                     try:
-                        _sup_s_tot, _sup_s_done = _fut_sup.result(timeout=60)
+                        (_sup_s_tot, _sup_s_done, _sup_u_tot, _sup_u_done,
+                         _sup_a_tot, _sup_a_done, _sup_sa_tot, _sup_sa_done) = _fut_sup.result(timeout=60)
                         _sup_ok = True
                     except Exception as _se:
                         print(f"[cache] support breakdown failed: {_se}")
-                        _sup_s_tot, _sup_s_done = {}, {}
+                        _sup_s_tot, _sup_s_done, _sup_u_tot, _sup_u_done = {}, {}, {}, {}
+                        _sup_a_tot, _sup_a_done, _sup_sa_tot, _sup_sa_done = {}, {}, {}, {}
                     _remaining = max(1.0, 60 - (time.time() - _t0))
                     try:
-                        _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=_remaining)
+                        _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = _fut_tst.result(timeout=_remaining)
                         _tst_ok = True
                     except Exception as _te:
                         print(f"[cache] testpkg breakdown failed: {_te}")
-                        _tst_s_tot, _tst_s_done = {}, {}
+                        _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = {}, {}, {}, {}
                 finally:
                     _sup_ex.shutdown(wait=False)
 
                 if _sup_ok or _tst_ok:
                     with _lock:
                         _sup_test_cache["data"] = {
-                            "sup_tot":  _sup_s_tot,  "sup_done": _sup_s_done,
-                            "tst_tot":  _tst_s_tot,  "tst_done": _tst_s_done,
+                            "sup_sys_tot": _sup_s_tot,   "sup_sys_done": _sup_s_done,
+                            "sup_unit_tot": _sup_u_tot,  "sup_unit_done": _sup_u_done,
+                            "sup_area_tot": _sup_a_tot,  "sup_area_done": _sup_a_done,
+                            "sup_sub_tot": _sup_sa_tot,  "sup_sub_done": _sup_sa_done,
+                            "tst_sys_tot": _tst_s_tot,   "tst_sys_done": _tst_s_done,
+                            "tst_sub_tot": _tst_sa_tot,  "tst_sub_done": _tst_sa_done,
                         }
                         _sup_test_cache["time"] = time.time()
                 else:
@@ -1017,7 +1052,23 @@ def _build():
                 _item["support_comp"]  = _sup_s_done.get(_s, 0)
                 _item["testpkg_total"] = _tst_s_tot.get(_s, 0)
                 _item["testpkg_comp"]  = _tst_s_done.get(_s, 0)
-            print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}, systems={len(raw.get('systems', []))}")
+            for _item in (raw.get("units") or []):
+                _u = _item.get("unit") or ""
+                _item["support_total"] = _sup_u_tot.get(_u, 0)
+                _item["support_comp"]  = _sup_u_done.get(_u, 0)
+            for _item in (raw.get("areas") or []):
+                _a = _item.get("area") or ""
+                _item["support_total"] = _sup_a_tot.get(_a, 0)
+                _item["support_comp"]  = _sup_a_done.get(_a, 0)
+            for _item in (raw.get("subareas") or []):
+                _sa = _item.get("sub_area") or _item.get("area") or ""
+                _item["support_total"] = _sup_sa_tot.get(_sa, 0)
+                _item["support_comp"]  = _sup_sa_done.get(_sa, 0)
+                _item["testpkg_total"] = _tst_sa_tot.get(_sa, 0)
+                _item["testpkg_comp"]  = _tst_sa_done.get(_sa, 0)
+            print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}, "
+                  f"systems={len(raw.get('systems', []))} units={len(raw.get('units', []))} "
+                  f"areas={len(raw.get('areas', []))} subareas={len(raw.get('subareas', []))}")
         except Exception as sp_e:
             print(f"[cache] support/testpkg agg error: {sp_e}")
             traceback.print_exc()
