@@ -677,7 +677,7 @@ async function renderOverview(kpi, wkData, units, systems) {
                 const diffSign = diffPct >= 0 ? "+" : "";
                 const wkLabel  = wkData[lastActIdx]?.week_label || `W${lastActIdx + 1}`;
                 scurveKpiEl.innerHTML =
-                    `<span style="opacity:0.55;font-size:9px">AS OF ${wkLabel}</span>` +
+                    `<span style="opacity:0.55;font-size:9px">PIPING D/I &middot; AS OF ${wkLabel}</span>` +
                     `<span>PLAN <b style="color:#60a5fa">${planPct.toFixed(2)}%</b></span>` +
                     `<span>ACTUAL <b style="color:#22d3a1">${actPct.toFixed(2)}%</b></span>` +
                     `<span>DIFF <b style="color:${diffClr}">${diffSign}${diffPct.toFixed(2)}%</b></span>`;
@@ -1145,7 +1145,7 @@ async function loadWeekly() {
             monthMap[mo].erect     += w.erect_di     || 0;
             monthMap[mo].completed += w.completed_di || 0;
         });
-        const monthlyData=Object.entries(monthMap).sort(([a],[b])=>a.localeCompare(b));
+        const monthlyData=Object.entries(monthMap).sort(([a],[b])=>a.localeCompare(b)).slice(-4);
         destroyChart("monthlyTrend");
         const moEl=document.getElementById("monthlyTrend");
         if(moEl && monthlyData.length){
