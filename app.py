@@ -538,7 +538,7 @@ def _build_secondary_caches():
             sys_di_m = defaultdict(float); unit_di_m = defaultdict(float)
             area_di_m = defaultdict(float); sub_di_m = defaultdict(float)
             c_di = c_fab = c_erect = 0.0; c_joints = 0
-            off, bsz = 0, 1000
+            off, bsz = 0, 10000
             while True:
                 r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
                       .not_.is_("date_completed", "null").order("id").range(off, off + bsz - 1).execute()
@@ -668,7 +668,7 @@ def _build_secondary_caches():
                 sub_total: dict = {}; sub_comp: dict = {}
                 _soff = 0
                 while True:
-                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").range(_soff, _soff + 999).execute()
+                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").range(_soff, _soff + 9999).execute()
                     for r in (_sr.data or []):
                         sa = r.get("sub_area") or ""
                         if not sa:
@@ -677,19 +677,38 @@ def _build_secondary_caches():
                         sub_total[sa] = sub_total.get(sa, 0) + di
                         if r.get("date_completed"):
                             sub_comp[sa] = sub_comp.get(sa, 0) + di
-                    if len(_sr.data or []) < 1000:
+                    if len(_sr.data or []) < 10000:
                         break
-                    _soff += 1000
+                    _soff += 10000
                 m_sub = sorted(sub_total.keys())
+                # 기존 subareas의 Support/Test 필드 보존 (덮어쓰기로 사라지지 않도록 병합)
+                with _lock:
+                    _old_subareas = {
+                        o.get("sub_area"): o for o in ((_cache.get("data") or {}).get("subareas") or [])
+                        if isinstance(o, dict) and o.get("sub_area")
+                    }
                 subareas = []
                 for sa in m_sub:
                     t = sub_total[sa]; c = sub_comp.get(sa, 0)
+                    old = _old_subareas.get(sa) or {}
+                    sup_tot = old.get("support_total", 0) or 0; sup_comp = old.get("support_comp", 0) or 0
+                    tst_tot = old.get("testpkg_total", 0) or 0; tst_comp = old.get("testpkg_comp", 0) or 0
+                    di_pct  = round(c / t * 100, 2) if t > 0 else 0.0
+                    sup_pct = round(sup_comp / sup_tot * 100, 2) if sup_tot > 0 else 0.0
+                    tst_pct = round(tst_comp / tst_tot * 100, 2) if tst_tot > 0 else 0.0
                     subareas.append({
-                        "sub_area":     sa,
-                        "total_di":     t,
-                        "completed_di": c,
-                        "remaining_di": t - c,
-                        "progress_pct": round(c / t * 100, 1) if t > 0 else 0.0,
+                        "sub_area":         sa,
+                        "total_di":         t,
+                        "completed_di":     c,
+                        "remaining_di":     t - c,
+                        "progress_pct":     di_pct,
+                        "support_total":    sup_tot,
+                        "support_comp":     sup_comp,
+                        "support_pct":      sup_pct,
+                        "testpkg_total":    tst_tot,
+                        "testpkg_comp":     tst_comp,
+                        "testpkg_pct":      tst_pct,
+                        "unified_readiness": round(di_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2),
                     })
                 with _lock:
                     _sub_area_cache["data"] = m_sub
@@ -711,7 +730,7 @@ def _build_secondary_caches():
         except Exception as e:
             print(f"[secondary_cache] jm_iso_stats failed: {e}")
 
-    ex = ThreadPoolExecutor(max_workers=4)
+    ex = ThreadPoolExecutor(max_workers=2)
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
@@ -950,7 +969,7 @@ def _build():
                     """support_master 전체 스캔 — system/unit/area/sub_area 4개 차원 동시 집계"""
                     sys_tot={}; sys_done={}; unit_tot={}; unit_done={}
                     area_tot={}; area_done={}; sub_tot={}; sub_done={}
-                    off, bsz = 0, 1000
+                    off, bsz = 0, 10000
                     while True:
                         r = _sb_exec(lambda _c: _c.table("support_master")
                                      .select("system,unit,area,sub_area,date_completed")
@@ -973,7 +992,7 @@ def _build():
                 def _fetch_test_breakdown():
                     """test_package_master 전체 스캔 — system/sub_area 집계 (unit/area 컬럼 없음)"""
                     sys_tot={}; sys_done={}; sub_tot={}; sub_done={}
-                    off, bsz = 0, 1000
+                    off, bsz = 0, 10000
                     while True:
                         r = _sb_exec(lambda _c: _c.table("test_package_master")
                                      .select("system,sub_area,completed")
@@ -1553,10 +1572,10 @@ def api_joints_packages():
                 q = q.eq("system", system)
             rows, off = [], 0
             while True:
-                r = q.range(off, off + 999).execute()
+                r = q.range(off, off + 9999).execute()
                 rows.extend(r.data or [])
-                if len(r.data or []) < 1000: break
-                off += 1000
+                if len(r.data or []) < 10000: break
+                off += 10000
             return jsonify(sorted(set(r["package"] for r in rows if r.get("package"))))
     except Exception as e:
         return jsonify([])
@@ -1599,10 +1618,10 @@ def api_joints_filter_values():
     try:
         rows, off = [], 0
         while True:
-            r = get_sb().table("joint_master").select(col).range(off, off + 999).execute()
+            r = get_sb().table("joint_master").select(col).range(off, off + 9999).execute()
             rows.extend(r.data or [])
-            if len(r.data or []) < 1000: break
-            off += 1000
+            if len(r.data or []) < 10000: break
+            off += 10000
         seen, vals = set(), []
         for r in rows:
             v = r.get(col)
@@ -1687,10 +1706,10 @@ def api_weekly_last_breakdown():
                .not_.is_("date_completed", "null")
         _off = 0
         while True:
-            _page = _q.range(_off, _off + 999).execute().data or []
+            _page = _q.range(_off, _off + 9999).execute().data or []
             joints.extend(_page)
-            if len(_page) < 1000: break
-            _off += 1000
+            if len(_page) < 10000: break
+            _off += 10000
 
         # 4. Aggregate
         sys_map, sub_map, mat_map = {}, {}, {}
@@ -1770,7 +1789,7 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
     if date_to:   q = q.lte("date_completed", date_to)
     if system:    q = q.eq("system", system)
     if welder:    q = q.ilike("welder", f"%{welder}%")
-    rows, off, bsz = [], 0, 1000
+    rows, off, bsz = [], 0, 10000
     while True:
         page = q.order("id").range(off, off + bsz - 1).execute().data or []
         rows.extend(page)
@@ -1942,7 +1961,7 @@ def api_welder_summary():
             if date_to:   q = q.lte("date_completed", date_to)
             if sys_:      q = q.eq("system", sys_)
             fab_map = {}; erect_map = {}
-            off, bsz = 0, 1000
+            off, bsz = 0, 10000
             while True:
                 rows = q.order("id").range(off, off + bsz - 1).execute().data or []
                 for row in rows:
@@ -2274,13 +2293,13 @@ def api_rt_quality():
                      .select(cols)
                      .not_.is_("rt_date", "null")
                      .order("rt_date")
-                     .range(offset_, offset_ + 999)
+                     .range(offset_, offset_ + 9999)
                      .execute())
             batch = res.data or []
             rows.extend(batch)
-            if len(batch) < 1000:
+            if len(batch) < 10000:
                 break
-            offset_ += 1000
+            offset_ += 10000
 
         def pct(n, d):
             return round(n / d * 100, 1) if d else 0.0
@@ -2417,11 +2436,11 @@ def api_area_field_quantities():
             r = (sb.table("support_master")
                    .select("sub_area")
                    .in_("sub_area", TARGET_SUBS)
-                   .range(ea_off, ea_off + 999).execute())
+                   .range(ea_off, ea_off + 9999).execute())
             ea_rows.extend(r.data or [])
-            if len(r.data or []) < 1000:
+            if len(r.data or []) < 10000:
                 break
-            ea_off += 1000
+            ea_off += 10000
         ea_by_sub = dict(Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
 
         return jsonify({"di": di_by_sub, "ea": ea_by_sub})
@@ -2569,7 +2588,7 @@ def api_support_sync_phase_package():
         _joff = 0
         while True:
             jm_res = sb.table("joint_master").select("iso_drawing, phase, package") \
-                .not_.is_("iso_drawing", "null").range(_joff, _joff + 999).execute()
+                .not_.is_("iso_drawing", "null").range(_joff, _joff + 9999).execute()
             for row in (jm_res.data or []):
                 iso = (row.get("iso_drawing") or "").strip()
                 ph  = (row.get("phase")   or "").strip() or None
@@ -2580,9 +2599,9 @@ def api_support_sync_phase_package():
                     else:
                         if ph  and not iso_map[iso]["phase"]:   iso_map[iso]["phase"]   = ph
                         if pkg and not iso_map[iso]["package"]: iso_map[iso]["package"] = pkg
-            if len(jm_res.data or []) < 1000: del jm_res; break
+            if len(jm_res.data or []) < 10000: del jm_res; break
             del jm_res
-            _joff += 1000
+            _joff += 10000
 
         if not iso_map:
             return jsonify({"ok": False, "error": "joint_master에 phase/package 데이터 없음"}), 404
@@ -2592,11 +2611,11 @@ def api_support_sync_phase_package():
         _soff = 0
         while True:
             sm_res = sb.table("support_master").select("id, iso_drawing, phase, package") \
-                .not_.is_("iso_drawing", "null").range(_soff, _soff + 999).execute()
+                .not_.is_("iso_drawing", "null").range(_soff, _soff + 9999).execute()
             sm_rows.extend(sm_res.data or [])
-            if len(sm_res.data or []) < 1000: del sm_res; break
+            if len(sm_res.data or []) < 10000: del sm_res; break
             del sm_res
-            _soff += 1000
+            _soff += 10000
 
         # Batch upsert — eliminates N individual UPDATE queries
         upsert_records = []
@@ -2642,11 +2661,11 @@ def api_support_sync_drawing():
         while True:
             r = draw_sb.table("support_latest") \
                 .select("support_drawing,type,revision,iso_drawing,line_no,system") \
-                .range(_doff, _doff + 999).execute()
+                .range(_doff, _doff + 9999).execute()
             draw_rows.extend(r.data or [])
-            if len(r.data or []) < 1000: del r; break
+            if len(r.data or []) < 10000: del r; break
             del r
-            _doff += 1000
+            _doff += 10000
 
         draw_map = {row["support_drawing"].strip(): row for row in draw_rows if row.get("support_drawing")}
         del draw_rows
@@ -2657,11 +2676,11 @@ def api_support_sync_drawing():
         while True:
             r = sb.table("support_master") \
                 .select("id,support_drawing,revision,type") \
-                .range(_soff, _soff + 999).execute()
+                .range(_soff, _soff + 9999).execute()
             sm_rows.extend(r.data or [])
-            if len(r.data or []) < 1000: del r; break
+            if len(r.data or []) < 10000: del r; break
             del r
-            _soff += 1000
+            _soff += 10000
 
         sm_map = {row["support_drawing"].strip(): row for row in sm_rows if row.get("support_drawing")}
         del sm_rows
@@ -2672,14 +2691,14 @@ def api_support_sync_drawing():
         while True:
             r = sb.table("joint_master") \
                 .select("iso_drawing,phase,package,unit,system,area,sub_area") \
-                .not_.is_("iso_drawing", "null").range(_joff, _joff + 999).execute()
+                .not_.is_("iso_drawing", "null").range(_joff, _joff + 9999).execute()
             for row in (r.data or []):
                 iso = (row.get("iso_drawing") or "").strip()
                 if iso and iso not in jm_map:
                     jm_map[iso] = row
-            if len(r.data or []) < 1000: del r; break
+            if len(r.data or []) < 10000: del r; break
             del r
-            _joff += 1000
+            _joff += 10000
 
         # 4. 기존 행 — type/revision 업데이트
         update_batch = []
@@ -2892,10 +2911,10 @@ def api_testpkg_sync():
         pkgs, off = [], 0
         while True:
             r = sb.table("joint_master").select("system,sub_area,package") \
-                    .not_.is_("package", "null").range(off, off + 999).execute()
+                    .not_.is_("package", "null").range(off, off + 9999).execute()
             pkgs.extend(r.data or [])
-            if len(r.data or []) < 1000: break
-            off += 1000
+            if len(r.data or []) < 10000: break
+            off += 10000
         del r
 
         seen: dict = {}
@@ -2954,11 +2973,11 @@ def _compute_daily_report():
         .not_.is_("date_completed", "null")
     _off = 0
     while True:
-        _page = _q.range(_off, _off + 999).execute().data or []
+        _page = _q.range(_off, _off + 9999).execute().data or []
         joints.extend(_page)
-        if len(_page) < 1000:
+        if len(_page) < 10000:
             break
-        _off += 1000
+        _off += 10000
 
     daily: dict = {}
     for j in joints:
@@ -3106,4 +3125,4 @@ def compress_response(resp):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5005, debug=False)
+    app.run(host="0.0.0.0", port=5005, debug=False, threaded=True)
