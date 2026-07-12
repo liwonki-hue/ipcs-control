@@ -408,6 +408,19 @@ def _fast_kpi_sync(target=None):
             kpi["overall_pct"] * 0.7
             + (kpi.get("support_pct") or 0) * 0.2
             + (kpi.get("testpkg_pct") or 0) * 0.1, 2)
+
+        # weekly cumul_actual은 느린 백그라운드 전체 스캔(_load_kpi_override)이 끝나야 보정되므로,
+        # 그 전까지 S-Curve ACTUAL%이 위 kpi.overall_pct와 어긋나 보이지 않도록 비례 축척으로 즉시 맞춘다.
+        weekly = cur.get("weekly") or []
+        old_sum = sum(float(w.get("completed_di") or 0) for w in weekly)
+        if old_sum > 0 and c_di > 0:
+            ratio = c_di / old_sum
+            cum = 0.0
+            for w in weekly:
+                w["completed_di"] = round(float(w.get("completed_di") or 0) * ratio, 2)
+                cum += w["completed_di"]
+                w["cumul_actual"] = round(cum, 2)
+
         def _repct(item, new_cdi):
             item["completed_di"] = round(new_cdi, 2)
             tdiv = item.get("total_di") or 0
