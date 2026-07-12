@@ -1683,15 +1683,6 @@ def api_joints_patch(jid):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/joints/<int:jid>", methods=["DELETE"])
-@admin_required
-def api_joints_delete(jid):
-    try:
-        get_sb().table("joint_master").delete().eq("id", jid).execute()
-        return jsonify({"ok": True})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 
 # ── Weekly Last-Week System/SubArea Breakdown ─────────────────────────
 @app.route("/api/weekly-last-breakdown")

@@ -1686,18 +1686,6 @@ async function saveNdeRow(id){
     }catch(e){ toast("✗ Save failed: " + e.message, "error"); }
 }
 
-
-async function deleteJoint(id){
-    if(!confirm("Are you sure you want to delete this joint? (ID: "+id+")"))return;
-    try{
-        const r=await fetch(`${API}/api/joints/${id}`,{method:"DELETE"});
-        if(!r.ok)throw new Error('HTTP '+r.status);
-        fetch("/api/cache/clear").catch(()=>{});
-        toast(`✓ Joint ID ${id} deleted`);
-        loadJointMaster();
-    }catch(e){toast("✗ Failed to delete","error");}
-}
-
 async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},
