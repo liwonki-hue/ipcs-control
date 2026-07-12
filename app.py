@@ -1216,7 +1216,7 @@ _meta_cache = {"time": 0, "data": None}
 @app.route("/api/cache/clear")
 @login_required
 def api_cache_clear():
-    global _building
+    global _building, _jm_iso_stats_building
     with _lock:
         _cache.clear()
         _meta_cache["time"] = 0
@@ -1607,6 +1607,7 @@ def api_joints_packages():
                 off += 10000
             return jsonify(sorted(set(r["package"] for r in rows if r.get("package"))))
     except Exception as e:
+        print(f"[joints/packages] error: {e}")
         return jsonify([])
 
 def _populate_jm_fv_cache_via_rpc():
