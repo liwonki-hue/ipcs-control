@@ -2068,7 +2068,7 @@ async function loadWelder() {
         ]);
         if (!res.ok) throw new Error("API error " + res.status);
         _welderData = await res.json();
-        renderWelder(_welderData, dashData);
+        renderWelder(_welderData);
         renderWelderDaily(dailyData, _welderData.weekly || []);
     } catch(e) {
         console.error("Welder load failed", e);
@@ -2140,7 +2140,7 @@ function renderWelderDaily(daily, weekly) {
 // Helper: render one half of a welder table (No / Welder ID / Joint / Fab DI / Erect DI / Total DI / Avg DI/Day)
 function _welderHalfRows(rows, startIdx, accentColor) {
     if (!rows.length) return "";
-    return rows.map((r, i) => `<tr>
+    return rows.map((r, i) => `<tr onclick="drillWelder('${r.welder}')" style="cursor:pointer">
         <td style="text-align:center;color:var(--text-dim)">${startIdx + i + 1}</td>
         <td style="color:${accentColor}">${r.welder}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.joints, 1)}</td>
@@ -2178,7 +2178,7 @@ function _welderSubTable(rows, startIdx, accentColor) {
     </table>`;
 }
 
-function renderWelder(data, dashData) {
+function renderWelder(data) {
     const s = data.stats || {};
     const ranking = data.ranking || [];
     const totalFab   = ranking.reduce((sum, r) => sum + (r.fab_di   || 0), 0);
@@ -2282,7 +2282,7 @@ function renderWelder(data, dashData) {
                           title: { display: true, text: "AVG DI/DAY PER WELDER", color: "#4a6080", font: { size: 10 } } }
                 },
                 plugins: {
-                    legend: { position: "top", align: "end", labels: { color: "#475569", font: { size: 10 }, boxWidth: 10, padding: 10 } },
+                    legend: { position: "top", align: "start", labels: { color: "#475569", font: { size: 10 }, boxWidth: 10, padding: 10 } },
                     tooltip: { backgroundColor: "#111827", borderColor: "#1e2d45", borderWidth: 1,
                                titleColor: "#e2eaf6", bodyColor: "#7a95b8", padding: 10 }
                 }
