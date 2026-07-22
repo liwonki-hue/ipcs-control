@@ -2813,6 +2813,8 @@ function renderTPTable(rows) {
         const insp = r.inspection || "";
         const inspColor = insp === "RT" ? "var(--orange)" : insp === "VT" ? "var(--accent)" : "var(--text-dim)";
         const inspLabel = insp === "RT" ? "VT/RT" : insp || "-";
+        const vtLocked = !r.date_completed || !r.inspection;
+        const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date and Inspection first"` : "";
         return `<tr id="tprow-${r.id}">
           <td style="text-align:center">${r.system||""}</td>
           <td style="font-weight:600;color:var(--indigo)">${r.package||""}</td>
@@ -2820,9 +2822,9 @@ function renderTPTable(rows) {
           <td style="text-align:center">${r.joint_no||""}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
           <td style="text-align:center;font-weight:700;font-size:11px;color:${inspColor}">${inspLabel}</td>
-          <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:pointer" onclick="_pickDate(this)" readonly></td>
+          <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLocked?'':'onclick="_pickDate(this)"'} readonly ${vtLockAttrs}></td>
           <td style="padding:2px;text-align:center">
-            <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:pointer">
+            <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
               <option value="" style="color:#000">-</option>
               <option value="PASS" style="color:#000" ${r.vt_result==="PASS"?"selected":""}>PASS</option>
               <option value="FAIL" style="color:#000" ${r.vt_result==="FAIL"?"selected":""}>FAIL</option>
@@ -2846,6 +2848,11 @@ function renderTPTable(rows) {
 async function saveTPVT(id) {
     let vtDate = _fullDateVal(`tp-vt-date-${id}`);
     const vtRes  = document.getElementById(`tp-vt-res-${id}`)?.value || "";
+    const row = tpData.find(r => r.id === id);
+    if ((vtDate || vtRes) && (!row?.date_completed || !row?.inspection)) {
+        toast("Weld Date and Inspection must be entered first in Joint Master.", "error");
+        return;
+    }
     try {
         const r = await fetch(`${API}/api/joints/${id}`, {
             method: "PATCH",

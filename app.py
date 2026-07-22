@@ -1678,7 +1678,16 @@ def api_joints_post():
 @login_required
 def api_joints_patch(jid):
     try:
-        get_sb().table("joint_master").update(request.get_json()).eq("id", jid).execute()
+        body = request.get_json()
+        sb = get_sb()
+        if body.get("vt_date") or body.get("vt_result"):
+            existing = sb.table("joint_master").select("date_completed,inspection").eq("id", jid).limit(1).execute().data
+            existing = existing[0] if existing else {}
+            weld = body["date_completed"] if "date_completed" in body else existing.get("date_completed")
+            insp = body["inspection"] if "inspection" in body else existing.get("inspection")
+            if not weld or not insp:
+                return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
+        sb.table("joint_master").update(body).eq("id", jid).execute()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
