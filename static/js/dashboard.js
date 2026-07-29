@@ -2652,10 +2652,6 @@ function renderSMTable(rows) {
     }
     tbody.innerHTML = rows.map(r => {
         const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
-        const ps = r.piping_status;
-        const isoColor = ps === "completed" ? "color:#38bdf8;font-weight:600;"
-                       : ps === "ongoing"   ? "color:#4ade80;font-weight:600;"
-                       : "";
         return `<tr id="smrow-${r.id}">
           <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="width:100%;text-align:center;padding:2px 4px"></td>
           <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${r.package||""}" style="text-align:center"></td>
@@ -2666,7 +2662,7 @@ function renderSMTable(rows) {
           <td>${r.support_drawing||""}</td>
           <td style="text-align:center">${r.type||""}</td>
           <td>${r.revision||""}</td>
-          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all;${isoColor}" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td>${r.line_no||""}</td>
           <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">
