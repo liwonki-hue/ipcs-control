@@ -347,8 +347,7 @@ function navigate(page) {
 // ================================================================================
 const _apiCache = new Map();   // url → {data, exp}
 const _CACHE_TTL = 120_000;    // 2분 — 읽기전용 API 재사용 TTL
-const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master",
-                             "/api/nde-pwht", "/api/rt-quality", "/api/test-master"];
+const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master", "/api/rt-quality"];
 
 async function apiFetch(url, { noCache = false } = {}) {
     const useCache = !noCache && !_NO_CACHE_PATTERNS.some(p => url.startsWith(p));
@@ -2596,18 +2595,17 @@ async function applySmBulkDate() {
     if (btn) { btn.disabled = true; btn.textContent = "Saving..."; }
     
     try {
-        let saved = 0;
-        for (const r of targets) {
-            await fetch(`${API}/api/support-master/${r.id}`, {
-                method: "PATCH", 
-                headers: {"Content-Type": "application/json"}, 
+        await Promise.all(targets.map(r =>
+            fetch(`${API}/api/support-master/${r.id}`, {
+                method: "PATCH",
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({date_completed: dateVal, completed: true})
-            });
-            const el = document.getElementById(`sm-date-${r.id}`);
-            if (el) { el.value = dateVal.slice(2); el.dataset.fullDate = dateVal; el.classList.remove("date-empty"); }
-            saved++;
-        }
-        toast(`✓ ${saved} items saved — KPI updating...`);
+            }).then(() => {
+                const el = document.getElementById(`sm-date-${r.id}`);
+                if (el) { el.value = dateVal.slice(2); el.dataset.fullDate = dateVal; el.classList.remove("date-empty"); }
+            })
+        ));
+        toast(`✓ ${targets.length} items saved — KPI updating...`);
         fetch("/api/cache/clear");
         updateSmIsoBulkPanel(isoVal, smData);
     } catch(e) { toast(`✗ Bulk save failed: ${e.message}`, "error"); }
@@ -2627,15 +2625,16 @@ async function clearSmBulkDate() {
     if (!confirm(`Delete dates for all ${targets.length} items?`)) return;
     
     try {
-        for (const r of targets) {
-            await fetch(`${API}/api/support-master/${r.id}`, {
-                method: "PATCH", 
-                headers: {"Content-Type": "application/json"}, 
+        await Promise.all(targets.map(r =>
+            fetch(`${API}/api/support-master/${r.id}`, {
+                method: "PATCH",
+                headers: {"Content-Type": "application/json"},
                 body: JSON.stringify({date_completed: null, completed: false})
-            });
-            const el = document.getElementById(`sm-date-${r.id}`);
-            if (el) { el.value = ""; delete el.dataset.fullDate; el.classList.add("date-empty"); }
-        }
+            }).then(() => {
+                const el = document.getElementById(`sm-date-${r.id}`);
+                if (el) { el.value = ""; delete el.dataset.fullDate; el.classList.add("date-empty"); }
+            })
+        ));
         toast(`✓ ${targets.length} items cleared — KPI updating...`);
         fetch("/api/cache/clear");
         updateSmIsoBulkPanel(isoVal, smData);

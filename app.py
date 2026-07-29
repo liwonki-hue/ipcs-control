@@ -1665,15 +1665,6 @@ def api_joints_filter_values():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/joints", methods=["POST"])
-@login_required
-def api_joints_post():
-    try:
-        res = get_sb().table("joint_master").insert(request.get_json()).execute()
-        return jsonify({"ok": True, "data": res.data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route("/api/joints/<int:jid>", methods=["PATCH"])
 @login_required
 def api_joints_patch(jid):
@@ -2486,7 +2477,17 @@ def api_ep_support_summary():
         if cached and time.time() - _ep_sup_cache.get("time", 0) < CACHE_TTL:
             return jsonify(cached)
     try:
-        rows = get_sb().table("support_master").select("system,sub_area,area,date_completed").eq("phase","EP").execute().data or []
+        sb = get_sb()
+        rows, off = [], 0
+        while True:
+            r = (sb.table("support_master")
+                   .select("system,sub_area,area,date_completed")
+                   .eq("phase", "EP")
+                   .range(off, off + 9999).execute())
+            rows.extend(r.data or [])
+            if len(r.data or []) < 10000:
+                break
+            off += 10000
         sys_map, area_map, subarea_map = {}, {}, {}
         for r in rows:
             s, sa, ar = r.get("system",""), r.get("sub_area",""), r.get("area","")
@@ -2567,15 +2568,6 @@ def api_support_get():
                 r["piping_status"] = "ongoing"
 
         return jsonify({"data": sm_rows, "count": res.count})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/api/support-master", methods=["POST"])
-@login_required
-def api_support_post():
-    try:
-        res = get_sb().table("support_master").insert(request.get_json()).execute()
-        return jsonify({"ok": True, "data": res.data})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2893,15 +2885,6 @@ def api_testpkg_get():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/testpkg-master", methods=["POST"])
-@login_required
-def api_testpkg_post():
-    try:
-        res = get_sb().table("test_package_master").insert(request.get_json()).execute()
-        return jsonify({"ok": True, "data": res.data})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
 @app.route("/api/testpkg-master/<int:rid>", methods=["PATCH"])
 @login_required
 def api_testpkg_patch(rid):
@@ -2935,7 +2918,12 @@ def api_testpkg_sync():
     """joint_master의 distinct package를 test_package_master에 자동 등록 (중복 제외)"""
     try:
         sb = get_sb()
-        existing = sb.table("test_package_master").select("system,test_pkg_no").execute().data or []
+        existing, ex_off = [], 0
+        while True:
+            r = sb.table("test_package_master").select("system,test_pkg_no").range(ex_off, ex_off + 9999).execute()
+            existing.extend(r.data or [])
+            if len(r.data or []) < 10000: break
+            ex_off += 10000
         existing_set = {(r.get("system") or "", r.get("test_pkg_no") or "") for r in existing}
 
         pkgs, off = [], 0
