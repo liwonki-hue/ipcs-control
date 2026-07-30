@@ -347,7 +347,7 @@ function navigate(page) {
 // ================================================================================
 const _apiCache = new Map();   // url → {data, exp}
 const _CACHE_TTL = 120_000;    // 2분 — 읽기전용 API 재사용 TTL
-const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master", "/api/rt-quality"];
+const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master", "/api/testpkg-joints", "/api/rt-quality"];
 
 async function apiFetch(url, { noCache = false } = {}) {
     const useCache = !noCache && !_NO_CACHE_PATTERNS.some(p => url.startsWith(p));
