@@ -763,17 +763,26 @@ def _build_secondary_caches():
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
-    f4 = ex.submit(_load_kpi_override)
-    f5 = ex.submit(_load_sub_areas)
     f6 = ex.submit(_load_daily_report)
     f7 = ex.submit(_load_jm_iso_stats)
-    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f4,"kpi_override"),(f5,"sub_areas"),(f6,"daily_report"),(f7,"jm_iso_stats")]:
+    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f6,"daily_report"),(f7,"jm_iso_stats")]:
         try: f.result(timeout=120)
         except Exception as _e: print(f"[secondary_cache] {name} timeout/error: {_e}")
     try:
         ex.shutdown(wait=False, cancel_futures=True)
     except TypeError:
         ex.shutdown(wait=False)
+
+    # joint_master 전체 스캔 2건(kpi_override, sub_areas)은 동시 실행 시 메모리 스파이크
+    # (Render OOM 원인) 위험이 있어 병렬 풀에서 빼고 순차 실행
+    try:
+        _load_kpi_override()
+    except Exception as _e:
+        print(f"[secondary_cache] kpi_override timeout/error: {_e}")
+    try:
+        _load_sub_areas()
+    except Exception as _e:
+        print(f"[secondary_cache] sub_areas timeout/error: {_e}")
     # kpi_override 실패 시 재시도 (소켓 오류 등 일시적 실패 대응)
     if _kpi_override_cache.get("data") is None:
         print("[secondary_cache] kpi_override retry...")
@@ -1051,15 +1060,27 @@ def _build():
                         _sup_ok = True
                     except Exception as _se:
                         print(f"[cache] support breakdown failed: {_se}")
-                        _sup_s_tot, _sup_s_done, _sup_u_tot, _sup_u_done = {}, {}, {}, {}
-                        _sup_a_tot, _sup_a_done, _sup_sa_tot, _sup_sa_done = {}, {}, {}, {}
+                        if _st_data is not None:
+                            print("[cache] support breakdown: keeping previous cached values")
+                            _sup_s_tot, _sup_s_done = _st_data["sup_sys_tot"],  _st_data["sup_sys_done"]
+                            _sup_u_tot, _sup_u_done = _st_data["sup_unit_tot"], _st_data["sup_unit_done"]
+                            _sup_a_tot, _sup_a_done = _st_data["sup_area_tot"], _st_data["sup_area_done"]
+                            _sup_sa_tot, _sup_sa_done = _st_data["sup_sub_tot"], _st_data["sup_sub_done"]
+                        else:
+                            _sup_s_tot, _sup_s_done, _sup_u_tot, _sup_u_done = {}, {}, {}, {}
+                            _sup_a_tot, _sup_a_done, _sup_sa_tot, _sup_sa_done = {}, {}, {}, {}
                     _remaining = max(1.0, 60 - (time.time() - _t0))
                     try:
                         _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = _fut_tst.result(timeout=_remaining)
                         _tst_ok = True
                     except Exception as _te:
                         print(f"[cache] testpkg breakdown failed: {_te}")
-                        _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = {}, {}, {}, {}
+                        if _st_data is not None:
+                            print("[cache] testpkg breakdown: keeping previous cached values")
+                            _tst_s_tot, _tst_s_done = _st_data["tst_sys_tot"], _st_data["tst_sys_done"]
+                            _tst_sa_tot, _tst_sa_done = _st_data["tst_sub_tot"], _st_data["tst_sub_done"]
+                        else:
+                            _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = {}, {}, {}, {}
                 finally:
                     _sup_ex.shutdown(wait=False)
 
