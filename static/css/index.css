@@ -80,6 +80,7 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 .main-area {
   margin-left: var(--sidebar-w);
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -105,14 +106,16 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 
 /* ── KPI Row ── */
 .kpi-row {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr 1fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 14px 20px 10px;
   background: var(--bg);
   flex-shrink: 0;
 }
 .kpi-card {
+  flex: 1 1 150px;
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-top: 2px solid var(--muted);
@@ -120,6 +123,7 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
   padding: 12px 14px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
+.kpi-row .kpi-card:first-child { flex: 1.5 1 220px; }
 .kpi-card.accent { border-top-color: var(--accent); }
 .kpi-card.cyan   { border-top-color: var(--accent); }
 .kpi-card.green  { border-top-color: var(--green); }
@@ -385,7 +389,6 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 
 /* 1280px — 3열→2열, 7열→4열, KPI 6→3열 */
 @media (max-width:1280px) {
-  .kpi-row  { grid-template-columns:repeat(3,1fr); gap:8px; }
   .kpi-value { font-size:20px; }
   .rg3, .rg3-12 { grid-template-columns:1fr 1fr; }
   .rg7      { grid-template-columns:repeat(4,1fr); }
@@ -398,12 +401,13 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 @media (max-width:960px) {
   :root { --sidebar-w:160px; }
   .nav-btn  { font-size:11px; padding:8px 10px; }
-  .kpi-row  { grid-template-columns:repeat(2,1fr); gap:6px; padding:8px 12px; }
+  .kpi-row  { gap:6px; padding:8px 12px; }
   .kpi-value { font-size:18px; }
   .rg-12, .rg2, .rg2-10 { grid-template-columns:1fr; }
   .rg3, .rg3-12 { grid-template-columns:1fr; }
   .rg7      { grid-template-columns:repeat(3,1fr); }
   .grid-2   { grid-template-columns:1fr; }
+  .grid-3   { grid-template-columns:1fr; }
   .grid-4, .grid-6 { grid-template-columns:1fr 1fr; }
   .unit-card-row { grid-template-columns:1fr; }
 }
@@ -416,6 +420,6 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
   .nav-btn  { padding:10px; justify-content:center; gap:0; font-size:0; }
   .nav-btn .nav-icon { font-size:16px; width:auto; }
   .rg7      { grid-template-columns:repeat(2,1fr); }
-  .kpi-row  { grid-template-columns:1fr 1fr; }
+  .kpi-card { flex-basis: 100%; }
   .grid-4, .grid-6 { grid-template-columns:1fr 1fr; }
 }

@@ -210,7 +210,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === "overview"));
         document.querySelectorAll(".page").forEach(p => p.classList.add("hidden"));
         document.getElementById("page-overview")?.classList.remove("hidden");
-        document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "grid");
+        document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
     } catch(e) {
@@ -308,10 +308,10 @@ function navigate(page) {
         const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
-            kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "grid";
+            kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "flex";
         }
         if (epKpiRow) {
-            epKpiRow.style.display = page === "early_power" ? "grid" : "none";
+            epKpiRow.style.display = page === "early_power" ? "flex" : "none";
         }
 
     }
