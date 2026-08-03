@@ -1451,6 +1451,17 @@ function updateIsoBulkPanel(isoVal,rows){
     document.getElementById("jm-iso-info").textContent=`${isoVal}  ·  ${isoRows.length} joints  ·  ${completedCount} completed`;
 }
 
+async function _runConcurrent(items, worker, limit=5){
+    let i=0;
+    async function runNext(){
+        while(i<items.length){
+            const idx=i++;
+            await worker(items[idx]);
+        }
+    }
+    await Promise.all(Array.from({length:Math.min(limit,items.length)}, runNext));
+}
+
 async function applyIsoBulkDate(){
     const isoVal=document.getElementById("jm-iso")?.value?.trim();
     const dateVal=_fullDateVal("jm-bulk-date");
@@ -1463,12 +1474,12 @@ async function applyIsoBulkDate(){
     if(btn){btn.disabled=true;btn.textContent="Saving...";}
     try{
         let saved=0;
-        for(const r of targets){
+        await _runConcurrent(targets, async (r)=>{
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:dateVal})});
             const el=document.getElementById(`date-${r.id}`);
             if(el){el.value=dateVal.slice(2);el.dataset.fullDate=dateVal;el.classList.remove("date-empty");}
             saved++;
-        }
+        });
         toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
         updateIsoBulkPanel(isoVal,jmData);
@@ -1483,10 +1494,10 @@ async function clearIsoBulkDate(){
     if(targets.length===0){toast("No joints found for this ISO","error");return;}
     if(!confirm(`${isoVal}\nDelete dates for all ${targets.length} joints?`))return;
     try{
-        for(const r of targets){
+        await _runConcurrent(targets, async (r)=>{
             await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
             const el=document.getElementById(`date-${r.id}`);if(el){el.value="";delete el.dataset.fullDate;el.classList.add("date-empty");}
-        }
+        });
         toast(`✓ ${targets.length} joints cleared (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
         updateIsoBulkPanel(isoVal,jmData);
@@ -1494,7 +1505,6 @@ async function clearIsoBulkDate(){
 }
 
 function jmGoto(page){jmCurrentPage=Math.max(0,page);loadJointMaster();}
-function jmPage(dir){jmGoto(jmCurrentPage+dir);}
 
 function renderJMTable(rows){
     const tbody=document.getElementById("jmBody");
@@ -1574,7 +1584,6 @@ async function loadNdePwht() {
 }
 
 function ndeGoto(page){ndeCurrentPage=Math.max(0,page);loadNdePwht();}
-function ndePage(dir){ndeGoto(ndeCurrentPage+dir);}
 
 function renderNdeTable(rows){
     const tbody=document.getElementById("ndeBody");
@@ -2642,7 +2651,6 @@ async function clearSmBulkDate() {
 }
 
 function smGoto(page) { smCurrentPage = Math.max(0, page); loadSupportMaster(); }
-function smPage(dir) { smGoto(smCurrentPage + dir); }
 
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
@@ -2768,7 +2776,6 @@ async function loadTestPkgMaster() {
 }
 
 function tpGoto(page) { tpCurrentPage = Math.max(0, page); loadTestPkgMaster(); }
-function tpPage(dir) { tpGoto(tpCurrentPage + dir); }
 
 async function loadSystemPackages() {
     const system = document.getElementById("tp-system")?.value || "";
