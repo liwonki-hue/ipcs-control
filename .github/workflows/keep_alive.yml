@@ -15,7 +15,18 @@ jobs:
         run: |
           # Supabase dashboard_cache 갱신 + Flask 캐시 재빌드 트리거
           # pg_cron 대체: GitHub Actions가 12분마다 캐시 갱신
+          # Render 콜드스타트/재배포 시 순간적인 연결 실패는 재시도로 흡수하고,
+          # 재시도까지 모두 실패한 경우에만 잡을 실패시켜 알림을 보낸다.
+          set +e
           STATUS=$(curl -s -o /tmp/resp.json -w "%{http_code}" \
+            --connect-timeout 10 --max-time 60 \
+            --retry 3 --retry-delay 5 --retry-all-errors \
             https://ipcs-control.onrender.com/api/refresh-db-cache)
-          echo "HTTP $STATUS"
-          cat /tmp/resp.json
+          CURL_EXIT=$?
+          set -e
+          echo "curl exit: $CURL_EXIT, HTTP $STATUS"
+          cat /tmp/resp.json 2>/dev/null || echo "(no response body)"
+          if [ "$CURL_EXIT" -ne 0 ]; then
+            echo "::error::curl failed after retries (exit $CURL_EXIT)"
+            exit 1
+          fi
