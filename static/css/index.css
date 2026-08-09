@@ -73,7 +73,6 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 
 .nav-divider { height: 1px; background: rgba(255,255,255,0.1); margin: 8px 0; }
 .nav-footer { margin-top: auto; padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.1); }
-.refresh-btn { color: var(--muted) !important; font-size: 11px !important; }
 .nav-version { font-size: 9px; color: #93c5fd; text-align: center; padding: 4px 0 8px; letter-spacing: 0.06em; }
 
 /* ══ MAIN AREA ══════════════════════════════════════════════════════ */

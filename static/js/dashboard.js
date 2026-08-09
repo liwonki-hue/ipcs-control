@@ -1766,16 +1766,6 @@ async function saveJointDate(id){
 // ================================================================================
 //  REFRESH
 // ================================================================================
-async function refreshData(){
-    try{
-        await fetch("/api/cache/clear");_dashData=null;_epSupportData=null;
-        const data=await getDashData(true);renderKPI(data.kpi,data.weekly);
-        const visPage=document.querySelector(".page:not(.hidden)")?.id?.replace("page-","");
-        if(visPage)navigate(visPage);
-        toast("↺ Data refreshed!");
-    }catch(e){toast("Refresh failed: "+e.message,"error");}
-}
-
 let _refreshPending = false;
 
 async function _refreshAfterSave() {
