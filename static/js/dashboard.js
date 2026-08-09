@@ -2784,7 +2784,7 @@ async function loadSystemPackages() {
 function _tpResultBadge(result) {
     if (!result) return '<span style="color:var(--text-dim)">-</span>';
     const color = result === "PASS" ? "var(--green)" : "var(--orange)";
-    return `<span style="font-weight:700;color:${color}">${result}</span>`;
+    return `<span style="color:${color}">${result}</span>`;
 }
 
 function renderTPTable(rows) {
@@ -2809,11 +2809,11 @@ function renderTPTable(rows) {
         const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date and Inspection first"` : "";
         return `<tr id="tprow-${r.id}">
           <td style="text-align:center">${r.system||""}</td>
-          <td style="font-weight:600;color:var(--indigo)">${r.package||""}</td>
+          <td style="color:var(--indigo)">${r.package||""}</td>
           <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td style="text-align:center">${r.joint_no||""}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
-          <td style="text-align:center;font-weight:700;font-size:11px;color:${inspColor}">${inspLabel}</td>
+          <td style="text-align:center;font-size:11px;color:${inspColor}">${inspLabel}</td>
           <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLocked?'':'onclick="_pickDate(this)"'} readonly ${vtLockAttrs}></td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
@@ -2830,7 +2830,7 @@ function renderTPTable(rows) {
           <td style="text-align:center;${insp==="RT"?"background:rgba(249,115,22,0.07)":""}">${_tpResultBadge(r.rt_result)}</td>
           <td style="text-align:center;font-size:11px">${pwhtDate||"-"}</td>
           <td style="text-align:center">${_tpResultBadge(r.pwht_result)}</td>
-          <td style="text-align:center;font-weight:700;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
+          <td style="text-align:center;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
           <td style="text-align:center"><button class="btn-save-row auth-write" style="padding:3px 8px;font-size:10px" onclick="saveTPVT(${r.id})">Save</button></td>
         </tr>`;
     }).join("");
