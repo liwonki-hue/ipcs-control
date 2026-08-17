@@ -311,24 +311,33 @@ _jm_iso_stats_building: bool = False  # 중복 빌드 방지 플래그
 
 def _get_jm_iso_stats(force: bool = False) -> dict:
     """joint_master의 iso_drawing별 완료 통계를 반환 (total, completed). 5분 캐시.
-    force=False일 때 캐시가 없으면 백그라운드 빌드를 트리거한 뒤 빈 dict 반환."""
+    force=False일 때 캐시가 없으면 백그라운드 빌드를 트리거한 뒤 빈 dict 반환.
+    스캔 진행 여부는 force와 무관하게 _jm_iso_stats_building 플래그로 단일화하여
+    _build_secondary_caches()의 직접 force=True 호출과 백그라운드 스레드가 동시에
+    joint_master 전체 스캔을 중복 실행하지 않도록 한다 (Render OOM 원인)."""
     global _jm_iso_stats_building
     with _lock:
         cached = _jm_iso_stats_cache.get("data")
         age = time.time() - _jm_iso_stats_cache.get("time", 0)
     if cached is not None and age < 300:
         return cached
+    with _lock:
+        if _jm_iso_stats_building:
+            # 이미 다른 스레드가 스캔 중 — 중복 스캔 방지
+            return _jm_iso_stats_cache.get("data") or {}
+        _jm_iso_stats_building = True
     if not force:
         # 캐시 없으면 백그라운드 빌드 시작 후 빈 dict 반환
-        with _lock:
-            if not _jm_iso_stats_building:
-                _jm_iso_stats_building = True
-                threading.Thread(target=lambda: _get_jm_iso_stats(force=True), daemon=True).start()
+        threading.Thread(target=_scan_jm_iso_stats, daemon=True).start()
         return {}
-    # 페이지네이션으로 joint_master 전체 스캔
+    return _scan_jm_iso_stats()
+
+def _scan_jm_iso_stats() -> dict:
+    """joint_master 전체 페이지네이션 스캔 (호출 전 _jm_iso_stats_building=True 가정)."""
+    global _jm_iso_stats_building
     stats: dict = {}
     try:
-        page_size = 1000
+        page_size = 10000
         off = 0
         while True:
             res = _sb_exec(lambda sb, o=off: sb.table("joint_master")
