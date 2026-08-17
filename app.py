@@ -2570,21 +2570,37 @@ def api_support_get():
         iso_stats = _get_jm_iso_stats(force=False)
 
         # piping_status 필터: joint_master 완료 통계 기반으로 ISO Drawing 목록 제한 (캐시 없으면 건너뜀)
+        qualifying_set = None
         if piping_status in ("completed", "ongoing") and iso_stats:
-            qualifying = [
+            qualifying_set = {
                 iso for iso, st in iso_stats.items()
                 if st["total"] > 0 and (
                     (piping_status == "completed" and st["completed"] == st["total"]) or
                     (piping_status == "ongoing"   and 0 < st["completed"] < st["total"])
                 )
-            ]
-            if qualifying:
-                q = q.in_("iso_drawing", qualifying)
-            else:
+            }
+            if not qualifying_set:
                 return jsonify({"data": [], "count": 0})
 
-        res = q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1).execute()
-        sm_rows = res.data or []
+        if qualifying_set is not None:
+            # ISO 목록이 커지면 .in_() 쿼리 문자열이 PostgREST 한도를 넘어 400 오류가 나므로
+            # (수천 건이면 수십 KB) DB에는 다른 필터만 적용해 전량 스캔한 뒤 Python에서
+            # iso_drawing 멤버십 필터 + 정렬 + 페이지네이션을 적용한다.
+            all_rows = []
+            _off = 0
+            q_ordered = q.order("system").order("pipe_size", desc=True).order("id")
+            while True:
+                _page = q_ordered.range(_off, _off + 9999).execute().data or []
+                all_rows.extend(r for r in _page if r.get("iso_drawing") in qualifying_set)
+                if len(_page) < 10000:
+                    break
+                _off += 10000
+            total_count = len(all_rows)
+            sm_rows = all_rows[offset: offset + limit]
+        else:
+            res = q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1).execute()
+            sm_rows = res.data or []
+            total_count = res.count
 
         # 각 row에 piping_status 필드 추가 (캐시가 없으면 건너뜀)
         for r in sm_rows:
@@ -2597,7 +2613,7 @@ def api_support_get():
             else:
                 r["piping_status"] = "ongoing"
 
-        return jsonify({"data": sm_rows, "count": res.count})
+        return jsonify({"data": sm_rows, "count": total_count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

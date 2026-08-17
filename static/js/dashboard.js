@@ -1901,12 +1901,20 @@ function _readFilters(fields) {
     return p;
 }
 
-// 현재 필터 조건으로 전체 데이터 조회 (limit=10000)
+// 현재 필터 조건으로 전체 데이터 조회 (10000건씩 페이지네이션 — 10000건 이상이면 잘리던 문제 수정)
 async function _fetchAllFiltered(endpoint, params) {
-    params.set("limit", 10000);
-    params.set("offset", 0);
-    const res = await apiFetch(`${endpoint}?${params}`);
-    return res.data || [];
+    const pageSize = 10000;
+    let offset = 0, all = [];
+    while (true) {
+        params.set("limit", pageSize);
+        params.set("offset", offset);
+        const res = await apiFetch(`${endpoint}?${params}`);
+        const rows = res.data || [];
+        all = all.concat(rows);
+        if (rows.length < pageSize) break;
+        offset += pageSize;
+    }
+    return all;
 }
 
 async function exportJMExcel(){
