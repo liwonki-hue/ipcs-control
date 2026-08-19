@@ -1556,7 +1556,7 @@ def api_refresh_db_cache():
 def api_joints_get():
     try:
         sb      = get_sb()
-        limit   = int(request.args.get("limit",  50))
+        limit   = min(int(request.args.get("limit",  50)), 10000)
         offset  = int(request.args.get("offset",  0))
         unit    = request.args.get("unit",     "")
         system  = request.args.get("system",   "")
@@ -2245,7 +2245,7 @@ def api_joints_sync_phase_package():
 def api_testpkg_joints():
     try:
         sb      = get_sb()
-        limit   = int(request.args.get("limit",  100))
+        limit   = min(int(request.args.get("limit",  100)), 10000)
         offset  = int(request.args.get("offset",   0))
         pkg     = request.args.get("package",  "").strip()
         system  = request.args.get("system",   "").strip()
@@ -2540,7 +2540,7 @@ def api_ep_support_summary():
 def api_support_get():
     try:
         sb      = get_sb()
-        limit   = int(request.args.get("limit",  100))
+        limit   = min(int(request.args.get("limit",  100)), 10000)
         offset  = int(request.args.get("offset",   0))
         unit    = request.args.get("unit",     "").strip()
         system  = request.args.get("system",   "").strip()
@@ -2845,7 +2845,7 @@ def api_testpkg_get():
     global _testpkg_all_cache
     try:
         sb      = get_sb()
-        limit   = int(request.args.get("limit",  100))
+        limit   = min(int(request.args.get("limit",  100)), 10000)
         offset  = int(request.args.get("offset",   0))
         system   = request.args.get("system",      "").strip()
         subarea  = request.args.get("sub_area",    "").strip()
