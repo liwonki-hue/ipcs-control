@@ -340,7 +340,39 @@ function navigate(page) {
     }
 }
 
+// ================================================================================
+//  AUTO REFRESH
+//  탭을 오래 열어둬도 차트가 최초 로드 시점의 오래된 값에 머무르지 않도록,
+//  차트/집계 기반 페이지(getDashData 사용)만 주기적으로 강제 새로고침한다.
+// ================================================================================
+const AUTO_REFRESH_MS = 5 * 60 * 1000; // 5분
+let _autoRefreshPending = false;
 
+async function _autoRefreshCurrentPage() {
+    if (document.hidden || _autoRefreshPending || _refreshPending) return;
+    const visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-", "");
+    if (!visPage) return;
+    _autoRefreshPending = true;
+    try {
+        await getDashData(true);
+        switch (visPage) {
+            case "overview":    loadOverview();     break;
+            case "early_power": loadEarlyPower();   break;
+            case "systems":     loadSystems(); loadSubArea(); break;
+            case "weekly":      loadWeekly();       break;
+            case "unitarea":    loadUnitArea();     break;
+            case "welder":      loadWelder();       break;
+            case "rt_quality":  loadRtQuality();    break;
+            case "daily_report": loadDailyReport(); break;
+        }
+    } catch (e) {
+        console.warn("[auto-refresh]", e);
+    } finally {
+        _autoRefreshPending = false;
+    }
+}
+
+setInterval(_autoRefreshCurrentPage, AUTO_REFRESH_MS);
 
 // ================================================================================
 //  API HELPERS
