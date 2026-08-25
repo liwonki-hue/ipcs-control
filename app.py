@@ -1238,7 +1238,11 @@ def get_cache(force=False):
                 _building = True
                 threading.Thread(target=_build, daemon=True).start()
 
-    # Return existing data (possibly stale) while rebuild runs
+    # TTL을 넘긴 stale 데이터는 그대로 내려주지 않음 — 재빌드가 끝날 때까지
+    # building 상태로 대기시켜, 접속 시 예전 값이 잠깐 보였다가 재접속해야
+    # 최신값으로 바뀌는 문제(S-Curve 등)를 방지한다.
+    if stale:
+        return None
     with _lock: return _cache.get("data")
 
 
