@@ -2451,6 +2451,9 @@ def api_rt_quality():
             _rt_cache["time"] = time.time()
         return jsonify(result)
     except Exception as e:
+        print(f"[rt-quality] Error: {e}")
+        if cached_rt is not None:          # 오류 시 stale 캐시라도 반환
+            return jsonify(cached_rt)
         return jsonify({"error": str(e)}), 500
 
 

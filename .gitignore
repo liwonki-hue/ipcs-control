@@ -34,3 +34,4 @@ screenshot_*.png
 
 # SQL 작업 파일
 *.sql
+.playwright-mcp/
