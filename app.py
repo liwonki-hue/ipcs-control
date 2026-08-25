@@ -14,6 +14,8 @@ from flask import Flask, render_template, jsonify, request, session
 from functools import wraps
 from supabase import create_client
 
+ALMT = timezone(timedelta(hours=5))   # Asia/Almaty, UTC+5 고정 (DST 없음) — 현장 기준 날짜 표시용
+
 # ── Load .env ─────────────────────────────────────────────────────────
 def load_env_manually():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -159,7 +161,7 @@ def _parse_rpc(raw):
         kpi["erect_total_di"]   = etdi
         kpi["erect_pct"]        = calc_pct(ecdi, etdi)
         kpi["remaining_di"]     = tdi - cdi
-        kpi["report_date"]      = datetime.now().strftime("%Y-%m-%d")
+        kpi["report_date"]      = datetime.now(ALMT).strftime("%Y-%m-%d")
         kpi["total_plan_joints"] = kpi.get("total_joints", 0)
 
         # Unified Readiness: D/I 70%, Support 20%, Test 10%

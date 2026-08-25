@@ -30,3 +30,7 @@ jobs:
             echo "::error::curl failed after retries (exit $CURL_EXIT)"
             exit 1
           fi
+          if [ "$STATUS" != "200" ]; then
+            echo "::error::refresh-db-cache returned HTTP $STATUS (cache NOT refreshed)"
+            exit 1
+          fi
