@@ -1715,6 +1715,8 @@ def api_joints_patch(jid):
             if not weld or not insp:
                 return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
         sb.table("joint_master").update(body).eq("id", jid).execute()
+        with _lock:
+            _cache.clear()
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
