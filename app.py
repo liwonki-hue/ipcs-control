@@ -295,6 +295,7 @@ _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
 CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
 _ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
+_area_field_cache: dict = {}  # /api/area-field-quantities 메모리 캐시
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
 _daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 캐시
@@ -1258,6 +1259,7 @@ def api_cache_clear():
         _meta_cache["time"] = 0
         _meta_cache["data"] = None
         _ep_sup_cache.clear()
+        _area_field_cache.clear()
         _pkg_stats_cache.clear()
         _pkg_cache["time"] = 0
         _pkg_cache["data"] = {}
@@ -2469,6 +2471,11 @@ def api_rt_quality():
 @app.route("/api/area-field-quantities")
 def api_area_field_quantities():
     """sub_area별 Field joints(sf='F') DI 합산 및 Support EA 카운트를 단일 호출로 반환."""
+    global _area_field_cache
+    with _lock:
+        cached = _area_field_cache.get("data")
+        if cached and time.time() - _area_field_cache.get("time", 0) < CACHE_TTL:
+            return jsonify(cached)
     TARGET_SUBS = [
         "PR #3", "PR #4", "PR #5", "PR #6", "PR #7",
         "MB STR", "HRSG #11 PR", "GT #11", "HRSG #12 PR", "GT #12"
@@ -2505,8 +2512,16 @@ def api_area_field_quantities():
             ea_off += 10000
         ea_by_sub = dict(Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
 
-        return jsonify({"di": di_by_sub, "ea": ea_by_sub})
+        result = {"di": di_by_sub, "ea": ea_by_sub}
+        with _lock:
+            _area_field_cache["data"] = result
+            _area_field_cache["time"] = time.time()
+        return jsonify(result)
     except Exception as e:
+        with _lock:
+            cached = _area_field_cache.get("data")
+        if cached is not None:          # 오류 시 stale 캐시라도 반환
+            return jsonify(cached)
         return jsonify({"error": str(e)}), 500
 
 # ── Support Master CRUD ───────────────────────────────────────────────
@@ -2636,6 +2651,7 @@ def api_support_patch(rid):
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
+            _area_field_cache.clear()
             _sup_test_cache["data"] = None
             _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
@@ -2650,6 +2666,7 @@ def api_support_delete(rid):
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
+            _area_field_cache.clear()
             _sup_test_cache["data"] = None
             _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
@@ -2837,6 +2854,7 @@ def api_support_sync_drawing():
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
+            _area_field_cache.clear()
 
         return jsonify({
             "ok": True,
