@@ -421,8 +421,9 @@ def _fast_kpi_sync(target=None):
             + (kpi.get("support_pct") or 0) * 0.2
             + (kpi.get("testpkg_pct") or 0) * 0.1, 2)
 
-        # weekly cumul_actual은 느린 백그라운드 전체 스캔(_load_kpi_override)이 끝나야 보정되므로,
-        # 그 전까지 S-Curve ACTUAL%이 위 kpi.overall_pct와 어긋나 보이지 않도록 비례 축척으로 즉시 맞춘다.
+        # weekly cumul_actual 정밀 보정은 _build()에서 이 함수 직후 _scan_kpi_override_data/
+        # _apply_kpi_override가 담당한다(캐시 저장 전 동기 실행). 혹시 그 호출이 실패하더라도
+        # S-Curve ACTUAL%이 위 kpi.overall_pct와 어긋나 보이지 않도록 여기서 비례 축척으로 즉시 맞춰둔다.
         weekly = cur.get("weekly") or []
         old_sum = sum(float(w.get("completed_di") or 0) for w in weekly)
         if old_sum > 0 and c_di > 0:
@@ -456,6 +457,166 @@ def _fast_kpi_sync(target=None):
         print(f"[fast_kpi] applied: DI={c_di:.1f}, joints={c_joints}")
     except Exception as e:
         print(f"[fast_kpi] error (non-critical): {e}")
+
+
+def _scan_kpi_override_data(weekly_schedule):
+    """joint_master completed 행 전체 스캔 → KPI/주간/시스템 보정용 집계 데이터 반환.
+    20분 캐시(_kpi_override_cache) — fresh하면 스캔 없이 캐시된 값 반환.
+    weekly_schedule: 주차 경계 판정에 쓸 week_start/week_end/week_no 리스트
+    (호출 시점에 따라 _build() 안의 로컬 data 또는 _cache["data"]의 weekly를 넘겨받음)."""
+    global _kpi_override_cache
+    with _lock:
+        _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
+        _ko_data = _kpi_override_cache.get("data")
+    if _ko_data is not None and _ko_age < CACHE_TTL:
+        return _ko_data
+    try:
+        sb = get_sb()
+        if not weekly_schedule:
+            return None
+        _wk_sorted = sorted(
+            [(str(w.get("week_start") or "")[:10],
+              str(w.get("week_end") or "")[:10],
+              int(w.get("week_no") or 0))
+             for w in weekly_schedule
+             if w.get("week_start") and w.get("week_no")],
+            key=lambda x: x[0]
+        )
+        _wk_starts = [x[0] for x in _wk_sorted]
+        def _wkno_for(d):
+            idx = bisect.bisect_right(_wk_starts, d) - 1
+            if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
+                return _wk_sorted[idx][2]
+            return None
+        wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
+        sys_di_m = defaultdict(float); unit_di_m = defaultdict(float)
+        area_di_m = defaultdict(float); sub_di_m = defaultdict(float)
+        mo_di_m = defaultdict(float); mo_fab_m = defaultdict(float); mo_erect_m = defaultdict(float)
+        c_di = c_fab = c_erect = 0.0; c_joints = 0
+        off, bsz = 0, 10000
+        while True:
+            r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
+                  .not_.is_("date_completed", "null").order("id").range(off, off + bsz - 1).execute()
+            rows = r.data or []; del r
+            for row in rows:
+                di = float(row.get("di") or 0); sf = (row.get("sf") or "").upper()
+                dc = str(row.get("date_completed") or "")[:10]; wno = _wkno_for(dc)
+                c_di += di
+                if   sf in ("S", "SHOP"):  c_fab   += di
+                elif sf in ("F", "FIELD"): c_erect += di
+                sys_di_m[row.get("system") or ""] += di; unit_di_m[row.get("unit") or ""] += di
+                area_di_m[row.get("area") or ""] += di;  sub_di_m[row.get("sub_area") or ""] += di
+                if wno:
+                    wk_di_m[wno] += di
+                    if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
+                    elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
+                # 실제 완료일(date_completed) 기준 월별 집계 — week_start 기준과 달리 월 경계에 걸친 주차도 정확히 귀속
+                if len(dc) >= 7:
+                    mo = dc[:7]
+                    mo_di_m[mo] += di
+                    if   sf in ("S", "SHOP"):  mo_fab_m[mo]   += di
+                    elif sf in ("F", "FIELD"): mo_erect_m[mo] += di
+            c_joints += len(rows)
+            if len(rows) < bsz: break
+            off += bsz
+        if c_joints == 0:
+            return None
+        ko = {
+            "c_di": c_di, "c_fab": c_fab, "c_erect": c_erect, "c_joints": c_joints,
+            "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
+            "sys_di_m":  dict(sys_di_m),   "unit_di_m": dict(unit_di_m),
+            "area_di_m": dict(area_di_m),  "sub_di_m":  dict(sub_di_m),
+            "mo_di_m":   dict(mo_di_m),    "mo_fab_m":  dict(mo_fab_m),  "mo_erect_m": dict(mo_erect_m),
+        }
+        with _lock:
+            _kpi_override_cache["data"] = ko
+            _kpi_override_cache["time"] = time.time()
+        print(f"[kpi_override] scanned: DI={c_di:.1f}, joints={c_joints}")
+        return ko
+    except Exception as _e:
+        print(f"[kpi_override] scan error: {_e}")
+        return None
+
+
+def _apply_kpi_override(ko, target=None):
+    """ko 데이터를 target(dict)에 인플레이스 적용.
+    target이 주어지면 그 dict에 직접 적용(락 불필요 — 아직 공유되지 않은 로컬 dict, 캐시 저장 전 호출용).
+    target=None이면 _cache["data"]에 락을 걸고 적용(런타임 보정용)."""
+    if not ko or ko.get("c_joints", 0) == 0:
+        return
+    c_di = ko["c_di"]; c_fab = ko["c_fab"]; c_erect = ko["c_erect"]; c_joints = ko["c_joints"]
+    wk_di_m = ko["wk_di_m"]; wk_fab_m = ko["wk_fab_m"]; wk_erect_m = ko["wk_erect_m"]
+    sys_di_m = ko["sys_di_m"]; unit_di_m = ko["unit_di_m"]
+    area_di_m = ko["area_di_m"]; sub_di_m = ko["sub_di_m"]
+    mo_di_m = ko.get("mo_di_m") or {}; mo_fab_m = ko.get("mo_fab_m") or {}; mo_erect_m = ko.get("mo_erect_m") or {}
+
+    def _mutate(cur):
+        kpi = cur.get("kpi") or {}
+        kpi["completed_di"] = c_di; kpi["completed_joints"] = c_joints
+        kpi["fab_completed_di"] = c_fab; kpi["erect_completed_di"] = c_erect
+        kpi["fab_di"]   = c_fab
+        kpi["erect_di"] = c_erect
+        tdi  = kpi.get("total_di", 0) or 0
+        ftdi = kpi.get("fab_total_di", 0) or 0
+        etdi = kpi.get("erect_total_di", 0) or 0
+        kpi["overall_pct"]  = round((c_di   / tdi)  * 100, 2) if tdi  > 0 else 0
+        kpi["progress_pct"] = kpi["overall_pct"]
+        kpi["remaining_di"] = tdi - c_di
+        kpi["fab_pct"]      = round((c_fab   / ftdi) * 100, 2) if ftdi > 0 else 0
+        kpi["erect_pct"]    = round((c_erect / etdi) * 100, 2) if etdi > 0 else 0
+        kpi["unified_readiness"] = round(
+            kpi["overall_pct"] * 0.7
+            + (kpi.get("support_pct") or 0) * 0.2
+            + (kpi.get("testpkg_pct") or 0) * 0.1, 2
+        )
+        for item in (cur.get("weekly") or []):
+            wno = int(item.get("week_no") or 0)
+            if wno in wk_di_m:
+                item["completed_di"] = round(wk_di_m[wno], 2)
+                item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
+                item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
+        _cum = 0.0
+        for item in (cur.get("weekly") or []):
+            _cum += float(item.get("completed_di") or 0)
+            item["cumul_actual"] = round(_cum, 2)
+
+        # 실제 완료일(date_completed) 기준 월별 집계 — Monthly Trend에서 week_start 기반 오분류 방지
+        cur["monthly"] = [
+            {"month": mo, "completed_di": round(mo_di_m[mo], 2),
+             "fab_di": round(mo_fab_m.get(mo, 0.0), 2), "erect_di": round(mo_erect_m.get(mo, 0.0), 2)}
+            for mo in sorted(mo_di_m.keys())
+        ]
+
+        def _repct(item, new_cdi):
+            item["completed_di"] = round(new_cdi, 2)
+            tdiv = item.get("total_di") or 0
+            new_pct = round(new_cdi / tdiv * 100, 2) if tdiv else 0
+            item["progress_pct"] = new_pct
+            sup_pct = item.get("support_pct") or 0
+            tst_pct = item.get("testpkg_pct") or 0
+            item["unified_readiness"] = round(new_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
+
+        for item in (cur.get("systems") or []):
+            s = item.get("system") or ""
+            if s in sys_di_m: _repct(item, sys_di_m[s])
+        for item in (cur.get("units") or []):
+            u = item.get("unit") or ""
+            if u in unit_di_m: _repct(item, unit_di_m[u])
+        for item in (cur.get("areas") or []):
+            a = item.get("area") or ""
+            if a in area_di_m: _repct(item, area_di_m[a])
+        for item in (cur.get("subareas") or []):
+            s = item.get("sub_area") or item.get("area") or ""
+            if s in sub_di_m: _repct(item, sub_di_m[s])
+
+    if target is not None:
+        _mutate(target)
+    else:
+        with _lock:
+            cur = _cache.get("data")
+            if not cur:
+                return
+            _mutate(cur)
 
 
 def _build_secondary_caches():
@@ -528,152 +689,6 @@ def _build_secondary_caches():
             _populate_jm_fv_cache_via_rpc()
         except Exception as e:
             print(f"[secondary_cache] jm_filter RPC failed: {e}")
-
-    def _load_kpi_override():
-        """joint_master completed 행 집계 → _cache["data"] KPI/weekly/system 인플레이스 업데이트"""
-        global _kpi_override_cache
-        with _lock:
-            _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
-            _ko_data = _kpi_override_cache.get("data")
-        if _ko_data is not None and _ko_age < CACHE_TTL:
-            print(f"[secondary_cache] kpi_override HIT ({int(_ko_age)}s old)")
-            _apply_kpi_override(_ko_data)
-            return
-        try:
-            sb = get_sb()
-            with _lock:
-                cur_data = _cache.get("data")
-            if not cur_data:
-                return
-            _wk_sorted = sorted(
-                [(str(w.get("week_start") or "")[:10],
-                  str(w.get("week_end") or "")[:10],
-                  int(w.get("week_no") or 0))
-                 for w in (cur_data.get("weekly") or [])
-                 if w.get("week_start") and w.get("week_no")],
-                key=lambda x: x[0]
-            )
-            _wk_starts = [x[0] for x in _wk_sorted]
-            def _wkno_for(d):
-                idx = bisect.bisect_right(_wk_starts, d) - 1
-                if idx >= 0 and _wk_sorted[idx][0] <= d <= _wk_sorted[idx][1]:
-                    return _wk_sorted[idx][2]
-                return None
-            wk_di_m = defaultdict(float); wk_fab_m = defaultdict(float); wk_erect_m = defaultdict(float)
-            sys_di_m = defaultdict(float); unit_di_m = defaultdict(float)
-            area_di_m = defaultdict(float); sub_di_m = defaultdict(float)
-            mo_di_m = defaultdict(float); mo_fab_m = defaultdict(float); mo_erect_m = defaultdict(float)
-            c_di = c_fab = c_erect = 0.0; c_joints = 0
-            off, bsz = 0, 10000
-            while True:
-                r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
-                      .not_.is_("date_completed", "null").order("id").range(off, off + bsz - 1).execute()
-                rows = r.data or []; del r
-                for row in rows:
-                    di = float(row.get("di") or 0); sf = (row.get("sf") or "").upper()
-                    dc = str(row.get("date_completed") or "")[:10]; wno = _wkno_for(dc)
-                    c_di += di
-                    if   sf in ("S", "SHOP"):  c_fab   += di
-                    elif sf in ("F", "FIELD"): c_erect += di
-                    sys_di_m[row.get("system") or ""] += di; unit_di_m[row.get("unit") or ""] += di
-                    area_di_m[row.get("area") or ""] += di;  sub_di_m[row.get("sub_area") or ""] += di
-                    if wno:
-                        wk_di_m[wno] += di
-                        if   sf in ("S", "SHOP"):  wk_fab_m[wno]   += di
-                        elif sf in ("F", "FIELD"): wk_erect_m[wno] += di
-                    # 실제 완료일(date_completed) 기준 월별 집계 — week_start 기준과 달리 월 경계에 걸친 주차도 정확히 귀속
-                    if len(dc) >= 7:
-                        mo = dc[:7]
-                        mo_di_m[mo] += di
-                        if   sf in ("S", "SHOP"):  mo_fab_m[mo]   += di
-                        elif sf in ("F", "FIELD"): mo_erect_m[mo] += di
-                c_joints += len(rows)
-                if len(rows) < bsz: break
-                off += bsz
-            if c_joints == 0:
-                return
-            ko = {
-                "c_di": c_di, "c_fab": c_fab, "c_erect": c_erect, "c_joints": c_joints,
-                "wk_di_m":   dict(wk_di_m),   "wk_fab_m":  dict(wk_fab_m),  "wk_erect_m": dict(wk_erect_m),
-                "sys_di_m":  dict(sys_di_m),   "unit_di_m": dict(unit_di_m),
-                "area_di_m": dict(area_di_m),  "sub_di_m":  dict(sub_di_m),
-                "mo_di_m":   dict(mo_di_m),    "mo_fab_m":  dict(mo_fab_m),  "mo_erect_m": dict(mo_erect_m),
-            }
-            with _lock:
-                _kpi_override_cache["data"] = ko
-                _kpi_override_cache["time"] = time.time()
-            _apply_kpi_override(ko)
-            print(f"[secondary_cache] kpi_override done: DI={c_di:.1f}, joints={c_joints}")
-        except Exception as _e:
-            print(f"[secondary_cache] kpi_override error: {_e}")
-
-    def _apply_kpi_override(ko):
-        c_di = ko["c_di"]; c_fab = ko["c_fab"]; c_erect = ko["c_erect"]; c_joints = ko["c_joints"]
-        wk_di_m = ko["wk_di_m"]; wk_fab_m = ko["wk_fab_m"]; wk_erect_m = ko["wk_erect_m"]
-        sys_di_m = ko["sys_di_m"]; unit_di_m = ko["unit_di_m"]
-        area_di_m = ko["area_di_m"]; sub_di_m = ko["sub_di_m"]
-        mo_di_m = ko.get("mo_di_m") or {}; mo_fab_m = ko.get("mo_fab_m") or {}; mo_erect_m = ko.get("mo_erect_m") or {}
-        with _lock:
-            cur = _cache.get("data")
-            if not cur or c_joints == 0:
-                return
-            kpi = cur.get("kpi") or {}
-            kpi["completed_di"] = c_di; kpi["completed_joints"] = c_joints
-            kpi["fab_completed_di"] = c_fab; kpi["erect_completed_di"] = c_erect
-            kpi["fab_di"]   = c_fab
-            kpi["erect_di"] = c_erect
-            tdi  = kpi.get("total_di", 0) or 0
-            ftdi = kpi.get("fab_total_di", 0) or 0
-            etdi = kpi.get("erect_total_di", 0) or 0
-            kpi["overall_pct"]  = round((c_di   / tdi)  * 100, 2) if tdi  > 0 else 0
-            kpi["progress_pct"] = kpi["overall_pct"]
-            kpi["remaining_di"] = tdi - c_di
-            kpi["fab_pct"]      = round((c_fab   / ftdi) * 100, 2) if ftdi > 0 else 0
-            kpi["erect_pct"]    = round((c_erect / etdi) * 100, 2) if etdi > 0 else 0
-            kpi["unified_readiness"] = round(
-                kpi["overall_pct"] * 0.7
-                + (kpi.get("support_pct") or 0) * 0.2
-                + (kpi.get("testpkg_pct") or 0) * 0.1, 2
-            )
-            for item in (cur.get("weekly") or []):
-                wno = int(item.get("week_no") or 0)
-                if wno in wk_di_m:
-                    item["completed_di"] = round(wk_di_m[wno], 2)
-                    item["fab_di"]       = round(wk_fab_m.get(wno, 0.0), 2)
-                    item["erect_di"]     = round(wk_erect_m.get(wno, 0.0), 2)
-            _cum = 0.0
-            for item in (cur.get("weekly") or []):
-                _cum += float(item.get("completed_di") or 0)
-                item["cumul_actual"] = round(_cum, 2)
-
-            # 실제 완료일(date_completed) 기준 월별 집계 — Monthly Trend에서 week_start 기반 오분류 방지
-            cur["monthly"] = [
-                {"month": mo, "completed_di": round(mo_di_m[mo], 2),
-                 "fab_di": round(mo_fab_m.get(mo, 0.0), 2), "erect_di": round(mo_erect_m.get(mo, 0.0), 2)}
-                for mo in sorted(mo_di_m.keys())
-            ]
-
-            def _repct(item, new_cdi):
-                item["completed_di"] = round(new_cdi, 2)
-                tdiv = item.get("total_di") or 0
-                new_pct = round(new_cdi / tdiv * 100, 2) if tdiv else 0
-                item["progress_pct"] = new_pct
-                sup_pct = item.get("support_pct") or 0
-                tst_pct = item.get("testpkg_pct") or 0
-                item["unified_readiness"] = round(new_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
-
-            for item in (cur.get("systems") or []):
-                s = item.get("system") or ""
-                if s in sys_di_m: _repct(item, sys_di_m[s])
-            for item in (cur.get("units") or []):
-                u = item.get("unit") or ""
-                if u in unit_di_m: _repct(item, unit_di_m[u])
-            for item in (cur.get("areas") or []):
-                a = item.get("area") or ""
-                if a in area_di_m: _repct(item, area_di_m[a])
-            for item in (cur.get("subareas") or []):
-                s = item.get("sub_area") or item.get("area") or ""
-                if s in sub_di_m: _repct(item, sub_di_m[s])
 
     def _load_daily_report():
         """서버 시작 직후 daily report 캐시 pre-warm — 첫 접속 시 빈 화면 방지"""
@@ -787,8 +802,13 @@ def _build_secondary_caches():
 
     # joint_master 전체 스캔 2건(kpi_override, sub_areas)은 동시 실행 시 메모리 스파이크
     # (Render OOM 원인) 위험이 있어 병렬 풀에서 빼고 순차 실행
+    def _refresh_kpi_override():
+        with _lock:
+            _weekly_sched = (_cache.get("data") or {}).get("weekly")
+        ko = _scan_kpi_override_data(_weekly_sched)
+        _apply_kpi_override(ko, target=None)
     try:
-        _load_kpi_override()
+        _refresh_kpi_override()
     except Exception as _e:
         print(f"[secondary_cache] kpi_override timeout/error: {_e}")
     try:
@@ -798,7 +818,7 @@ def _build_secondary_caches():
     # kpi_override 실패 시 재시도 (소켓 오류 등 일시적 실패 대응)
     if _kpi_override_cache.get("data") is None:
         print("[secondary_cache] kpi_override retry...")
-        _load_kpi_override()
+        _refresh_kpi_override()
 
 
 def _extract_d17(d17, raw):
@@ -1185,6 +1205,14 @@ def _build():
         # KPI 보정을 캐시 저장 전에 실행 — 첫 요청부터 정확한 값 반환
         gc.collect()
         _fast_kpi_sync(target=data)
+        # 주간 실적(weekly completed_di) 정밀 보정도 캐시 저장 전에 실행 — v17/RPC의 weekly
+        # 데이터가 최신 완료 주차를 못 따라가는 경우 S-Curve "AS OF" 주차/Plan%가 예전 값으로
+        # 굳어버리는 문제 방지. _kpi_override_cache(20분)가 fresh하면 재스캔 없이 바로 적용됨.
+        try:
+            _ko = _scan_kpi_override_data(data.get("weekly"))
+            _apply_kpi_override(_ko, target=data)
+        except Exception as _koe:
+            print(f"[cache] kpi_override sync-apply error (non-critical): {_koe}")
         kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
 
         global _meta_cache
