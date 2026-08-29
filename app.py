@@ -2929,7 +2929,7 @@ def api_testpkg_get():
         if search:
             like = f"%{search}%"
             q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
-        res = q.order("id").range(offset, offset + limit - 1).execute()
+        res = q.order("system").order("test_pkg_no").range(offset, offset + limit - 1).execute()
         rows = res.data or []
 
         # Readiness: piping 70% + support 30% 가중 진행률
