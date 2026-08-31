@@ -1056,7 +1056,7 @@ const SYSTEM_FULL_NAMES = {
     "SA": "Service Air System", "ATM": "Atmosphere Flash Tank System", "FGH": "Fuel Gas Performance Heater System",
     "HP": "High Pressure Steam System", "LP": "Low Pressure Steam System", "N2": "N2 Gas System",
     "PW": "Potable Water System", "SS": "Sampling System", "ST MISC": "ST Miscellaneous System",
-    "WWT": "Waste Water Transfer System", "FW": "Feed Water System"
+    "WWT": "Waste Water Transfer System", "FW": "Feed Water System", "CDS": "Chemical Dosing System"
 };
 
 async function loadSystems() {

@@ -1183,6 +1183,15 @@ def _build():
             m_units = sorted(list(set(u.get("unit") for u in (data.get("units") or []) if isinstance(u, dict) and u.get("unit"))))
             m_sys   = sorted(list(set(s.get("system") for s in (data.get("systems") or []) if isinstance(s, dict) and s.get("system"))))
             m_area  = sorted(list(set(a.get("area") for a in (data.get("areas") or []) if isinstance(a, dict) and a.get("area"))))
+            # v17의 systems 집계는 신규 system(예 CDS)이 생겨도 반영이 늦어 드롭다운에서 누락될 수 있음
+            # → get_distinct_meta_v2(조인트 실데이터 DISTINCT 스캔)로 보정, 실패 시 위 v17 파생값 그대로 사용
+            try:
+                _dm = sb.rpc("get_distinct_meta_v2", {}).execute().data or {}
+                _dm_sys = _dm.get("systems")
+                if _dm_sys:
+                    m_sys = sorted(set(_dm_sys))
+            except Exception as _dme:
+                print(f"[cache] get_distinct_meta_v2 fallback failed (non-critical): {_dme}")
             # sub_area 드롭다운 — 캐시 있으면 재사용, 없으면 v17 subareas로 초기값 설정
             # 전체 스캔(47k rows)은 _build_secondary_caches()에서 백그라운드 실행
             with _lock:
