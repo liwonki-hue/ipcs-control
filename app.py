@@ -16,6 +16,17 @@ from supabase import create_client
 
 ALMT = timezone(timedelta(hours=5))   # Asia/Almaty, UTC+5 고정 (DST 없음) — 현장 기준 날짜 표시용
 
+try:
+    import resource  # POSIX 전용(Render/Linux) — 캐시 빌드 전후 RSS 로깅으로 OOM 원인 추적용
+except ImportError:
+    resource = None  # Windows 로컬 개발 환경엔 없음
+
+def _rss_mb():
+    """현재 프로세스 RSS(MB). resource 모듈 없는 환경(Windows)에서는 None."""
+    if resource is None:
+        return None
+    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux: KB 단위
+
 # ── Load .env ─────────────────────────────────────────────────────────
 def load_env_manually():
     base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -311,6 +322,7 @@ _kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결
 _welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
 _jm_iso_stats_cache: dict = {"data": None, "time": 0}  # ISO Drawing별 joint 완료 통계 5분 캐시
 _jm_iso_stats_building: bool = False  # 중복 빌드 방지 플래그
+_secondary_building: bool = False  # _build_secondary_caches() 중복 실행 방지 플래그 (겹치면 joint_master 풀스캔이 이중으로 돌아 OOM 위험)
 
 def _get_jm_iso_stats(force: bool = False) -> dict:
     """joint_master의 iso_drawing별 완료 통계를 반환 (total, completed). 5분 캐시.
@@ -620,7 +632,24 @@ def _apply_kpi_override(ko, target=None):
 
 
 def _build_secondary_caches():
-    """_build() 완료 후 보조 캐시 백그라운드 로딩 — KPI override, sub_area 스캔, pkg_stats 등 병렬 실행"""
+    """_build() 완료 후 보조 캐시 백그라운드 로딩 — KPI override, sub_area 스캔, pkg_stats 등 병렬 실행.
+    _building과 달리 _build() 리턴 직후 별도 스레드로 뜨기 때문에, 연속된 refresh-db-cache/cache-clear
+    호출이 겹치면 이 함수가 중복 실행되어 joint_master 풀스캔(kpi_override, sub_areas)이 동시에
+    두 벌 돌 수 있다 — Render 512MB에서 OOM 재발 원인으로 지목되어 가드 추가."""
+    global _pkg_stats_cache, _pkg_cache, _secondary_building
+    with _lock:
+        if _secondary_building:
+            print("[secondary_cache] already running — skip duplicate trigger")
+            return
+        _secondary_building = True
+    try:
+        _build_secondary_caches_impl()
+    finally:
+        with _lock:
+            _secondary_building = False
+
+
+def _build_secondary_caches_impl():
     global _pkg_stats_cache, _pkg_cache
 
     def _load_pkg_stats():
@@ -913,7 +942,7 @@ def _build():
     try:
         sb  = get_sb()
         raw = {}
-        print("[cache] Background build started...")
+        print(f"[cache] Background build started... (RSS={_rss_mb()}MB)")
 
         # ═══════════════════════════════════════════════════════════════
         # FAST PATH: Supabase dashboard_cache 테이블 읽기 (1~2초)
@@ -1236,13 +1265,15 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             _build_fail = False
-        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}%")
+        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% (RSS={_rss_mb()}MB)")
         def _run_secondary():
             try:
                 _build_secondary_caches()
             except Exception as _sce:
                 print(f"[secondary_cache] CRITICAL: {_sce}")
                 traceback.print_exc()
+            finally:
+                print(f"[secondary_cache] done (RSS={_rss_mb()}MB)")
         threading.Thread(target=_run_secondary, daemon=True).start()
     except Exception as e:
         with _lock:
