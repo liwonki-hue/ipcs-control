@@ -4,6 +4,7 @@ import gc
 import gzip
 import bisect
 import hmac
+import signal
 import threading
 import time
 import traceback
@@ -26,6 +27,17 @@ def _rss_mb():
     if resource is None:
         return None
     return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux: KB 단위
+
+_RSS_RESTART_THRESHOLD_MB = 420  # Render free tier 512MB 한도 대비 안전 마진 확보
+
+def _maybe_self_recycle(rss_mb):
+    """RSS가 임계치를 넘으면 OOM kill 당하기 전에 스스로 SIGTERM을 보내 gunicorn이
+    새 워커로 교체하도록 유도한다. Render의 유휴 스핀다운과 동일한 graceful 종료
+    경로(Handling signal: term → Worker exiting)를 타므로 진행 중인 요청은
+    graceful timeout 내에서 정상적으로 마무리된다."""
+    if rss_mb is not None and rss_mb >= _RSS_RESTART_THRESHOLD_MB:
+        print(f"[memory] RSS {rss_mb}MB >= {_RSS_RESTART_THRESHOLD_MB}MB threshold — self-restarting before OOM kill")
+        os.kill(os.getpid(), signal.SIGTERM)
 
 # ── Load .env ─────────────────────────────────────────────────────────
 def load_env_manually():
@@ -1265,7 +1277,9 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             _build_fail = False
-        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% (RSS={_rss_mb()}MB)")
+        _rss_after_build = _rss_mb()
+        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% (RSS={_rss_after_build}MB)")
+        _maybe_self_recycle(_rss_after_build)
         def _run_secondary():
             try:
                 _build_secondary_caches()
@@ -1273,7 +1287,9 @@ def _build():
                 print(f"[secondary_cache] CRITICAL: {_sce}")
                 traceback.print_exc()
             finally:
-                print(f"[secondary_cache] done (RSS={_rss_mb()}MB)")
+                _rss_after_secondary = _rss_mb()
+                print(f"[secondary_cache] done (RSS={_rss_after_secondary}MB)")
+                _maybe_self_recycle(_rss_after_secondary)
         threading.Thread(target=_run_secondary, daemon=True).start()
     except Exception as e:
         with _lock:
