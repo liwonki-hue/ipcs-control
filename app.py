@@ -1334,11 +1334,22 @@ def get_cache(force=False):
 # ── Metadata ─────────────────────────────────────────────────────────
 _meta_cache = {"time": 0, "data": None}
 
+_last_cache_clear = 0.0  # /api/cache/clear 디바운스용 — 마지막 성공 실행 시각
+_CACHE_CLEAR_MIN_INTERVAL = 20  # 초. 프런트에서 저장할 때마다 fetch("/api/cache/clear")를
+# 매번 쏘는데(dashboard.js 여러 곳), 짧은 간격으로 여러 건을 연속 저장하면 매번 전체
+# _build() 재빌드(joint_master 풀스캔 포함)가 겹쳐 돌면서 RSS가 사이클마다 안 풀리고
+# 쌓여 결국 Render 512MB OOM으로 이어지는 게 실측으로 확인됨(2026-09-14 오전).
+# 짧은 시간 내 반복 호출은 마지막 한 번만 반영되도록 묶어서 재빌드 폭주를 막는다.
+
 @app.route("/api/cache/clear")
 @login_required
 def api_cache_clear():
-    global _building, _jm_iso_stats_building
+    global _building, _jm_iso_stats_building, _last_cache_clear
     with _lock:
+        now = time.time()
+        if now - _last_cache_clear < _CACHE_CLEAR_MIN_INTERVAL:
+            return jsonify({"status": "ok", "message": "Cache clear throttled (recent clear already in progress)"})
+        _last_cache_clear = now
         _cache.clear()
         _meta_cache["time"] = 0
         _meta_cache["data"] = None
