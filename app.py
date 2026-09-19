@@ -81,7 +81,7 @@ def _maybe_self_recycle(rss_mb):
     경로(Handling signal: term → Worker exiting)를 타므로 진행 중인 요청은
     graceful timeout 내에서 정상적으로 마무리된다."""
     if rss_mb is not None and rss_mb >= _RSS_RESTART_THRESHOLD_MB:
-        print(f"[memory] RSS {rss_mb}MB >= {_RSS_RESTART_THRESHOLD_MB}MB threshold — self-restarting before OOM kill")
+        print(f"[memory] RSS {rss_mb}MB >= {_RSS_RESTART_THRESHOLD_MB}MB threshold - self-restarting before OOM kill")
         os.kill(os.getpid(), signal.SIGTERM)
 
 # ── Load .env ─────────────────────────────────────────────────────────
@@ -739,10 +739,10 @@ def _build_secondary_caches():
     _building과 달리 _build() 리턴 직후 별도 스레드로 뜨기 때문에, 연속된 refresh-db-cache/cache-clear
     호출이 겹치면 이 함수가 중복 실행되어 joint_master 풀스캔(kpi_override, sub_areas)이 동시에
     두 벌 돌 수 있다 — Render 512MB에서 OOM 재발 원인으로 지목되어 가드 추가."""
-    global _pkg_stats_cache, _pkg_cache, _secondary_building
+    global _secondary_building
     with _lock:
         if _secondary_building:
-            print("[secondary_cache] already running — skip duplicate trigger")
+            print("[secondary_cache] already running - skip duplicate trigger")
             return
         _secondary_building = True
     try:
