@@ -14,6 +14,7 @@ from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request, session
 from functools import wraps
+import httpx
 from supabase import create_client
 
 # gunicorn 아래에서는 stdout이 파이프라 기본이 블록 버퍼링 — 로그가 수 분 뒤/종료 시점에야 나오고
@@ -120,6 +121,51 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 _sb = None
 _sb_lock = threading.Lock()
 
+# ── Supabase 연결 끊김 1회 재시도 ─────────────────────────────────────────
+# 서버가 유휴 연결을 끊은 뒤 그 연결을 재사용하다 나는 httpx.RemoteProtocolError("Server disconnected")가
+# 2026-09-16~19 사이 ~350회 발생 → 대시보드 빌드 실패 24회(503 106회), 저장(PATCH) 500 9회.
+# 재시도하면 커넥션 풀이 죽은 연결을 버리고 새로 연결해 성공한다(빌드 실패의 23/24가 다음 시도에서 자동 복구됨).
+_RETRY_SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "PUT", "PATCH", "DELETE"}
+
+def _is_retry_safe(request):
+    """다시 보내도 결과가 같은(멱등) 요청인지. INSERT/UPSERT(POST)와 쓰기 RPC는 중복 실행 위험이 있어 제외."""
+    if request.method in _RETRY_SAFE_METHODS:
+        return True
+    if request.method == "POST":  # PostgREST RPC 중 조회성/멱등 함수만
+        path = request.url.path
+        return "/rpc/get_" in path or path.endswith("/rpc/refresh_dashboard_cache")
+    return False
+
+class _RetryOnDisconnectTransport(httpx.BaseTransport):
+    """멱등 요청이 연결 끊김(RemoteProtocolError/ReadError)으로 실패하면 1회만 다시 보낸다. 타임아웃은 재시도하지 않는다."""
+    def __init__(self, inner):
+        self._inner = inner
+
+    def handle_request(self, request):
+        try:
+            return self._inner.handle_request(request)
+        except (httpx.RemoteProtocolError, httpx.ReadError) as e:
+            if not _is_retry_safe(request):
+                raise
+            print(f"[supabase] connection dropped ({type(e).__name__}: {e}) - retrying once: {request.method} {request.url.path}")
+            return self._inner.handle_request(request)
+
+    def close(self):
+        self._inner.close()
+
+def _supabase_options(schema, timeout_s):
+    """supabase-py 기본 PostgREST 클라이언트(HTTP/2, 리다이렉트 추종)와 같은 설정에 트랜스포트만 재시도로 감싼다."""
+    try:
+        client = httpx.Client(
+            transport=_RetryOnDisconnectTransport(httpx.HTTPTransport(http2=True, retries=1)),
+            timeout=httpx.Timeout(timeout_s),
+            follow_redirects=True,
+        )
+        return ClientOptions(schema=schema, httpx_client=client)
+    except TypeError:  # 이후 supabase 버전에서 httpx_client 옵션이 바뀌면 재시도 없이 기존 방식으로 폴백
+        print("[supabase] httpx_client option unsupported - falling back to the default client (no retry)")
+        return ClientOptions(schema=schema, postgrest_client_timeout=timeout_s)
+
 # ── Drawing DB (ipcs-drawing-v1, 별도 Supabase 프로젝트) ──────────────
 DRAWING_SUPABASE_URL = os.environ.get("DRAWING_SUPABASE_URL", "")
 DRAWING_SUPABASE_KEY = os.environ.get("DRAWING_SUPABASE_KEY", "")
@@ -132,7 +178,7 @@ def get_draw_sb():
         if _draw_sb is None:
             if not DRAWING_SUPABASE_URL or not DRAWING_SUPABASE_KEY:
                 raise RuntimeError("DRAWING_SUPABASE_URL / DRAWING_SUPABASE_KEY 환경변수 미설정")
-            options = ClientOptions(schema="drawing", postgrest_client_timeout=120)
+            options = _supabase_options("drawing", 120)
             _draw_sb = create_client(DRAWING_SUPABASE_URL, DRAWING_SUPABASE_KEY, options=options)
     return _draw_sb
 
@@ -162,7 +208,7 @@ def get_sb():
     with _sb_lock:
         if _sb is None:
             try:
-                options = ClientOptions(schema="construction", postgrest_client_timeout=90)
+                options = _supabase_options("construction", 90)
                 _sb = create_client(SUPABASE_URL, SUPABASE_KEY, options=options)
             except Exception as e:
                 print(f"[supabase] connection failed: {e}")
