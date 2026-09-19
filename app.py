@@ -403,6 +403,7 @@ def _parse_rpc(raw):
 _cache           = {}
 _lock            = threading.Lock()
 _building        = False
+_rebuild_pending = False      # 빌드 중에 cache clear가 들어왔으면 True — 그 빌드가 끝난 뒤 한 번 더 돈다
 _build_fail      = False
 _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
@@ -1040,7 +1041,7 @@ def _extract_ep(ep_data, raw):
 
 
 def _build():
-    global _building, _build_fail, _build_fail_time
+    global _build_fail, _build_fail_time
     try:
         sb  = get_sb()
         raw = {}
@@ -1386,8 +1387,22 @@ def _build():
         print(f"[cache] CRITICAL BUILD ERROR: {e}")
         traceback.print_exc()
     finally:
-        with _lock:
-            _building = False
+        _finish_build()
+
+
+def _finish_build():
+    """빌드 종료 처리. 빌드 도중 cache clear가 들어왔다면 이 빌드는 clear 이전 데이터로 캐시를 채웠을 수
+    있으므로 그 결과를 비우고 한 번 더 돈다. 직전 빌드가 실패했으면 쿨다운을 존중해 get_cache()의 재시도에 맡긴다."""
+    global _building, _rebuild_pending
+    with _lock:
+        rerun = _rebuild_pending and not _build_fail
+        _rebuild_pending = False
+        if rerun:
+            _cache.clear()
+        _building = rerun
+    if rerun:
+        print("[cache] cache cleared during build - rebuilding once more")
+        threading.Thread(target=_build, daemon=True).start()
 
 
 def get_cache(force=False):
@@ -1422,22 +1437,17 @@ def get_cache(force=False):
 # ── Metadata ─────────────────────────────────────────────────────────
 _meta_cache = {"time": 0, "data": None}
 
-_last_cache_clear = 0.0  # /api/cache/clear 디바운스용 — 마지막 성공 실행 시각
-_CACHE_CLEAR_MIN_INTERVAL = 20  # 초. 프런트에서 저장할 때마다 fetch("/api/cache/clear")를
-# 매번 쏘는데(dashboard.js 여러 곳), 짧은 간격으로 여러 건을 연속 저장하면 매번 전체
-# _build() 재빌드(joint_master 풀스캔 포함)가 겹쳐 돌면서 RSS가 사이클마다 안 풀리고
-# 쌓여 결국 Render 512MB OOM으로 이어지는 게 실측으로 확인됨(2026-09-14 오전).
-# 짧은 시간 내 반복 호출은 마지막 한 번만 반영되도록 묶어서 재빌드 폭주를 막는다.
+_last_cache_clear = 0.0   # 마지막으로 실제 clear를 실행한 시각
+_clear_timer = None       # 창 안에서 들어온 호출을 창 끝에 1회로 묶는 대기 타이머
+# 저장마다 프런트가 cache/clear를 부르고 연속 저장 시 전체 재빌드가 겹쳐 RSS가 쌓여 OOM이 났다(2026-09-14).
+# 창 안의 호출은 버리지 않고 창 끝에 1회 실행해 마지막 저장까지 반영을 보장한다. 09-16~19 실측 호출로
+# 시뮬레이션: 창 20초=379회, 30초=316회, 45초=245회 (선행 실행만 하던 기존 20초 방식은 293회이나 마지막 저장 누락).
+_CACHE_CLEAR_MIN_INTERVAL = 30  # 초
 
-@app.route("/api/cache/clear")
-@login_required
-def api_cache_clear():
-    global _building, _jm_iso_stats_building, _last_cache_clear
+def _run_cache_clear():
+    """모든 캐시를 비우고 재빌드를 시작한다. 이미 빌드 중이면 그 빌드가 끝난 뒤 한 번 더 돈다."""
+    global _building, _rebuild_pending, _jm_iso_stats_building
     with _lock:
-        now = time.time()
-        if now - _last_cache_clear < _CACHE_CLEAR_MIN_INTERVAL:
-            return jsonify({"status": "ok", "message": "Cache clear throttled (recent clear already in progress)"})
-        _last_cache_clear = now
         _cache.clear()
         _meta_cache["time"] = 0
         _meta_cache["data"] = None
@@ -1470,12 +1480,41 @@ def api_cache_clear():
         _jm_iso_stats_cache["data"] = None
         _jm_iso_stats_cache["time"] = 0
         _jm_iso_stats_building = False
-    print("[cache] All caches cleared - starting background rebuild")
-    with _lock:
-        if not _building:
+        start = not _building
+        if start:
             _building = True
-            threading.Thread(target=_build, daemon=True).start()
-    return jsonify({"status": "ok", "message": "All caches cleared, rebuild started"})
+        else:
+            _rebuild_pending = True
+    print("[cache] All caches cleared - starting background rebuild" if start
+          else "[cache] All caches cleared - build in progress, rebuilding again when it finishes")
+    if start:
+        threading.Thread(target=_build, daemon=True).start()
+
+
+def _run_deferred_cache_clear():
+    global _last_cache_clear, _clear_timer
+    with _lock:
+        _clear_timer = None
+        _last_cache_clear = time.time()
+    _run_cache_clear()
+
+
+@app.route("/api/cache/clear")
+@login_required
+def api_cache_clear():
+    global _last_cache_clear, _clear_timer
+    with _lock:
+        wait = _CACHE_CLEAR_MIN_INTERVAL - (time.time() - _last_cache_clear)
+        if wait > 0:
+            if _clear_timer is None:
+                _clear_timer = threading.Timer(wait, _run_deferred_cache_clear)
+                _clear_timer.daemon = True
+                _clear_timer.start()
+            print(f"[cache] clear deferred {wait:.0f}s (coalescing rapid saves)")
+            return jsonify({"status": "ok", "deferred": True, "retry_after": round(wait, 1)})
+        _last_cache_clear = time.time()
+    _run_cache_clear()
+    return jsonify({"status": "ok", "deferred": False, "message": "All caches cleared, rebuild started"})
 
 # ── Auth endpoints ─────────────────────────────────────────────────────
 @app.route("/api/auth/status", methods=["GET"])

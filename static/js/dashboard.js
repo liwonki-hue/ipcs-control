@@ -1804,7 +1804,9 @@ async function _refreshAfterSave() {
     if (_refreshPending) return;
     _refreshPending = true;
     try {
-        await fetch("/api/cache/clear").catch(() => {});
+        const clr = await fetch("/api/cache/clear").then(r => r.json()).catch(() => null);
+        // 서버가 연속 저장을 묶어 잠시 뒤 재빌드하는 경우 지금 조회하면 옛 캐시가 낙관적 KPI 갱신을 덮어쓰므로 기다린다
+        if (clr && clr.deferred) await new Promise(r => setTimeout(r, (clr.retry_after || 0) * 1000 + 500));
         _epSupportData = null;
         const fresh = await getDashData(true);
         _dashData = fresh;
