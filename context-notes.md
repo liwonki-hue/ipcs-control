@@ -50,3 +50,12 @@
 - 디바운스로 응답이 deferred일 때 프런트 `_refreshAfterSave`가 바로 `getDashData(true)`를 하면 옛 캐시로 낙관적 KPI 갱신을 덮어쓰므로, `retry_after`만큼 기다린 뒤 조회한다.
 - 4번은 Joint 저장 비중이 91%라 Support 전용이 아니라 `scope=joint`도 함께 만든다. scope=joint는 `_sup_test_cache`, `_sub_area_cache`를 보존(joint 저장은 support 집계·sub_area 목록을 바꾸지 않음), scope=support는 joint 유래 캐시를 모두 보존. 지정 없으면 기존처럼 전체 삭제.
 - `_get_jm_iso_stats(force=True)`는 캐시가 5분 이내면 그대로 반환하므로(force는 동기/비동기 여부만 결정) 수정 불필요.
+
+## 구현 중 추가로 확인한 것 (4번)
+- 자동 갱신(5분)은 `getDashData(true)`만 쓰고 cache/clear를 부르지 않는다. cache/clear는 저장 후에만 호출된다.
+- `PATCH /api/joints/<id>` 핸들러가 저장마다 `_cache.clear()`를 직접 실행하고 있었다. 캐시가 비면 다음 `/api/dashboard` 요청이 디바운스와 무관하게 즉시 재빌드를 시작하므로, 로그의 "빌드 횟수 ≈ cache/clear 횟수의 1.8배"를 설명한다. 프런트의 Joint 저장 4곳은 모두 `_refreshAfterSave`(→ cache/clear)를 부르므로 핸들러의 clear를 제거했다.
+- 핸들러 clear를 없애면 `_refreshPending` 가드가 갱신 중 저장의 clear 호출을 버려 그 저장이 서버 캐시에 반영되지 않는다. 그래서 `_refreshDirty`를 두어 갱신 중 들어온 저장은 끝난 뒤 한 번 더 갱신한다(Node 테스트로 5회 연속 저장이 2회 갱신으로 합쳐짐 확인).
+- scope 삭제 대상: 공통(대시보드, ep_sup, area_field, pkg_stats, testpkg_all) / joint=+meta,pkg_list,daily,wkbd,jm_fv,welder,rt,daily_report,kpi_override,welder_daily,iso_stats / support=+sup_test / all=+sub_area.
+- 실측(로컬, 실 Supabase 읽기 전용) 재빌드 1회 비용: all 30.1초·joint_master 조회 16회·HTTP 30회 / joint 19.0초·10회·20회 / support 10.0초·0회·12회. 세 경우 모두 재빌드 후 KPI가 전체 재빌드와 동일.
+- 남은 과제(범위 밖): joint 범위에도 iso_stats(약 6페이지)와 kpi_override 스캔이 남는다. iso_stats는 원래 5분 TTL이라 joint 저장마다 비우지 않는 것도 가능하나 UI 영향 확인이 필요해 보류.
+- 로그 형식이 바뀌었다: `clear executed scope=..`(실제 실행), `clear scope=.. deferred Ns`(묶임), `mem cur=..MB peak=..MB cgroup=..MB`. 예전 `All caches cleared`/`RSS=` 패턴으로는 더 이상 집계되지 않는다.

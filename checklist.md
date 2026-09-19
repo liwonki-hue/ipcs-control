@@ -46,6 +46,6 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
   - 검증: 가짜 트랜스포트 단위 테스트(재시도/비멱등 미재시도), 실서버 읽기 스모크
 - [x] 2. `/api/cache/clear` 디바운스 개선 — leading+trailing, 진행 중 빌드 재실행 플래그, 프런트가 deferred 응답이면 대기
   - 검증: Flask test client로 연속 호출 시나리오
-- [ ] 4. 저장 종류별 캐시 무효화 범위(scope=joint/support) — 호출 431건 중 Joint 저장 91%, Support 9%
+- [x] 4. 저장 종류별 캐시 무효화 범위(scope=joint/support) — 호출 431건 중 Joint 저장 91%, Support 9%
   - 검증: scope별 삭제/보존 대상 단위 테스트, 프런트 호출부 수정
-- [ ] 항목별 커밋 (push는 finish 때)
+- [x] 항목별 커밋 (push는 finish 때)

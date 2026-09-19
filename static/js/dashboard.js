@@ -1799,12 +1799,13 @@ async function saveJointDate(id){
 //  REFRESH
 // ================================================================================
 let _refreshPending = false;
+let _refreshDirty = false;   // 갱신 중에 또 저장이 들어왔음 — 서버는 저장 시 스스로 캐시를 비우지 않으므로 끝난 뒤 한 번 더 갱신
 
 async function _refreshAfterSave() {
-    if (_refreshPending) return;
+    if (_refreshPending) { _refreshDirty = true; return; }
     _refreshPending = true;
     try {
-        const clr = await fetch("/api/cache/clear").then(r => r.json()).catch(() => null);
+        const clr = await fetch("/api/cache/clear?scope=joint").then(r => r.json()).catch(() => null);
         // 서버가 연속 저장을 묶어 잠시 뒤 재빌드하는 경우 지금 조회하면 옛 캐시가 낙관적 KPI 갱신을 덮어쓰므로 기다린다
         if (clr && clr.deferred) await new Promise(r => setTimeout(r, (clr.retry_after || 0) * 1000 + 500));
         _epSupportData = null;
@@ -1814,7 +1815,10 @@ async function _refreshAfterSave() {
         const visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-", "");
         if (visPage) navigate(visPage);
     } catch(e) { console.warn("[refresh-after-save]", e); }
-    finally { _refreshPending = false; }
+    finally {
+        _refreshPending = false;
+        if (_refreshDirty) { _refreshDirty = false; _refreshAfterSave(); }
+    }
 }
 
 // 하위 호환 alias
@@ -2647,7 +2651,7 @@ async function applySmBulkDate() {
             })
         ));
         toast(`✓ ${targets.length} items saved — KPI updating...`);
-        fetch("/api/cache/clear");
+        fetch("/api/cache/clear?scope=support");
         updateSmIsoBulkPanel(isoVal, smData);
     } catch(e) { toast(`✗ Bulk save failed: ${e.message}`, "error"); }
     finally { if (btn) { btn.disabled = false; btn.textContent = "Apply to All"; } }
@@ -2677,7 +2681,7 @@ async function clearSmBulkDate() {
             })
         ));
         toast(`✓ ${targets.length} items cleared — KPI updating...`);
-        fetch("/api/cache/clear");
+        fetch("/api/cache/clear?scope=support");
         updateSmIsoBulkPanel(isoVal, smData);
     } catch(e) { toast(`✗ Bulk clear failed: ${e.message}`, "error"); }
 }
@@ -2734,7 +2738,7 @@ async function saveSMRow(id) {
         if (!r.ok) throw new Error("HTTP "+r.status);
         toast(`✓ Support #${id} saved`);
         _epSupportData = null;
-        fetch("/api/cache/clear");
+        fetch("/api/cache/clear?scope=support");
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
 }
 
@@ -2923,7 +2927,7 @@ async function syncSMFromDrawing() {
         if (!d.ok) throw new Error(d.error);
         toast(`✓ ${d.updated} updated / ${d.inserted} added`);
         loadSupportMaster();
-        fetch("/api/cache/clear");
+        fetch("/api/cache/clear?scope=support");
     } catch(e) { toast(`✗ ${e.message}`, "error"); }
     finally { if (btn) { btn.disabled = false; btn.textContent = "⟳ Sync from Drawing"; } }
 }

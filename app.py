@@ -1439,54 +1439,66 @@ _meta_cache = {"time": 0, "data": None}
 
 _last_cache_clear = 0.0   # 마지막으로 실제 clear를 실행한 시각
 _clear_timer = None       # 창 안에서 들어온 호출을 창 끝에 1회로 묶는 대기 타이머
+_pending_clear_scopes: set = set()  # 타이머가 실행할 때 합쳐 지울 범위('joint'/'support'/'all')
 # 저장마다 프런트가 cache/clear를 부르고 연속 저장 시 전체 재빌드가 겹쳐 RSS가 쌓여 OOM이 났다(2026-09-14).
 # 창 안의 호출은 버리지 않고 창 끝에 1회 실행해 마지막 저장까지 반영을 보장한다. 09-16~19 실측 호출로
 # 시뮬레이션: 창 20초=379회, 30초=316회, 45초=245회 (선행 실행만 하던 기존 20초 방식은 293회이나 마지막 저장 누락).
 _CACHE_CLEAR_MIN_INTERVAL = 30  # 초
 
-def _run_cache_clear():
-    """모든 캐시를 비우고 재빌드를 시작한다. 이미 빌드 중이면 그 빌드가 끝난 뒤 한 번 더 돈다."""
+def _run_cache_clear(scopes):
+    """캐시를 비우고 재빌드를 시작한다. 이미 빌드 중이면 그 빌드가 끝난 뒤 한 번 더 돈다.
+    scopes(집합)가 무엇을 지울지 정한다. 'joint'=Joint 저장(조인트 유래 캐시), 'support'=Support 저장(지원 집계 캐시),
+    'all'=전체. Joint 저장은 지원 집계(_sup_test_cache)와 sub_area 목록을, Support 저장은 조인트 유래 캐시를 바꾸지 않으므로
+    보존해 재빌드마다 joint_master 스캔이 다시 도는 것을 피한다."""
     global _building, _rebuild_pending, _jm_iso_stats_building
+    everything = "all" in scopes
+    joint = everything or "joint" in scopes
+    support = everything or "support" in scopes
     with _lock:
+        # 모든 범위 공통: 대시보드 결과와 조인트·지원 양쪽에서 파생되는 캐시
         _cache.clear()
-        _meta_cache["time"] = 0
-        _meta_cache["data"] = None
         _ep_sup_cache.clear()
         _area_field_cache.clear()
         _pkg_stats_cache.clear()
-        _pkg_cache["time"] = 0
-        _pkg_cache["data"] = {}
-        _daily_cache["time"] = 0
-        _daily_cache["data"] = None
-        _wkbd_cache["time"] = 0
-        _wkbd_cache["data"] = None
-        _jm_fv_cache.clear()
-        _welder_cache["data"] = None
-        _welder_cache["time"] = 0
-        _rt_cache["data"] = None
-        _rt_cache["time"] = 0
-        _sub_area_cache["data"] = None
-        _sub_area_cache["time"] = 0
-        _daily_report_cache["data"] = None
-        _daily_report_cache["time"] = 0
-        _sup_test_cache["data"] = None
-        _sup_test_cache["time"] = 0
-        _kpi_override_cache["data"] = None
-        _kpi_override_cache["time"] = 0
-        _welder_daily_cache["data"] = None
-        _welder_daily_cache["time"] = 0
         _testpkg_all_cache["data"] = None
         _testpkg_all_cache["time"] = 0
-        _jm_iso_stats_cache["data"] = None
-        _jm_iso_stats_cache["time"] = 0
-        _jm_iso_stats_building = False
+        if joint:
+            _meta_cache["time"] = 0
+            _meta_cache["data"] = None
+            _pkg_cache["time"] = 0
+            _pkg_cache["data"] = {}
+            _daily_cache["time"] = 0
+            _daily_cache["data"] = None
+            _wkbd_cache["time"] = 0
+            _wkbd_cache["data"] = None
+            _jm_fv_cache.clear()
+            _welder_cache["data"] = None
+            _welder_cache["time"] = 0
+            _rt_cache["data"] = None
+            _rt_cache["time"] = 0
+            _daily_report_cache["data"] = None
+            _daily_report_cache["time"] = 0
+            _kpi_override_cache["data"] = None
+            _kpi_override_cache["time"] = 0
+            _welder_daily_cache["data"] = None
+            _welder_daily_cache["time"] = 0
+            _jm_iso_stats_cache["data"] = None
+            _jm_iso_stats_cache["time"] = 0
+            _jm_iso_stats_building = False
+        if support:
+            _sup_test_cache["data"] = None
+            _sup_test_cache["time"] = 0
+        if everything:
+            _sub_area_cache["data"] = None
+            _sub_area_cache["time"] = 0
         start = not _building
         if start:
             _building = True
         else:
             _rebuild_pending = True
-    print("[cache] All caches cleared - starting background rebuild" if start
-          else "[cache] All caches cleared - build in progress, rebuilding again when it finishes")
+    tag = "+".join(sorted(scopes))
+    print(f"[cache] clear executed scope={tag} - starting background rebuild" if start
+          else f"[cache] clear executed scope={tag} - build in progress, rebuilding again when it finishes")
     if start:
         threading.Thread(target=_build, daemon=True).start()
 
@@ -1494,27 +1506,33 @@ def _run_cache_clear():
 def _run_deferred_cache_clear():
     global _last_cache_clear, _clear_timer
     with _lock:
+        scopes = set(_pending_clear_scopes)
+        _pending_clear_scopes.clear()
         _clear_timer = None
         _last_cache_clear = time.time()
-    _run_cache_clear()
+    _run_cache_clear(scopes)
 
 
 @app.route("/api/cache/clear")
 @login_required
 def api_cache_clear():
     global _last_cache_clear, _clear_timer
+    scope = request.args.get("scope", "all")
+    if scope not in ("joint", "support"):
+        scope = "all"
     with _lock:
         wait = _CACHE_CLEAR_MIN_INTERVAL - (time.time() - _last_cache_clear)
         if wait > 0:
+            _pending_clear_scopes.add(scope)
             if _clear_timer is None:
                 _clear_timer = threading.Timer(wait, _run_deferred_cache_clear)
                 _clear_timer.daemon = True
                 _clear_timer.start()
-            print(f"[cache] clear deferred {wait:.0f}s (coalescing rapid saves)")
+            print(f"[cache] clear scope={scope} deferred {wait:.0f}s (coalescing rapid saves)")
             return jsonify({"status": "ok", "deferred": True, "retry_after": round(wait, 1)})
         _last_cache_clear = time.time()
-    _run_cache_clear()
-    return jsonify({"status": "ok", "deferred": False, "message": "All caches cleared, rebuild started"})
+    _run_cache_clear({scope})
+    return jsonify({"status": "ok", "deferred": False, "message": f"Caches cleared (scope={scope}), rebuild started"})
 
 # ── Auth endpoints ─────────────────────────────────────────────────────
 @app.route("/api/auth/status", methods=["GET"])
@@ -1939,8 +1957,8 @@ def api_joints_patch(jid):
             if not weld or not insp:
                 return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
         sb.table("joint_master").update(body).eq("id", jid).execute()
-        with _lock:
-            _cache.clear()
+        # 여기서 _cache를 비우지 않는다: 프런트가 저장 뒤 /api/cache/clear?scope=joint(디바운스)를 부르는데,
+        # 저장마다 캐시를 비우면 다음 대시보드 요청이 디바운스를 우회해 즉시 재빌드를 시작한다.
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
