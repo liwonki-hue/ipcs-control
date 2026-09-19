@@ -5,6 +5,7 @@ import gzip
 import bisect
 import hmac
 import signal
+import sys
 import threading
 import time
 import traceback
@@ -14,6 +15,11 @@ from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request, session
 from functools import wraps
 from supabase import create_client
+
+# gunicorn 아래에서는 stdout이 파이프라 기본이 블록 버퍼링 — 로그가 수 분 뒤/종료 시점에야 나오고
+# SIGKILL 시 마지막 로그가 유실된다. 줄 단위 즉시 출력으로 바꿔 OOM 직전 상황이 보이게 한다.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
 
 ALMT = timezone(timedelta(hours=5))   # Asia/Almaty, UTC+5 고정 (DST 없음) — 현장 기준 날짜 표시용
 
@@ -26,7 +32,45 @@ def _rss_mb():
     """현재 프로세스 RSS(MB). resource 모듈 없는 환경(Windows)에서는 None."""
     if resource is None:
         return None
-    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux: KB 단위
+    return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)  # Linux: KB 단위 (프로세스 최고치라 내려가지 않음)
+
+def _proc_rss_mb():
+    """현재 프로세스 RSS(MB, /proc/self/status의 VmRSS). ru_maxrss와 달리 메모리가 반환되면 내려간다. Linux가 아니면 None."""
+    try:
+        with open("/proc/self/status", encoding="ascii") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except (OSError, ValueError, IndexError):  # 진단용이라 어떤 경우에도 요청 처리를 깨면 안 됨
+        pass
+    return None
+
+def _cgroup_mb():
+    """컨테이너(cgroup) 전체 메모리 사용량/한도(MB). Render가 OOM을 판정하는 기준에 가장 가깝다. 읽을 수 없으면 (None, None)."""
+    for cur_path, lim_path in (
+        ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max"),                                    # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.usage_in_bytes", "/sys/fs/cgroup/memory/memory.limit_in_bytes"),  # cgroup v1
+    ):
+        try:
+            with open(cur_path) as f:
+                usage = int(f.read())
+            with open(lim_path) as f:
+                raw = f.read().strip()
+        except (OSError, ValueError):
+            continue
+        limit = int(raw) if raw.isdigit() else None  # v2 무제한은 "max"
+        if limit is not None and limit >= 1 << 50:   # v1 무제한은 매우 큰 수
+            limit = None
+        return round(usage / 1048576, 1), (round(limit / 1048576, 1) if limit else None)
+    return None, None
+
+def _mem_status(cur=None):
+    """로그용 메모리 요약. cur=현재 RSS(이미 읽은 값이 있으면 전달), peak=프로세스 최고 RSS, cgroup=컨테이너 사용량/한도."""
+    cur = _proc_rss_mb() if cur is None else cur
+    peak = _rss_mb()
+    cg, cg_limit = _cgroup_mb()
+    show = lambda v: "n/a" if v is None else v
+    return f"mem cur={show(cur)}MB peak={show(peak)}MB cgroup={show(cg)}/{show(cg_limit)}MB"
 
 _RSS_RESTART_THRESHOLD_MB = 420  # Render free tier 512MB 한도 대비 안전 마진 확보
 
@@ -954,7 +998,7 @@ def _build():
     try:
         sb  = get_sb()
         raw = {}
-        print(f"[cache] Background build started... (RSS={_rss_mb()}MB)")
+        print(f"[cache] Background build started... ({_mem_status()})")
 
         # ═══════════════════════════════════════════════════════════════
         # FAST PATH: Supabase dashboard_cache 테이블 읽기 (1~2초)
@@ -1277,9 +1321,8 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             _build_fail = False
-        _rss_after_build = _rss_mb()
-        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% (RSS={_rss_after_build}MB)")
-        _maybe_self_recycle(_rss_after_build)
+        print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% ({_mem_status()})")
+        _maybe_self_recycle(_rss_mb())
         def _run_secondary():
             try:
                 _build_secondary_caches()
@@ -1287,9 +1330,8 @@ def _build():
                 print(f"[secondary_cache] CRITICAL: {_sce}")
                 traceback.print_exc()
             finally:
-                _rss_after_secondary = _rss_mb()
-                print(f"[secondary_cache] done (RSS={_rss_after_secondary}MB)")
-                _maybe_self_recycle(_rss_after_secondary)
+                print(f"[secondary_cache] done ({_mem_status()})")
+                _maybe_self_recycle(_rss_mb())
         threading.Thread(target=_run_secondary, daemon=True).start()
     except Exception as e:
         with _lock:
@@ -3309,6 +3351,20 @@ def compress_response(resp):
         resp.data = gzip.compress(resp.data, compresslevel=6)
         resp.headers["Content-Encoding"] = "gzip"
         resp.headers["Content-Length"]   = len(resp.data)
+    return resp
+
+
+_mem_last_logged = 0.0
+
+@app.after_request
+def log_memory_steps(resp):
+    """현재 RSS가 마지막 기록 대비 25MB 이상 바뀔 때만 요청 경로와 함께 기록 — 어떤 요청이
+    메모리를 올리는지, 메모리가 실제로 반환되는지(누수 vs 일시 피크)를 구분하기 위함."""
+    global _mem_last_logged
+    cur = _proc_rss_mb()
+    if cur is not None and abs(cur - _mem_last_logged) >= 25:
+        _mem_last_logged = cur
+        print(f"[memory] {request.method} {request.path} {_mem_status(cur)}")
     return resp
 
 

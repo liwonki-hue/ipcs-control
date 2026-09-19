@@ -33,3 +33,19 @@
 - [x] 4) 성능·안정성 — pandas 의존 제거(빌드/메모리 감소), 캐시/gzip 기존 설정 유지
 - [x] 5) 로컬 웹 직접 작동 검증 — 서버 재시작 후 재검증 완료
 - [x] 6) git commit → push
+
+---
+
+# Checklist — Render OOM 예방 1~4번 (2026-09-19)
+
+Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수행. 항목별로 검증 후 의미 단위로 커밋하고, push는 finish 때 한다.
+
+- [x] 1. 메모리 측정 정상화 — 현재 RSS + 컨테이너(cgroup) 사용량 로그, 요청 단위 메모리 변화 로그, stdout 즉시 출력
+  - 검증: 로컬 부팅, 새 로그 포맷 확인, Windows에서 None 안전
+- [ ] 3. Supabase 연결 끊김 1회 재시도 — 멱등 요청만 재시도하는 httpx 트랜스포트를 httpx_client로 주입
+  - 검증: 가짜 트랜스포트 단위 테스트(재시도/비멱등 미재시도), 실서버 읽기 스모크
+- [ ] 2. `/api/cache/clear` 디바운스 개선 — leading+trailing, 진행 중 빌드 재실행 플래그, 프런트가 deferred 응답이면 대기
+  - 검증: Flask test client로 연속 호출 시나리오
+- [ ] 4. 저장 종류별 캐시 무효화 범위(scope=joint/support) — 호출 431건 중 Joint 저장 91%, Support 9%
+  - 검증: scope별 삭제/보존 대상 단위 테스트, 프런트 호출부 수정
+- [ ] 항목별 커밋 (push는 finish 때)

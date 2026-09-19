@@ -32,3 +32,21 @@
 ### 버튼 배치
 - 차트 탭(Overview/EP/Weekly/UnitArea/Welder/RT)은 `.page-header` 우측에 Export/Print 배치.
 - 데이터 탭은 기존 jm-top-row 우측 배치 유지, 빠진 Print만 추가 (Pkg Master, Test Master).
+
+---
+
+# Context Notes — Render OOM 예방 1~4번 (2026-09-19)
+
+## 근거 (09-16~19 로그 19k줄 + Render 이벤트 API)
+- 수정(20초 디바운스) 배포 후 OOM 이벤트 0건이지만 RSS 피크가 352~376MB로 사고 당시와 비슷.
+- 지금 지표 `ru_maxrss`는 최고치라 누수/일시 피크 구분 불가 → 현재값과 cgroup 사용량이 필요.
+- `/api/cache/clear` 431건 중 392건(91%)이 Joint 저장(PATCH /api/joints) 직후, 39건(9%)이 Support 저장. 5분 자동 갱신은 `getDashData(true)`만 쓰고 cache/clear를 부르지 않음(확인 완료).
+
+## 결정 사항
+- 자가재시작(`_maybe_self_recycle`)은 이번 범위 밖(5번)이라 기존 `ru_maxrss` 기준 그대로 둔다. 새 로그 포맷은 `mem cur=..MB peak=..MB cgroup=..MB/..MB`로 바꾸고, 예전 `RSS=` 정규식이 조용히 의미가 바뀌지 않게 이름을 다르게 한다.
+- 연결 끊김 재시도는 supabase-py가 지원하는 `ClientOptions(httpx_client=...)`로 트랜스포트만 감싼다(콜사이트 수정 없음, 라이브러리 내부 패치 없음). HTTP/2 설정은 기존과 동일하게 유지해 프로토콜 변화 위험을 피한다.
+- 재시도 대상은 멱등 요청만: GET/HEAD/OPTIONS/PUT/PATCH/DELETE와 `rpc/get_*`, `rpc/refresh_dashboard_cache`. INSERT/UPSERT(POST)와 `bulk_update_phase_package`는 재시도하지 않는다(중복 쓰기 방지).
+- 디바운스는 leading+trailing. 기존 leading-only는 연속 저장의 마지막 건이 서버 캐시에 반영되지 않은 채 TTL(20분)까지 남을 수 있었다. 진행 중인 빌드는 clear 이전 데이터로 결과를 쓸 수 있어 `_rebuild_pending`으로 끝난 뒤 1회 더 돌린다.
+- 디바운스로 응답이 deferred일 때 프런트 `_refreshAfterSave`가 바로 `getDashData(true)`를 하면 옛 캐시로 낙관적 KPI 갱신을 덮어쓰므로, `retry_after`만큼 기다린 뒤 조회한다.
+- 4번은 Joint 저장 비중이 91%라 Support 전용이 아니라 `scope=joint`도 함께 만든다. scope=joint는 `_sup_test_cache`, `_sub_area_cache`를 보존(joint 저장은 support 집계·sub_area 목록을 바꾸지 않음), scope=support는 joint 유래 캐시를 모두 보존. 지정 없으면 기존처럼 전체 삭제.
+- `_get_jm_iso_stats(force=True)`는 캐시가 5분 이내면 그대로 반환하므로(force는 동기/비동기 여부만 결정) 수정 불필요.
