@@ -59,3 +59,13 @@
 - 실측(로컬, 실 Supabase 읽기 전용) 재빌드 1회 비용: all 30.1초·joint_master 조회 16회·HTTP 30회 / joint 19.0초·10회·20회 / support 10.0초·0회·12회. 세 경우 모두 재빌드 후 KPI가 전체 재빌드와 동일.
 - 남은 과제(범위 밖): joint 범위에도 iso_stats(약 6페이지)와 kpi_override 스캔이 남는다. iso_stats는 원래 5분 TTL이라 joint 저장마다 비우지 않는 것도 가능하나 UI 영향 확인이 필요해 보류.
 - 로그 형식이 바뀌었다: `clear executed scope=..`(실제 실행), `clear scope=.. deferred Ns`(묶임), `mem cur=..MB peak=..MB cgroup=..MB`. 예전 `All caches cleared`/`RSS=` 패턴으로는 더 이상 집계되지 않는다.
+
+---
+
+# Context Notes — JM vs Drawing DB 비교 리포트 (2026-09-19)
+
+- 기준은 Drawing DB(drawing.dwg_latest). "누락" = Drawing DB에 있는데 JM(joint_master)에 없는 도면, "Revision 불일치" = JM 조인트 중 하나라도 rev가 도면 revision과 다른 ISO. 비교는 앞뒤 공백 제거 + 대소문자 무시.
+- JM은 조인트마다 rev를 가지므로 ISO 하나에 여러 rev가 섞일 수 있다(18개 ISO). 기존 스크립트는 최빈값 하나로 대표했지만, 불일치를 놓치지 않도록 "JM Rev (조인트 수)"로 전부 표시하고 "불일치 조인트 수"를 따로 센다.
+- dwg_latest의 Revision `VOID`(53건)는 발행 후 무효 처리된 도면(remark "Void (Voided after issuance)", file_link 없음). 누락 38건은 전부 VOID라 JM에 없는 게 정상일 수 있고, VOID 15건은 JM에 조인트가 남아 있어 별도 비고로 표시한다.
+- 기존 `fetch_all`은 정렬 없이 range로 페이지를 나눠 페이지 경계에서 행이 중복/누락될 수 있었다. `order("id")`를 추가하고 끝에서 전체 건수(count=exact)와 대조해 어긋나면 중단하게 했다.
+- 기존 "JM에만 존재" 비교는 유지(현재 0건이라 엑셀에는 행이 나오지 않음). 출력은 Reports/ISO_Drawing_vs_JM_YYYYMMDD.xlsx (Reports/는 gitignore, 로컬 전용).
