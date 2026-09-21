@@ -496,7 +496,7 @@ function renderKPI(d, wkData) {
     const totalEl    = document.getElementById("kpi-total-di");
     const totalSubEl = document.getElementById("kpi-total-di-sub");
     if (totalEl)    totalEl.textContent    = fmtNum(d.total_plan_di, 0);
-    if (totalSubEl) totalSubEl.textContent = `${Math.round(pipingPct)}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
+    if (totalSubEl) totalSubEl.textContent = `${pipingPct.toFixed(1)}% · ${d.total_joints?.toLocaleString() || "–"} joints`;
 
     const completedEl    = document.getElementById("kpi-completed");
     const completedSubEl = document.getElementById("kpi-completed-sub");
