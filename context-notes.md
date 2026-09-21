@@ -69,3 +69,13 @@
 - dwg_latest의 Revision `VOID`(53건)는 발행 후 무효 처리된 도면(remark "Void (Voided after issuance)", file_link 없음). 누락 38건은 전부 VOID라 JM에 없는 게 정상일 수 있고, VOID 15건은 JM에 조인트가 남아 있어 별도 비고로 표시한다.
 - 기존 `fetch_all`은 정렬 없이 range로 페이지를 나눠 페이지 경계에서 행이 중복/누락될 수 있었다. `order("id")`를 추가하고 끝에서 전체 건수(count=exact)와 대조해 어긋나면 중단하게 했다.
 - 기존 "JM에만 존재" 비교는 유지(현재 0건이라 엑셀에는 행이 나오지 않음). 출력은 Reports/ISO_Drawing_vs_JM_YYYYMMDD.xlsx (Reports/는 gitignore, 로컬 전용).
+
+---
+
+# Context Notes — Joint Master 목록 정렬(ISO Drawing → Joint No 숫자순) (2026-09-21)
+
+- 원인: `/api/joints`가 `order("id")`라 나중에 추가된 조인트(id가 큼)는 항상 맨 뒤에 나와 확인이 어려웠다. `joint_no`는 문자열이라 DB에서 그냥 정렬하면 1,10,11,…,2 순이 된다.
+- JM 화면은 30건씩 서버 페이징이라 정렬은 DB 조회 단계에서 해야 한다. 앱 키로는 DDL(숫자 정렬용 generated column)을 못 하고 배포 순서 의존이 생겨 채택하지 않았다.
+- 채택: DB는 `iso_drawing, joint_no, id`로 정렬해 페이지를 자른 뒤, 같은 ISO 안에서만 숫자순으로 재정렬한다. ISO 묶음의 순서·크기는 두 정렬이 같으므로, 페이지 양 끝의 ISO만 전체 행(최대 45건)을 다시 조회해 자리를 맞춘다(`_sort_joints_numeric`). 응답은 페이지당 약 1.4초(경계 ISO 조회 2회 포함).
+- `1A`, `6A` 같은 문자 붙은 번호(5건)는 숫자 부분 기준으로 `1` 바로 뒤에 온다. NDE 탭과 엑셀 export도 같은 엔드포인트라 같은 순서가 된다.
+- 검증: 전체 51,114건의 기대 순서와 API 결과를 표본 44페이지(첫/끝 페이지 포함), limit=1000, status=completed 필터로 대조해 모두 일치.

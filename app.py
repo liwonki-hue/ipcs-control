@@ -4,6 +4,7 @@ import gc
 import gzip
 import bisect
 import hmac
+import re
 import signal
 import sys
 import threading
@@ -1800,6 +1801,35 @@ def api_refresh_db_cache():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # ── Joint Master ───────────────────────────────────────────────────────
+def _joint_no_key(r):
+    """joint_no 숫자순 정렬 키 (1, 2, ..., 10 / '1A'는 1 뒤). 숫자가 없으면 맨 뒤."""
+    jn = r.get("joint_no") or ""
+    m = re.match(r"\d+", jn)
+    return (int(m.group()) if m else 10**9, jn, r["id"])
+
+def _sort_joints_numeric(rows, fetch_iso_rows):
+    """DB는 joint_no를 문자열(1,10,11,...,2)로 정렬하므로 같은 ISO 안에서만 숫자순으로 다시 정렬한다.
+    페이지 양 끝의 ISO는 페이지 밖에도 행이 있을 수 있어, 그 ISO 전체를 fetch_iso_rows(iso)로 받아 자리를 맞춘다."""
+    out, i = [], 0
+    while i < len(rows):
+        iso = rows[i].get("iso_drawing")
+        j = i
+        while j < len(rows) and rows[j].get("iso_drawing") == iso:
+            j += 1
+        block = rows[i:j]
+        ids = []
+        if i == 0 or j == len(rows):
+            full = fetch_iso_rows(iso)
+            ids = [r["id"] for r in full]
+        if block[0]["id"] in ids:
+            start = ids.index(block[0]["id"])
+            block = sorted(full, key=_joint_no_key)[start:start + len(block)]
+        else:
+            block = sorted(block, key=_joint_no_key)
+        out += block
+        i = j
+    return out
+
 @app.route("/api/joints", methods=["GET"])
 def api_joints_get():
     try:
@@ -1818,27 +1848,33 @@ def api_joints_get():
         welder  = request.args.get("welder",   "")
         mat     = request.args.get("mat",      "")
         size    = request.args.get("size",     "")
-        q = sb.table("joint_master").select("*", count="exact")
-        if unit:    q = q.eq("unit",        unit)
-        if system:  q = q.eq("system",      system)
-        if iso:     q = q.ilike("iso_drawing", f"%{iso}%")
-        if subarea: q = q.eq("sub_area",    subarea)
-        if phase:   q = q.eq("phase",       phase)
-        if insp:    q = q.eq("inspection",  insp)
-        if pkg:     q = q.eq("package",     pkg)
-        if welder:  q = q.ilike("welder",   f"%{welder}%")
-        if mat:     q = q.eq("mat",          mat)
         pwht    = request.args.get("pwht",     "")
-        if pwht:    q = q.eq("pwht",         pwht)
-        if size:
-            try:    q = q.eq("size_inch", float(size))
-            except ValueError: pass
-        if nde_only == "true":
-            q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
-        if status == "completed": q = q.not_.is_("date_completed", "null")
-        if status == "pending":   q = q.is_("date_completed",      "null")
-        res = q.order("id").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": res.data, "count": res.count})
+        def build_query(count=None):
+            q = sb.table("joint_master").select("*", count=count)
+            if unit:    q = q.eq("unit",        unit)
+            if system:  q = q.eq("system",      system)
+            if iso:     q = q.ilike("iso_drawing", f"%{iso}%")
+            if subarea: q = q.eq("sub_area",    subarea)
+            if phase:   q = q.eq("phase",       phase)
+            if insp:    q = q.eq("inspection",  insp)
+            if pkg:     q = q.eq("package",     pkg)
+            if welder:  q = q.ilike("welder",   f"%{welder}%")
+            if mat:     q = q.eq("mat",          mat)
+            if pwht:    q = q.eq("pwht",         pwht)
+            if size:
+                try:    q = q.eq("size_inch", float(size))
+                except ValueError: pass
+            if nde_only == "true":
+                q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
+            if status == "completed": q = q.not_.is_("date_completed", "null")
+            if status == "pending":   q = q.is_("date_completed",      "null")
+            return q.order("iso_drawing").order("joint_no").order("id")
+        def fetch_iso_rows(iso_drawing):
+            q = build_query()
+            q = q.is_("iso_drawing", "null") if iso_drawing is None else q.eq("iso_drawing", iso_drawing)
+            return q.execute().data
+        res = build_query("exact").range(offset, offset + limit - 1).execute()
+        return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows), "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

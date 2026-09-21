@@ -58,3 +58,12 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] `scripts/compare_iso_drawings.py`를 Drawing DB 기준으로 갱신 — JM 누락 / Revision 불일치 / (기존 유지) JM에만 존재
 - [x] 검증: 엑셀 재로딩, 누락 4건·불일치 6건을 DB에서 직접 재조회해 대조, 일치 ISO가 결과에 없는지 확인
 - [x] 커밋 (push는 finish 때)
+
+---
+
+# Checklist — Joint Master 목록 정렬 (2026-09-21)
+
+- [x] 원인 확인 (order("id"), joint_no 문자열)
+- [x] `/api/joints`를 ISO Drawing → Joint No 숫자순으로 정렬 (`_sort_joints_numeric`)
+- [x] 검증: 전체 정렬과 표본 페이지/필터/큰 limit 대조, WD-512-1에서 Joint 21이 마지막
+- [x] 커밋 (push는 finish 때)
