@@ -79,3 +79,11 @@
 - 채택: DB는 `iso_drawing, joint_no, id`로 정렬해 페이지를 자른 뒤, 같은 ISO 안에서만 숫자순으로 재정렬한다. ISO 묶음의 순서·크기는 두 정렬이 같으므로, 페이지 양 끝의 ISO만 전체 행(최대 45건)을 다시 조회해 자리를 맞춘다(`_sort_joints_numeric`). 응답은 페이지당 약 1.4초(경계 ISO 조회 2회 포함).
 - `1A`, `6A` 같은 문자 붙은 번호(5건)는 숫자 부분 기준으로 `1` 바로 뒤에 온다. NDE 탭과 엑셀 export도 같은 엔드포인트라 같은 순서가 된다.
 - 검증: 전체 51,114건의 기대 순서와 API 결과를 표본 44페이지(첫/끝 페이지 포함), limit=1000, status=completed 필터로 대조해 모두 일치.
+
+---
+
+# Context Notes — KPI Remaining DI Piping 기준 + Fab/Erect % (2026-09-22)
+
+- 원인: `renderKPI`가 Remaining 서브텍스트를 `100 - weightedPct`(Piping 70/Support 20/Test 10 가중 진척)로 계산해 61.4%로 나왔다. Total DI 카드는 Piping 진척(52.5%)을 쓰므로 Remaining도 `100 - pipingPct`(47.5%)로 맞췄다. Remaining DI 숫자(remaining_di)는 원래 Piping DI 기준이라 그대로다.
+- Fab/Erect % 기준: kpi에 이미 있는 `fab_total_di`/`erect_total_di` 대비 비율로 계산했다(공정별 진행률, 서버의 fab_pct/erect_pct와 같은 정의). Completed는 완료/전체, Remaining은 (전체-완료)/전체이며 Fab+Erect 잔여 합이 remaining_di와 일치한다. "완료 DI 중 Fab 비중"으로 해석할 수도 있으나 서버 fab_pct와의 일관성 때문에 채택하지 않았다.
+- 조인트 저장 시 낙관적 갱신(saveJointDate/clear)은 fab_di/erect_di를 건드리지 않아 Fab/Erect %는 서버 재빌드(_refreshAfterSave) 후에 맞춰진다. 기존 Fab/Erect 숫자도 동일했다.

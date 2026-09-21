@@ -67,3 +67,12 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] `/api/joints`를 ISO Drawing → Joint No 숫자순으로 정렬 (`_sort_joints_numeric`)
 - [x] 검증: 전체 정렬과 표본 페이지/필터/큰 limit 대조, WD-512-1에서 Joint 21이 마지막
 - [x] 커밋 (push는 finish 때)
+
+---
+
+# Checklist — KPI Remaining DI를 Piping 기준으로 + Fab/Erect % 표시 (2026-09-22)
+
+- [x] Remaining DI 서브텍스트의 % 를 가중 전체 진척(weightedPct)이 아닌 Piping(overall_pct) 기준으로 수정
+- [x] Completed DI 카드: Fab/Erect 옆에 각 공정 전체 DI 대비 % 가로 표시
+- [x] Remaining DI 카드: Fab/Erect 잔여 DI와 잔여 % 가로 표시
+- [x] 브라우저에서 값/레이아웃 확인 — Fab+Erect 잔여 합 = 77,376, 1920px에서 가로 한 줄, 1416px(사이드바 포함)에서는 카드가 좁아 줄바꿈
