@@ -87,3 +87,16 @@
 - 원인: `renderKPI`가 Remaining 서브텍스트를 `100 - weightedPct`(Piping 70/Support 20/Test 10 가중 진척)로 계산해 61.4%로 나왔다. Total DI 카드는 Piping 진척(52.5%)을 쓰므로 Remaining도 `100 - pipingPct`(47.5%)로 맞췄다. Remaining DI 숫자(remaining_di)는 원래 Piping DI 기준이라 그대로다.
 - Fab/Erect % 기준: kpi에 이미 있는 `fab_total_di`/`erect_total_di` 대비 비율로 계산했다(공정별 진행률, 서버의 fab_pct/erect_pct와 같은 정의). Completed는 완료/전체, Remaining은 (전체-완료)/전체이며 Fab+Erect 잔여 합이 remaining_di와 일치한다. "완료 DI 중 Fab 비중"으로 해석할 수도 있으나 서버 fab_pct와의 일관성 때문에 채택하지 않았다.
 - 조인트 저장 시 낙관적 갱신(saveJointDate/clear)은 fab_di/erect_di를 건드리지 않아 Fab/Erect %는 서버 재빌드(_refreshAfterSave) 후에 맞춰진다. 기존 Fab/Erect 숫자도 동일했다.
+
+---
+
+# Context Notes — 신규 Revision Drawing JM 정합성 (2026-09-24)
+
+- dwg_latest에는 업로드 시각 컬럼이 없어 file_link의 Cloudinary 버전(`/v1790175409/` = Unix 초)을 KST로 변환해 업로드일을 판별했다. 09-23 23시 109건 + 09-24 00시 41건은 하나의 연속 업로드 배치라 "어제 업로드"로 본다. 전부 revision C03.
+- JM rev 갱신에서 기존 예외 4 ISO(SA-049-1, WD-541-1, CH-506-1, LN-052-1: JM이 Drawing DB보다 최신)는 사용자 결정(2026-09-19)에 따라 제외한다. 이번 업로드 대상이 아니라 그대로 남아 있다.
+- PDF는 벡터 PDF(텍스트 레이어 있음)이고 Joint No는 원형 안 숫자, Part No는 사각 안 숫자다. PyMuPDF로 작은 원(폭≈5pt, 곡선 4개)을 찾아 그 안의 텍스트를 Joint No로 읽는다. 샘플(WD-452-1) 검증: 원 12개 = JM joint_no 1~12. PyMuPDF는 프로젝트 .venv에만 설치(requirements.txt에는 넣지 않음).
+- JM rev 갱신 결과: 139 ISO / 1,653 조인트를 전부 C03으로 변경(C01A 934, C01B 712, C01C 7). 롤백 데이터는 `Reports/JM_Rev_Update_Backup_20260924_1934.xlsx`(id, 기존 rev, 새 rev; 1933 파일은 미리보기 때 만든 동일 내용). 적용 후 재비교: 예외 4 ISO(59조인트)와 VOID 누락 38건만 남음.
+- PDF는 세 종류였다. (1) 텍스트 레이어 도면: 원(폭≈5.4pt, 곡선) 안 텍스트를 그대로 읽는다. (2) 글자가 선분으로 그려진 도면(텍스트 레이어 없음): 원은 36선분 폴리라인(폭≈10pt)이고 숫자는 원 안의 별도 경로다. 글리프 선분만 tight crop해 높이 64px로 다시 그려 RapidOCR로 읽고 선 굵기 3종으로 투표한다. 처음에 원 크기 기준 큰 캔버스에 그리니 글자가 작아 6/8/9를 자주 틀렸고(저신뢰 다수), tight crop으로 바꾸자 샘플이 JM과 정확히 일치했다. (3) Joint No 원이 아예 없는 도면(14건): 대조 불가로 분류.
+- 같은 번호가 여러 번 나와도 오류가 아니다. 상세도(View B-B, Detail A)에 같은 조인트가 다시 표기된다(CWR-033-1의 18/19/22). 비교는 번호 집합 기준이다. `0` 원은 도면에 실제로 "0"이 적힌 것(DW-001-1은 10이어야 할 자리, WD-518-1)이라 PDF에만 있는 번호로 그대로 보고한다.
+- 검증 결과: 152건 중 일치 103, 불일치 35(PDF에만 13 / JM에만 18 / 양쪽 4), 표기 없음 14. 불일치 조인트는 JM에만 46개(완료된 것 21개), PDF에만 46개.
+- PyMuPDF와 rapidocr/onnxruntime은 프로젝트 .venv에만 설치(requirements.txt 미반영, 앱 런타임과 무관). scratch/ 는 gitignore라 스크립트는 로컬에만 있다.

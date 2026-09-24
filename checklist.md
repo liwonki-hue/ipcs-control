@@ -76,3 +76,13 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] Completed DI 카드: Fab/Erect 옆에 각 공정 전체 DI 대비 % 가로 표시
 - [x] Remaining DI 카드: Fab/Erect 잔여 DI와 잔여 % 가로 표시
 - [x] 브라우저에서 값/레이아웃 확인 — Fab+Erect 잔여 합 = 77,376, 1920px에서 가로 한 줄, 1416px(사이드바 포함)에서는 카드가 좁아 줄바꿈
+
+---
+
+# Checklist — 신규 Revision Drawing(2026-09-23 업로드) JM 정합성 (2026-09-24)
+
+- [x] 업로드 대상 식별: file_link의 Cloudinary 버전 타임스탬프(KST)로 09-23 23시~09-24 00시 배치 150건 + 09-21 2건 = 152건 (전부 C03)
+- [x] JM rev vs Drawing DB 비교 (미리보기, 읽기 전용) — 139 ISO / 1,653 조인트가 C03으로 변경 대상, 기존 예외 4 ISO 제외
+- [x] JM rev를 Drawing DB 기준으로 갱신(canary → 일괄) + 롤백용 백업 + 검증 — 0건 불일치, 전체 51,114행 유지
+- [x] 152개 PDF에서 원형 Joint No 추출 → JM joint_no와 ISO별 대조 (Reports/JM_Joint_vs_PDF_20260924.xlsx)
+- [x] 불일치 ISO 표본을 렌더링해 추출 로직 검증 (CWS-062-1, CWR-033-1, LS-011-2, DW-001-1, WD-518-1)
