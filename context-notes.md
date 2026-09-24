@@ -100,3 +100,19 @@
 - 같은 번호가 여러 번 나와도 오류가 아니다. 상세도(View B-B, Detail A)에 같은 조인트가 다시 표기된다(CWR-033-1의 18/19/22). 비교는 번호 집합 기준이다. `0` 원은 도면에 실제로 "0"이 적힌 것(DW-001-1은 10이어야 할 자리, WD-518-1)이라 PDF에만 있는 번호로 그대로 보고한다.
 - 검증 결과: 152건 중 일치 103, 불일치 35(PDF에만 13 / JM에만 18 / 양쪽 4), 표기 없음 14. 불일치 조인트는 JM에만 46개(완료된 것 21개), PDF에만 46개.
 - PyMuPDF와 rapidocr/onnxruntime은 프로젝트 .venv에만 설치(requirements.txt 미반영, 앱 런타임과 무관). scratch/ 는 gitignore라 스크립트는 로컬에만 있다.
+
+---
+
+# Context Notes — 전체 JM DB vs ISO Drawing PDF Joint No 대조 (2026-09-24)
+
+- 기존 JM 엑셀 export 형식(exportJMExcel): ID, UNIT, SYSTEM, AREA, SUB AREA, LINE NO, ISO DRAWING, REV, SPOOL NO, MAT, SIZE, S/F, JOINT NO, DI, WELDER, PHASE, COMPLETED DATE, REMARK. 이미 REMARK(joint_master.remark) 열이 있으므로, 원본 REMARK는 그대로 두고 비교 결과는 새 열 "비교 REMARK"로 추가한다(원본 내용 덮어쓰기 방지).
+- DB는 변경하지 않는다(엑셀 산출만). 4,000건가량 PDF는 디스크에 저장하지 않고 메모리에서 파싱하고 결과만 캐시한다.
+- PDF 판독기(scratch/pdf_joint_reader.py) 개선 이력과 이유. 처음엔 152건 표본에서만 검증됐고, 전체 3,973건으로 넓히자 도면 유형이 더 있었다.
+  1) 회전된 페이지: 일부 PDF는 page.rotation=270이고 get_drawings 좌표가 회전 전 기준이라 원 안 글자가 옆으로 누워 읽히고 가시성 판정도 어긋났다. `page.rotation_matrix`로 화면 좌표로 변환(`_to_display`)한 뒤 읽는다. 이전에 넣었던 "0/90/270/180도 시험" 로직은 이 문제의 우회책이었고, 변환 후에는 대부분 0도에서 읽힌다(9를 6으로 읽는 오독도 해소).
+  2) 원 표현이 3~4가지: 경로 하나에 선분 36개인 다각형, 곡선 4개(12pt), 선분 하나당 경로 하나로 쪼갠 원(끝점 연결로 복원, `_ring_circles`). 원 폭은 4.5~18pt.
+  3) 흰 마스크(wipeout)로 가려진 옛 도형: 렌더링해 잉크가 있는 원만 인정(`_visibility`).
+  4) 선분 수로 덩어리를 걸러내려던 시도는 소구경 도면 정상 번호까지 지워 되돌렸다(선분 수 기준 금지). `0` 원은 도면에 실제로 그려진 표기(다른 도면과의 연결 지점으로 보임)라 제외하지 않고 비교 REMARK에 명시한다.
+  5) 병렬 추출: ONNX 스레드 1개로 제한, 글리프 판독 결과를 프로세스별 파일(Reports/glyph_cache_<pid>.tsv)로 공유(한 파일에 동시 append하면 줄이 섞임). 기존 캐시는 로직 변경 때마다 삭제하고 --all로 재추출.
+- 최종 결과(2026-09-24): 비교 3,960 도면 중 일치 2,961, 차이 999(JM에만 있는 조인트 1,035개[그중 완료 183개], ISO Drawing에만 있는 번호 2,748개), 대조 불가 13(원형 Joint No 표기가 없는 도면). 산출물 `Reports/Large_Bore_Master_20260924.xlsx`(JM에만 175 / ISO Drawing에만 1,455), `Reports/Small_Bore_Master_20260924.xlsx`(JM에만 860 / ISO Drawing에만 1,293). 시트: JointMaster(기존 JM 열 + "비교 REMARK"), 요약, Revision 불일치·VOID, 대조 불가 도면.
+- Bore 규칙: JM 행은 SIZE>2 Large, ≤2 Small. ISO Drawing에만 있는 번호는 SIZE가 없어 (1) 같은 ISO의 JM 조인트가 한 Bore뿐이면 그 Bore (2) 혼합이면 도면 Line No의 앞 크기(≤2" Small) 순으로 배정하고 근거를 REMARK에 적었다. 한 ISO가 Large+Small이 섞여 있을 때는 추정임을 감안해야 한다.
+- 해석 주의: "ISO Drawing에만 있음"은 HS/ST/LS 계통에 집중돼 있다(상세도/단면도에 같은 번호가 다시 표기되거나 지지대 용접 상세 번호가 섞인 것으로 추정). 상세도 영역은 도면마다 그려진 방식이 달라 자동 구분하지 못했다. `0` 원은 다른 도면과의 연결 지점 표기로 보이나 확정은 아니다. 조인트 번호 앞자리 0은 비교 시 제거('09'→'9').

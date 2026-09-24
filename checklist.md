@@ -86,3 +86,14 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] JM rev를 Drawing DB 기준으로 갱신(canary → 일괄) + 롤백용 백업 + 검증 — 0건 불일치, 전체 51,114행 유지
 - [x] 152개 PDF에서 원형 Joint No 추출 → JM joint_no와 ISO별 대조 (Reports/JM_Joint_vs_PDF_20260924.xlsx)
 - [x] 불일치 ISO 표본을 렌더링해 추출 로직 검증 (CWS-062-1, CWR-033-1, LS-011-2, DW-001-1, WD-518-1)
+
+---
+
+# Checklist — 전체 JM DB vs ISO Drawing PDF Joint No 대조 → Large/Small Bore Master 엑셀 (2026-09-24)
+
+- [x] 전체 도면(VOID 제외 3,973건) PDF를 다운로드 후 메모리에서 파싱해 Joint No 추출(병렬, 결과 캐시 Reports/pdf_joint_extract_cache.jsonl)
+- [x] 추출 결과 품질 점검 — 도면 유형·회전 페이지·가려진 도형 등 판독기를 여러 차례 보완, 0건 도면 13건만 남음: 도면 유형별(텍스트/OCR/표기없음) 분포, 표기 없음 도면의 원 미검출 여부 표본 확인
+- [x] JM과 ISO별 Joint No 집합 비교 + Revision 상태 비교
+- [x] 기존 Joint Master 엑셀 형식(ID~REMARK) + "비교 REMARK" 열로 차이 행 작성 (JM에만 있음 / ISO Drawing에만 있음)
+- [x] Bore 분리: size_inch ≤ 2 Small, 그 외 Large (ISO Drawing에만 있는 번호는 규칙 확정 후 배정)
+- [x] Large_Bore_Master_20260924.xlsx, Small_Bore_Master.xlsx 생성 및 건수 검증
