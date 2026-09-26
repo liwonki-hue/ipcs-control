@@ -2444,7 +2444,7 @@ def api_testpkg_joints():
         elif status == "pending":
             q = q.or_("date_completed.is.null,vt_result.neq.PASS,vt_result.is.null")
 
-        res = _exec_page(q.order("package").order("iso_drawing").order("joint_no")
+        res = _exec_page(q.order("package").order("iso_drawing").order("joint_no").order("id")
                          .range(offset, offset + limit - 1))
 
         # Compute STATUS per row
@@ -2515,7 +2515,7 @@ def api_rt_quality():
             res = (sb.table("joint_master")
                      .select(cols)
                      .not_.is_("rt_date", "null")
-                     .order("rt_date")
+                     .order("rt_date").order("id")
                      .range(offset_, offset_ + 9999)
                      .execute())
             batch = res.data or []
