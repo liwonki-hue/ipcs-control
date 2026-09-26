@@ -1591,10 +1591,6 @@ def index():
 # ══════════════════════════════════════════════════════════════════════
 #  DASHBOARD API
 # ══════════════════════════════════════════════════════════════════════
-@app.route("/api/test")
-def api_test():
-    return jsonify({"status": "working", "time": time.time()})
-
 @app.route("/api/dashboard")
 def api_dashboard():
     data = get_cache()
