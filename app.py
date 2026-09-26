@@ -463,7 +463,7 @@ def _scan_jm_iso_stats() -> dict:
         while True:
             res = _sb_exec(lambda sb, o=off: sb.table("joint_master")
                            .select("iso_drawing,date_completed")
-                           .range(o, o + page_size - 1).execute())
+                           .order("id").range(o, o + page_size - 1).execute())
             rows = res.data or []
             for row in rows:
                 iso = row.get("iso_drawing")
@@ -859,7 +859,7 @@ def _build_secondary_caches_impl():
                 sub_total: dict = {}; sub_comp: dict = {}
                 _soff = 0
                 while True:
-                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").range(_soff, _soff + 9999).execute()
+                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").order("id").range(_soff, _soff + 9999).execute()
                     for r in (_sr.data or []):
                         sa = r.get("sub_area") or ""
                         if not sa:
@@ -1178,7 +1178,7 @@ def _build():
                     while True:
                         r = _sb_exec(lambda _c: _c.table("support_master")
                                      .select("system,unit,area,sub_area,date_completed")
-                                     .range(off, off + bsz - 1).execute())
+                                     .order("id").range(off, off + bsz - 1).execute())
                         rows = r.data or []
                         for row in rows:
                             done = 1 if row.get("date_completed") else 0
@@ -1201,7 +1201,7 @@ def _build():
                     while True:
                         r = _sb_exec(lambda _c: _c.table("test_package_master")
                                      .select("system,sub_area,completed")
-                                     .range(off, off + bsz - 1).execute())
+                                     .order("id").range(off, off + bsz - 1).execute())
                         rows = r.data or []
                         for row in rows:
                             done = 1 if row.get("completed") else 0
@@ -1929,7 +1929,7 @@ def api_joints_packages():
                 q = q.eq("system", system)
             rows, off = [], 0
             while True:
-                r = q.range(off, off + 9999).execute()
+                r = q.order("id").range(off, off + 9999).execute()
                 rows.extend(r.data or [])
                 if len(r.data or []) < 10000: break
                 off += 10000
@@ -1976,7 +1976,7 @@ def api_joints_filter_values():
     try:
         rows, off = [], 0
         while True:
-            r = get_sb().table("joint_master").select(col).range(off, off + 9999).execute()
+            r = get_sb().table("joint_master").select(col).order("id").range(off, off + 9999).execute()
             rows.extend(r.data or [])
             if len(r.data or []) < 10000: break
             off += 10000
@@ -2093,7 +2093,7 @@ def api_weekly_last_breakdown():
                .not_.is_("date_completed", "null")
         _off = 0
         while True:
-            _page = _q.range(_off, _off + 9999).execute().data or []
+            _page = _q.order("id").range(_off, _off + 9999).execute().data or []
             joints.extend(_page)
             if len(_page) < 10000: break
             _off += 10000
@@ -2816,7 +2816,7 @@ def api_area_field_quantities():
                      .select("sub_area, di")
                      .eq("sf", "F")
                      .in_("sub_area", TARGET_SUBS)
-                     .range(offset, offset + batch - 1)
+                     .order("id").range(offset, offset + batch - 1)
                      .execute())
             for row in res.data or []:
                 sub = row.get("sub_area", "")
@@ -2831,7 +2831,7 @@ def api_area_field_quantities():
             r = (sb.table("support_master")
                    .select("sub_area")
                    .in_("sub_area", TARGET_SUBS)
-                   .range(ea_off, ea_off + 9999).execute())
+                   .order("id").range(ea_off, ea_off + 9999).execute())
             ea_rows.extend(r.data or [])
             if len(r.data or []) < 10000:
                 break
@@ -2865,7 +2865,7 @@ def api_ep_support_summary():
             r = (sb.table("support_master")
                    .select("system,sub_area,area,date_completed")
                    .eq("phase", "EP")
-                   .range(off, off + 9999).execute())
+                   .order("id").range(off, off + 9999).execute())
             rows.extend(r.data or [])
             if len(r.data or []) < 10000:
                 break
@@ -3010,7 +3010,7 @@ def api_support_sync_phase_package():
         _joff = 0
         while True:
             jm_res = sb.table("joint_master").select("iso_drawing, phase, package") \
-                .not_.is_("iso_drawing", "null").range(_joff, _joff + 9999).execute()
+                .not_.is_("iso_drawing", "null").order("id").range(_joff, _joff + 9999).execute()
             for row in (jm_res.data or []):
                 iso = (row.get("iso_drawing") or "").strip()
                 ph  = (row.get("phase")   or "").strip() or None
@@ -3033,7 +3033,7 @@ def api_support_sync_phase_package():
         _soff = 0
         while True:
             sm_res = sb.table("support_master").select("id, iso_drawing, phase, package") \
-                .not_.is_("iso_drawing", "null").range(_soff, _soff + 9999).execute()
+                .not_.is_("iso_drawing", "null").order("id").range(_soff, _soff + 9999).execute()
             sm_rows.extend(sm_res.data or [])
             if len(sm_res.data or []) < 10000: del sm_res; break
             del sm_res
@@ -3083,7 +3083,7 @@ def api_support_sync_drawing():
         while True:
             r = draw_sb.table("support_latest") \
                 .select("support_drawing,type,revision,iso_drawing,line_no,system") \
-                .range(_doff, _doff + 9999).execute()
+                .order("id").range(_doff, _doff + 9999).execute()
             draw_rows.extend(r.data or [])
             if len(r.data or []) < 10000: del r; break
             del r
@@ -3098,7 +3098,7 @@ def api_support_sync_drawing():
         while True:
             r = sb.table("support_master") \
                 .select("id,support_drawing,revision,type") \
-                .range(_soff, _soff + 9999).execute()
+                .order("id").range(_soff, _soff + 9999).execute()
             sm_rows.extend(r.data or [])
             if len(r.data or []) < 10000: del r; break
             del r
@@ -3113,7 +3113,7 @@ def api_support_sync_drawing():
         while True:
             r = sb.table("joint_master") \
                 .select("iso_drawing,phase,package,unit,system,area,sub_area") \
-                .not_.is_("iso_drawing", "null").range(_joff, _joff + 9999).execute()
+                .not_.is_("iso_drawing", "null").order("id").range(_joff, _joff + 9999).execute()
             for row in (r.data or []):
                 iso = (row.get("iso_drawing") or "").strip()
                 if iso and iso not in jm_map:
@@ -3321,7 +3321,7 @@ def api_testpkg_sync():
         sb = get_sb()
         existing, ex_off = [], 0
         while True:
-            r = sb.table("test_package_master").select("system,test_pkg_no").range(ex_off, ex_off + 9999).execute()
+            r = sb.table("test_package_master").select("system,test_pkg_no").order("id").range(ex_off, ex_off + 9999).execute()
             existing.extend(r.data or [])
             if len(r.data or []) < 10000: break
             ex_off += 10000
@@ -3330,7 +3330,7 @@ def api_testpkg_sync():
         pkgs, off = [], 0
         while True:
             r = sb.table("joint_master").select("system,sub_area,package") \
-                    .not_.is_("package", "null").range(off, off + 9999).execute()
+                    .not_.is_("package", "null").order("id").range(off, off + 9999).execute()
             pkgs.extend(r.data or [])
             if len(r.data or []) < 10000: break
             off += 10000
@@ -3392,7 +3392,7 @@ def _compute_daily_report():
         .not_.is_("date_completed", "null")
     _off = 0
     while True:
-        _page = _q.range(_off, _off + 9999).execute().data or []
+        _page = _q.order("id").range(_off, _off + 9999).execute().data or []
         joints.extend(_page)
         if len(_page) < 10000:
             break
