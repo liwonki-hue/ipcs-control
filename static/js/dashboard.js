@@ -329,6 +329,7 @@ function navigate(page) {
                 _loadJMFilterSel("jm-size", "size_inch", "Size");
                 _loadJMFilterSel("jm-pwht", "pwht",      "PWHT");
             }
+            _loadWelderIdList();
             loadJointMaster(); break;
         case "welder":      loadWelder();       break;
         case "rt_quality":  loadRtQuality();    break;
@@ -1579,7 +1580,7 @@ function renderJMTable(rows){
             <td style="text-align:center">${r.size_inch||""}</td>
             <td style="text-align:center">${r.sf||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
-            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
+            <td><input class="cell-input" id="welder-${r.id}" type="text" list="welder-id-list" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
             <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="text" value="${dStr?dStr.slice(2):''}" data-full-date="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
@@ -1722,6 +1723,26 @@ function renderNdeTable(rows){
     applyAuthUI(window.authRole);
 }
 
+// 저장 실패 시 서버가 보낸 사유(용접사 ID 형식, 날짜 순서 등)를 그대로 보여준다
+async function _respError(r){
+    try { const j = await r.json(); if (j && j.error) return j.error; } catch(e) {}
+    return "HTTP " + r.status;
+}
+
+// 등록 형식(IWP-000 / IWP-K-000)의 용접사 ID를 입력 추천 목록으로 한 번 불러온다
+let _welderIdsLoaded = false;
+async function _loadWelderIdList(){
+    if (_welderIdsLoaded) return;
+    try {
+        const ids = await apiFetch("/api/welders");
+        if (!Array.isArray(ids)) return;
+        let dl = document.getElementById("welder-id-list");
+        if (!dl) { dl = document.createElement("datalist"); dl.id = "welder-id-list"; document.body.appendChild(dl); }
+        dl.innerHTML = ids.map(w => `<option value="${w}">`).join("");
+        _welderIdsLoaded = true;
+    } catch(e) { console.error("welder list load failed", e); }
+}
+
 async function saveNdeRow(id){
     const data = {
         pt_date: _fullDateVal(`nde-pt-date-${id}`) || null,
@@ -1743,7 +1764,7 @@ async function saveNdeRow(id){
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify(data)
         });
-        if(!r.ok) throw new Error('HTTP ' + r.status);
+        if(!r.ok) throw new Error(await _respError(r));
         toast("✓ NDE data saved!");
     }catch(e){ toast("✗ Save failed: " + e.message, "error"); }
 }
@@ -1752,7 +1773,7 @@ async function clearJointDate(id){
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},
             body:JSON.stringify({date_completed:null, welder:null, inspection:null, pwht:null})});
-        if(!r.ok)throw new Error('HTTP '+r.status);
+        if(!r.ok) throw new Error(await _respError(r));
         // 화면 초기화
         const dateEl=document.getElementById(`date-${id}`);       if(dateEl){dateEl.value='';delete dateEl.dataset.fullDate;dateEl.classList.add('date-empty');}
         const weldEl=document.getElementById(`welder-${id}`);     if(weldEl)weldEl.value='';
@@ -1787,7 +1808,7 @@ async function saveJointDate(id){
     if(val){const _today=new Date().toISOString().slice(0,10);if(val>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
-        if(!r.ok)throw new Error('HTTP '+r.status);
+        if(!r.ok) throw new Error(await _respError(r));
         toast(`✓ ID ${id} saved!`);
         // jmData 전체 필드 동기화 (re-render 시 stale 방지)
         const joint = jmData.find(j => j.id === id);
@@ -2929,7 +2950,7 @@ async function saveTPVT(id) {
             headers: {"Content-Type":"application/json"},
             body: JSON.stringify({vt_date: vtDate||null, vt_result: vtRes||null})
         });
-        if (!r.ok) throw new Error("HTTP " + r.status);
+        if(!r.ok) throw new Error(await _respError(r));
         toast(`✓ VT saved (ID ${id})`);
         loadTestPkgMaster();
     } catch(e) { toast(`✗ ${e.message}`, "error"); }

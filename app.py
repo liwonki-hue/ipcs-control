@@ -1943,12 +1943,39 @@ def api_joints_filter_values():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def _validate_joint_update(sb, jid, body):
+    """저장 전 검증. 오류 메시지(영문, 화면 토스트용) 또는 None.
+    - 용접사 ID: '/'로 나눈 각 이름이 IWP-000 또는 IWP-K-000 형식 (오타로 실적이 다른 사람으로 갈라지던 문제)
+    - 날짜 순서: 검사일(VT/RT/PT/MT/PWHT)이 용접일보다 빠르면 거절. 날짜를 바꾸는 저장일 때만 기존 값과 합쳐 확인한다
+      (기존 오류 데이터라도 다른 칸만 고치는 저장은 막지 않는다)."""
+    welder = body.get("welder")
+    if isinstance(welder, str) and welder.strip():
+        bad = [w for w in _welder_parts(welder) if not WELDER_ID_RE.fullmatch(w)]
+        if bad:
+            return f"Invalid welder ID: {', '.join(bad)} (format IWP-000 or IWP-K-000, multiple welders separated by '/')"
+    date_cols = ("date_completed",) + _INSP_DATE_COLS
+    if not any(c in body for c in date_cols):
+        return None
+    cur = (sb.table("joint_master").select(",".join(date_cols)).eq("id", jid).limit(1).execute().data or [{}])[0]
+    merged = {c: (body[c] if c in body else cur.get(c)) for c in date_cols}
+    weld = merged.get("date_completed")
+    if not weld:
+        return None
+    early = [c.replace("_date", "").upper() for c in _INSP_DATE_COLS if merged.get(c) and str(merged[c])[:10] < str(weld)[:10]]
+    if early:
+        return f"{', '.join(early)} date is earlier than the weld date ({str(weld)[:10]})"
+    return None
+
+
 @app.route("/api/joints/<int:jid>", methods=["PATCH"])
 @login_required
 def api_joints_patch(jid):
     try:
         body = request.get_json()
         sb = get_sb()
+        err = _validate_joint_update(sb, jid, body)
+        if err:
+            return jsonify({"error": err}), 400
         if body.get("vt_date") or body.get("vt_result"):
             existing = sb.table("joint_master").select("date_completed,inspection").eq("id", jid).limit(1).execute().data
             existing = existing[0] if existing else {}
@@ -1987,6 +2014,15 @@ def api_joints_bulk_date():
             except ValueError:
                 return jsonify({"error": "date_completed must be YYYY-MM-DD or null"}), 400
         sb = get_sb()
+        if date_completed:
+            late = []
+            for i in range(0, len(ids), _BULK_DATE_CHUNK):
+                rows = sb.table("joint_master").select("id,joint_no," + ",".join(_INSP_DATE_COLS)) \
+                    .in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute().data or []
+                late += [r["joint_no"] for r in rows if any(r.get(c) and str(r[c])[:10] < date_completed for c in _INSP_DATE_COLS)]
+            if late:
+                return jsonify({"error": f"Weld date {date_completed} is later than an inspection date on joint(s) {', '.join(map(str, late[:10]))}"
+                                         + (f" and {len(late) - 10} more" if len(late) > 10 else "")}), 400
         updated = 0
         for i in range(0, len(ids), _BULK_DATE_CHUNK):
             try:
