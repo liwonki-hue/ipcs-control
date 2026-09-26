@@ -1766,7 +1766,7 @@ async function _respError(r){
     return "HTTP " + r.status;
 }
 
-// 등록 형식(IWP-000 / IWP-K-000)의 용접사 ID를 입력 추천 목록으로 한 번 불러온다
+// 용접 기록에 나온 용접사 ID를 입력 추천 목록으로 한 번 불러온다(형식 제한 없음)
 let _welderIdsLoaded = false;
 async function _loadWelderIdList(){
     if (_welderIdsLoaded) return;

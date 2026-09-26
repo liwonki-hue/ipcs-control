@@ -1945,14 +1945,9 @@ def api_joints_filter_values():
 
 def _validate_joint_update(sb, jid, body):
     """저장 전 검증. 오류 메시지(영문, 화면 토스트용) 또는 None.
-    - 용접사 ID: '/'로 나눈 각 이름이 IWP-000 또는 IWP-K-000 형식 (오타로 실적이 다른 사람으로 갈라지던 문제)
+    용접사 ID 형식은 검사하지 않는다(협력사마다 형식이 조금씩 달라 현재 값을 유지하기로 함, 2026-09-27).
     - 날짜 순서: 검사일(VT/RT/PT/MT/PWHT)이 용접일보다 빠르면 거절. 날짜를 바꾸는 저장일 때만 기존 값과 합쳐 확인한다
       (기존 오류 데이터라도 다른 칸만 고치는 저장은 막지 않는다)."""
-    welder = body.get("welder")
-    if isinstance(welder, str) and welder.strip():
-        bad = [w for w in _welder_parts(welder) if not WELDER_ID_RE.fullmatch(w)]
-        if bad:
-            return f"Invalid welder ID: {', '.join(bad)} (format IWP-000 or IWP-K-000, multiple welders separated by '/')"
     date_cols = ("date_completed",) + _INSP_DATE_COLS
     if not any(c in body for c in date_cols):
         return None
@@ -2506,7 +2501,6 @@ def api_welder_detail():
         return jsonify({"error": str(e)}), 500
 
 # ── 공정 품질 스캔: 용접 뒤 단계(검사·PWHT·Package)의 대기 물량 ─────────
-WELDER_ID_RE = re.compile(r"IWP-(K-)?\d{3}")
 _QA_COLS = ("id,iso_drawing,rev,package,welder,date_completed,inspection,pwht,pwht_date,pwht_result,"
             "vt_date,vt_result,rt_date,rt_result,rt_2_date,rt_2_result,pt_date,pt_result,mt_date,mt_result")
 _INSP_DATE_COLS = ("vt_date", "rt_date", "rt_2_date", "pt_date", "mt_date", "pwht_date")
@@ -2540,7 +2534,7 @@ def _scan_qa():
             break
         off += 10000
     checks = {k: {"label": lbl, "count": 0, "over7": 0, "over14": 0, "oldest_days": 0} for k, (lbl, _) in QA_CHECKS.items()}
-    date_error_ids, pkg, iso_revs, welded, bad_welders = [], {}, defaultdict(set), Counter(), Counter()
+    date_error_ids, pkg, iso_revs, welded = [], {}, defaultdict(set), Counter()
     accepted_total = 0
     for r in rows:
         iso = (r.get("iso_drawing") or "").strip()
@@ -2559,8 +2553,6 @@ def _scan_qa():
             st["accepted"] += acc
         for w in _welder_parts(r.get("welder")):
             welded[w] += 1
-            if not WELDER_ID_RE.fullmatch(w):
-                bad_welders[w] += 1
         try:
             age = (today - datetime.strptime(str(r["date_completed"])[:10], "%Y-%m-%d").date()).days
         except ValueError:
@@ -2599,7 +2591,6 @@ def _scan_qa():
         "rev_mismatch_isos": rev_mismatch,
         "pkg": pkg,
         "welded_by_welder": dict(welded),
-        "invalid_welders": dict(bad_welders.most_common()),
     }
 
 
@@ -2646,19 +2637,19 @@ def api_backlog():
         if qa is None:
             return jsonify({"building": True}), 202
         return jsonify({k: qa[k] for k in ("as_of", "welded", "accepted", "checks")} |
-                       {"rev_mismatch_isos": len(qa["rev_mismatch_isos"]), "invalid_welders": qa["invalid_welders"]})
+                       {"rev_mismatch_isos": len(qa["rev_mismatch_isos"])})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
 @app.route("/api/welders")
 def api_welders():
-    """등록 형식(IWP-000, IWP-K-000)에 맞는 용접사 ID 목록 — 입력 추천용."""
+    """용접 기록에 나온 용접사 ID 전체 — 입력 추천용(형식 제한 없음)."""
     try:
         qa = _get_qa()
         if qa is None:
             return jsonify({"building": True}), 202
-        return jsonify(sorted(w for w in qa["welded_by_welder"] if WELDER_ID_RE.fullmatch(w)))
+        return jsonify(sorted(qa["welded_by_welder"]))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -2886,7 +2877,7 @@ def api_rt_quality():
         welded_by = (_get_qa() or {}).get("welded_by_welder") or {}
         rt_rate = sorted(
             ({"welder": w, "welded": n, "rt_shots": w_tot.get(w, 0), "rate": pct(w_tot.get(w, 0), n)}
-             for w, n in welded_by.items() if WELDER_ID_RE.fullmatch(w)),
+             for w, n in welded_by.items()),
             key=lambda x: (x["rate"], -x["welded"]))
 
         result = {
