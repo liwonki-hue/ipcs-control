@@ -1807,9 +1807,11 @@ def _joint_no_key(r):
     m = re.match(r"\d+", jn)
     return (int(m.group()) if m else 10**9, jn, r["id"])
 
-def _sort_joints_numeric(rows, fetch_iso_rows):
+def _sort_joints_numeric(rows, fetch_iso_rows, has_before=True, has_after=True):
     """DB는 joint_no를 문자열(1,10,11,...,2)로 정렬하므로 같은 ISO 안에서만 숫자순으로 다시 정렬한다.
-    페이지 양 끝의 ISO는 페이지 밖에도 행이 있을 수 있어, 그 ISO 전체를 fetch_iso_rows(iso)로 받아 자리를 맞춘다."""
+    페이지 양 끝의 ISO는 페이지 밖에도 행이 있을 수 있어, 그 ISO 전체를 fetch_iso_rows(iso)로 받아 자리를 맞춘다.
+    has_before/has_after: 이 페이지 앞/뒤에 다른 행이 더 있는지. 페이지가 결과의 처음(끝)이면 첫(끝) ISO 앞(뒤)에는
+    같은 ISO 행이 있을 수 없어 재조회(DB 왕복)를 생략한다 - ISO 하나를 검색하면 보통 재조회가 필요 없다."""
     out, i = [], 0
     while i < len(rows):
         iso = rows[i].get("iso_drawing")
@@ -1818,7 +1820,7 @@ def _sort_joints_numeric(rows, fetch_iso_rows):
             j += 1
         block = rows[i:j]
         ids = []
-        if i == 0 or j == len(rows):
+        if (i == 0 and has_before) or (j == len(rows) and has_after):
             full = fetch_iso_rows(iso)
             ids = [r["id"] for r in full]
         if block[0]["id"] in ids:
@@ -1874,7 +1876,8 @@ def api_joints_get():
             q = q.is_("iso_drawing", "null") if iso_drawing is None else q.eq("iso_drawing", iso_drawing)
             return q.execute().data
         res = build_query("exact").range(offset, offset + limit - 1).execute()
-        return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows), "count": res.count})
+        has_after = res.count is None or offset + len(res.data) < res.count
+        return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows, offset > 0, has_after), "count": res.count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
