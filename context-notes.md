@@ -125,3 +125,12 @@
 - 원인(재현 확인): `templates/index.html`의 `#jm-iso`가 `oninput="loadJointMaster()"`라 글자마다 `/api/joints`를 호출한다(디바운스 없음). `apiFetch`는 요청 취소(AbortController)나 응답 순서 확인이 없고 `/api/joints`는 캐시도 안 한다. 27자 ISO를 치면 요청 25개가 4초 안에 나가고, 각 요청은 서버에서 약 1.3초(DB 왕복 2회: 메인 쿼리+경계 ISO 재조회 `_sort_joints_numeric`)라 Render처럼 요청을 하나씩 처리하는 sync 워커(`gunicorn app:app`)에서는 줄을 선다. 단일 스레드 서버로 재현: 1번째 검색 마지막 글자 응답까지 35s, 2번째 64s, 3번째 92s(앞 검색의 대기 요청 때문에 누적). 순차 요청은 누적 악화가 없었다(12개 ISO 검색이 각 약 3s→3s).
 - DB 쪽은 원인이 아니다: 쿼리 단독 0.5s 내외(가장 가벼운 조회도 0.47s = 네트워크 왕복), 결과 행 수와 무관.
 - 아직 수정하지 않았다(사용자가 확인만 요청). 후보: (1) 프런트 디바운스 300~400ms + 이전 요청 취소 + 응답 순서 확인, (2) `/api/joints` 쿼리를 1회로 줄이기(경계 재조회 제거 또는 조건부), (3) Render Start Command에 `--threads`(대시보드 변경, 메모리 영향 확인 필요).
+
+---
+
+# Context Notes — Render 로그 재검증(OOM) + JM 검색 지연 진단 정정 (2026-09-26)
+
+- OOM 재검증(사용자 제공 Render API 키로 읽기 전용 조회, 키는 저장하지 않음): Events API 기준 마지막 oomKilled는 2026-09-14 05:59Z(수정 배포 전). 이후 12일간 server_failed 0건, 배포는 09-19(4b815b3), 09-21(8e99b1c, c148966)에 있었다. 09-19 16:27Z~09-26 07:08Z 로그(17.7k줄, 컨테이너 78개)에서 RSS 최대 339MB(09-23 09:16Z 컨테이너, build 61회), cgroup 사용 최대 401MB/512MB(09-24 02:56Z, build 52회). 기준선(09-16~19)의 RSS 피크 352~376MB보다 낮고 420MB 자가 재시작은 0회. `mem cgroup=`은 Render에서 정상 출력된다(cgroup이 RSS보다 60~130MB 크다).
+- Supabase 끊김: 재시도(`connection dropped ... retrying once`) 290회, `CRITICAL BUILD ERROR` 0, `/api/dashboard` 503 0, `PATCH /api/joints` 500 0(기준선 3.6일: 24 / 106 / 9). 5xx는 7일간 18건: 09-21 02:36~03:42Z에 gunicorn WORKER TIMEOUT(기본 30s)으로 워커 13회 kill(support-master·welder-summary 500 13건), 09-24 03:46·03:50Z와 09-26 06:00·06:53Z의 `/api/joints` 500 5건(같은 시각 `ConnectionTerminated` 재시도 실패, 백그라운드 재빌드의 joint_master 스캔과 겹침). 로그의 "SIGKILL! Perhaps out of memory?"는 타임아웃 kill의 일반 문구였고 OOM이 아니다.
+- 종료 신호 없는 컨테이너 20개: 마지막 줄이 정상 200 응답이고 메모리 이상이 없으며 server_failed도 없다(유휴 종료 때 로그가 안 남는 것으로 보임). 재빌드: clear 실행 154/58/54/99/44회(09-21~25)로 30초 병합이 작동.
+- JM 검색 지연 정정: 이전 진단(글자마다 요청 → 워커 대기열)은 손으로 타이핑할 때만 해당한다. 운영 로그의 ISO 검색 892건 중 807건이 완성형(25자 이상)이라 실제 작업은 "ISO 붙여넣기 → 조인트별 PATCH → 다음 ISO"다. 연속 저장 구간 336개에서 PATCH 완료 간격 중앙값 2.7초(90%가 11.4초), "Apply to All" 22건이 77~102초 걸렸다(건당 3.5~4.6초). sync 워커 1개라 저장이 줄줄이 처리되는 동안 검색이 대기하고, 저장 뒤 cache/clear(scope=joint) 재빌드도 같은 프로세스에서 돈다(재빌드 중 검색 1.0s→1.1~2.1s, 재빌드 19s). 로컬 urllib 측정 3.1s는 `localhost`의 IPv6 우선 지연 때문이었고 실제 요청은 1.0~1.3s다.
