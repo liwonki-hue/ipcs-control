@@ -165,3 +165,4 @@
 - 성능: area-field-quantities 1천→1만 건 단위(13.4s→3.2s). 일일 보고서 날짜 조회 500→2000(5일 누락 방지).
 - 제거: `/api/test`, `/api/weekly-actuals`, `/api/joints/sync-phase-package`(gitignore된 Raw File 엑셀 의존, 어디서도 동작 불가). Procfile을 실제 Start Command와 일치.
 - 보류(사용자 확인 필요): `dashboard_cache` 테이블이 앱 키로 조회 시 비어 있어 `_build`의 빠른 경로가 한 번도 쓰이지 않음(빌드 513회 중 512회 MISS). `refresh_dashboard_cache()`가 이 테이블에 쓰는 함수라 RLS로 읽기가 막힌 것으로 추정. 읽기 정책 추가는 권한 변경이라 하지 않음.
+- 후속(2026-09-27): (1) Support Sync Phase/Package를 수정된 코드로 실행 — phase 170·package 1,140건 채움, 기존 값 변경 0칸(백업 `Reports/SM_PhasePkg_Backup_20260927_0129.json`, id·phase·package 전체). (2) `dashboard_cache`: 앱 키가 anon이고 anon에게 행이 안 보임(RLS). anon 키로는 정책을 못 바꿔 SQL Editor 실행용 SQL을 사용자에게 전달. (3) `--threads 4` 적용 후(09-26 08:53Z~20:24Z) Render 로그: OOM 이벤트 0, RSS 최대 321MB·cgroup 366/512MB, WORKER TIMEOUT 0, 5xx 1건(배포 직후 콜드 스타트에 보낸 시험 요청, 같은 순간 v2 RPC statement timeout), HTTP/2 끊김 재시도 36회 전부 복구. HTTP/1.1 전환(f07b2f6)은 20:23Z 배포라 이 로그엔 거의 반영 안 됨.
