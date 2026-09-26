@@ -2912,12 +2912,9 @@ def api_support_get():
 def api_support_patch(rid):
     try:
         get_sb().table("support_master").update(request.get_json()).eq("id", rid).execute()
-        with _lock:
-            _cache.clear()
-            _ep_sup_cache.clear()
-            _area_field_cache.clear()
-            _sup_test_cache["data"] = None
-            _sup_test_cache["time"] = 0
+        # Joint PATCH와 같은 이유로 여기서 캐시를 비우지 않는다: 프런트가 저장마다 /api/cache/clear?scope=support
+        # (30초 병합)를 부르고 그 호출이 대시보드·EP·Area·Support 집계 캐시를 모두 비운다. 저장마다 직접 비우면
+        # 다음 대시보드 요청이 병합을 건너뛰고 곧바로 전체 재빌드를 시작한다.
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
