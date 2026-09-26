@@ -158,10 +158,13 @@ class _RetryOnDisconnectTransport(httpx.BaseTransport):
         self._inner.close()
 
 def _supabase_options(schema, timeout_s):
-    """supabase-py 기본 PostgREST 클라이언트(HTTP/2, 리다이렉트 추종)와 같은 설정에 트랜스포트만 재시도로 감싼다."""
+    """supabase-py 기본 PostgREST 클라이언트와 같은 설정(리다이렉트 추종)에 트랜스포트를 재시도로 감싼다.
+    HTTP/2 대신 HTTP/1.1을 쓴다: gunicorn --threads 4로 요청이 동시에 처리되면서 스레드들이 HTTP/2 연결 하나를
+    나눠 쓰면 읽기가 깨졌다(동시 요청 240건 중 16건 실패, 재시도 62회). HTTP/1.1은 스레드마다 연결을 따로 써서
+    같은 시험에서 실패·재시도 0건, 오히려 더 빨랐다(2026-09-27). HTTP/2의 'Server disconnected' 끊김도 함께 피한다."""
     try:
         client = httpx.Client(
-            transport=_RetryOnDisconnectTransport(httpx.HTTPTransport(http2=True, retries=1)),
+            transport=_RetryOnDisconnectTransport(httpx.HTTPTransport(http2=False, retries=1)),
             timeout=httpx.Timeout(timeout_s),
             follow_redirects=True,
         )
