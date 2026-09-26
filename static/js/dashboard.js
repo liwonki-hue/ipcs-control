@@ -1605,7 +1605,7 @@ function renderJMTable(rows){
         const wVal=r.welder||"";
         const phaseVal=r.phase||"";
         const pkgVal=r.package||"";
-        return `<tr id="jmrow-${r.id}">
+        return `<tr id="jmrow-${r.id}"${_lastUpdatedTitle(r)}>
             <td style="display:none">${r.id}</td>
             <td style="padding:2px"><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 4px"></td>
             <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
@@ -2051,7 +2051,8 @@ async function exportJMExcel(){
         "SIZE":r.size_inch||"", "S/F":r.sf||"", "JOINT NO":r.joint_no||"",
         "DI":r.di||"", "WELDER":r.welder||"", "PHASE":r.phase||"",
         "COMPLETED DATE":r.date_completed?r.date_completed.substring(0,10):"",
-        "REMARK":r.remark||""
+        "REMARK":r.remark||"",
+        "UPDATED AT":r.updated_at||"", "UPDATED BY":r.updated_by||""
     }));
     const ws=XLSX.utils.json_to_sheet(exportData),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"JointMaster");
     const success=await downloadWithPicker(wb,"Joint_Master_Export.xlsx");if(success)toast(`✓ ${data.length.toLocaleString()} rows exported`);
@@ -2861,6 +2862,8 @@ async function exportSMExcel() {
         "ISO DRAWING": r.iso_drawing || "",
         "LINE NO": r.line_no || "",
         "ACTUAL DATE": r.date_completed ? r.date_completed.substring(0,10) : "",
+        "UPDATED AT": r.updated_at || "",
+        "UPDATED BY": r.updated_by || "",
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
@@ -3191,7 +3194,7 @@ function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
         return;
     }
     const iopt = v => v ? ` selected` : "";
@@ -3223,16 +3226,18 @@ function renderTMTable(data) {
                 </div>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:2px;padding:0 2px">
-                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace" title="Inspection accepted / welded">P:${pp.toFixed(1)}% <span style="opacity:.7">(W ${pw.toFixed(0)}%)</span></span>
+                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace" title="${pa == null ? "Inspection status is still being calculated on the server - showing welded basis" : "Inspection accepted / welded"}">P:${pp.toFixed(1)}% <span style="opacity:.7">${pa == null ? "(W basis)" : `(W ${pw.toFixed(0)}%)`}</span></span>
                 <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace">S:${sp.toFixed(1)}%</span>
             </div>
         </div>`;
-        return `<tr>
+        return `<tr${_lastUpdatedTitle(r)}>
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
             <td style="text-align:center"><input type="text" class="cell-input" id="tm-desc-${r.id}" value="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400"></td>
             <td style="padding:0">${readinessCell}</td>
+            ${_tmDateCell("tm-linecheck", r.id, r.line_check_date)}
+            ${_tmDateCell("tm-puncha", r.id, r.punch_a_clear_date)}
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
                     <option value="" style="color:#000">-</option>
@@ -3263,6 +3268,7 @@ function renderTMTable(data) {
                     <option value="FAIL"${iopt(res==="FAIL")} style="color:#000">FAIL</option>
                 </select>
             </td>
+            ${_tmDateCell("tm-reinstate", r.id, r.reinstatement_date)}
             <td style="text-align:center;white-space:nowrap">
                 <button class="btn-save-row auth-write" onclick="saveTMRow(${r.id})">Save</button>
                 <button class="btn-del-row auth-admin"  onclick="deleteTMRow(${r.id})">Del</button>
@@ -3270,6 +3276,21 @@ function renderTMTable(data) {
         </tr>`;
     }).join("");
     applyAuthUI(window.authRole);
+}
+
+// 날짜 입력칸(클릭하면 달력) — Test Pkg Register 단계 날짜용
+function _tmDateCell(prefix, id, value) {
+    const dc = value ? String(value).substring(0, 10) : "";
+    return `<td style="text-align:center"><input type="text" class="cell-input${dc ? "" : " date-empty"}" id="${prefix}-${id}" value="${dc ? dc.slice(2) : ""}" data-full-date="${dc}"
+        style="width:100%;text-align:center;background:#fff;cursor:pointer;color:#000;font-size:10px;padding:0 1px" onclick="_pickDate(this)" readonly></td>`;
+}
+
+// 행에 마우스를 올리면 보이는 마지막 수정 정보(updated_at은 UTC로 저장, 현장 시각으로 표시)
+function _lastUpdatedTitle(r) {
+    if (!r.updated_at) return "";
+    const t = new Date(r.updated_at);
+    const local = isNaN(t) ? r.updated_at : t.toLocaleString("en-GB", { hour12: false });
+    return ` title="Last updated ${local} by ${r.updated_by || "-"}"`;
 }
 
 async function saveTMRow(id) {
@@ -3284,7 +3305,10 @@ async function saveTMRow(id) {
         holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
         date_completed:  dateVal || null,
         completed:       completed,
-        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null
+        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null,
+        line_check_date:    _fullDateVal(`tm-linecheck-${id}`) || null,
+        punch_a_clear_date: _fullDateVal(`tm-puncha-${id}`)    || null,
+        reinstatement_date: _fullDateVal(`tm-reinstate-${id}`) || null
     };
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, {
@@ -3638,10 +3662,15 @@ async function exportTMExcel() {
         "Test Pressure":    r.test_pressure    || "",
         "Method":           r.method           || "",
         "Media":            r.media            || "",
+        "Line Check":       (r.line_check_date    || "").substring(0,10),
+        "Punch A Clear":    (r.punch_a_clear_date || "").substring(0,10),
         "Holding Time":     r.holding_time     || "",
         "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
         "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
-        "Description":      r.description      || ""
+        "Reinstatement":    (r.reinstatement_date || "").substring(0,10),
+        "Description":      r.description      || "",
+        "UPDATED AT":       r.updated_at || "",
+        "UPDATED BY":       r.updated_by || ""
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
