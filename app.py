@@ -15,7 +15,9 @@ from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request, session
 from functools import wraps
+from types import SimpleNamespace
 import httpx
+from postgrest.exceptions import APIError
 from supabase import create_client
 
 # gunicorn 아래에서는 stdout이 파이프라 기본이 블록 버퍼링 — 로그가 수 분 뒤/종료 시점에야 나오고
@@ -1797,6 +1799,19 @@ def api_refresh_db_cache():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 # ── Joint Master ───────────────────────────────────────────────────────
+_RANGE_ROWS_RE = re.compile(r"only (\d+) rows")
+
+def _exec_page(q):
+    """페이지 조회 실행. 결과 행 수보다 큰 offset(PostgREST PGRST103)은 500 대신 빈 페이지와 전체 건수로 돌려준다.
+    2페이지를 보다가 검색 조건을 바꿔 결과가 줄면 이전 offset 그대로 조회돼 표가 오류로 멈췄다(2026-09-24 운영 로그)."""
+    try:
+        return q.execute()
+    except APIError as e:
+        if getattr(e, "code", None) != "PGRST103":
+            raise
+        m = _RANGE_ROWS_RE.search(str(getattr(e, "details", "") or ""))
+        return SimpleNamespace(data=[], count=int(m.group(1)) if m else None)
+
 def _joint_no_key(r):
     """joint_no 숫자순 정렬 키 (1, 2, ..., 10 / '1A'는 1 뒤). 숫자가 없으면 맨 뒤."""
     jn = r.get("joint_no") or ""
@@ -1871,7 +1886,7 @@ def api_joints_get():
             q = build_query()
             q = q.is_("iso_drawing", "null") if iso_drawing is None else q.eq("iso_drawing", iso_drawing)
             return q.execute().data
-        res = build_query("exact").range(offset, offset + limit - 1).execute()
+        res = _exec_page(build_query("exact").range(offset, offset + limit - 1))
         has_after = res.count is None or offset + len(res.data) < res.count
         return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows, offset > 0, has_after), "count": res.count})
     except Exception as e:
@@ -2593,8 +2608,8 @@ def api_testpkg_joints():
         elif status == "pending":
             q = q.or_("date_completed.is.null,vt_result.neq.PASS,vt_result.is.null")
 
-        res = q.order("package").order("iso_drawing").order("joint_no") \
-               .range(offset, offset + limit - 1).execute()
+        res = _exec_page(q.order("package").order("iso_drawing").order("joint_no")
+                         .range(offset, offset + limit - 1))
 
         # Compute STATUS per row
         rows = []
@@ -2935,7 +2950,7 @@ def api_support_get():
             total_count = len(all_rows)
             sm_rows = all_rows[offset: offset + limit]
         else:
-            res = q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1).execute()
+            res = _exec_page(q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1))
             sm_rows = res.data or []
             total_count = res.count
 
@@ -3212,7 +3227,7 @@ def api_testpkg_get():
         if search:
             like = f"%{search}%"
             q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
-        res = q.order("system").order("test_pkg_no").range(offset, offset + limit - 1).execute()
+        res = _exec_page(q.order("system").order("test_pkg_no").range(offset, offset + limit - 1))
         rows = res.data or []
 
         # Readiness: piping 70% + support 30% 가중 진행률
