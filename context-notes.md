@@ -147,3 +147,21 @@
 - 브라우저 검증(로컬 서버 재시작 후): 27자를 글자당 120ms로 입력 -> `/api/joints` 요청 1회(이전 25~27회), 18행. 즉시 조회 2회 연달아 -> 마지막 결과(19행)만 표시. Apply to All/Clear는 bulk-date 요청 1회이고 조인트별 PATCH 0회, 저장 요청이 실패(401)하면 "Bulk save failed"로 표시하고 성공 토스트를 내지 않는다. 저장 요청은 fetch를 가로채 실제 운영 데이터는 바꾸지 않았다. 콘솔 오류는 로그인하지 않은 상태의 `cache/clear` 401과 기존 favicon 404뿐.
 - finish(2026-09-26): 임시 코드 스캔(추적 파일 7개) 0건, pyflakes에서 미사용 import/변수/미정의 이름 0건(기존의 불필요한 `global` 선언 18줄만 남음, 동작에 영향 없어 건드리지 않음). 검토 중 보강: bulk-date가 뒤쪽 200건 묶음에서 실패하면 앞 묶음 반영 건수를 오류 응답에 포함. 시험: bulk-date/정렬/엔드포인트 동등성 3종 + 기존 회귀 시험 4종 통과. `test_supabase_retry`는 로컬 venv의 supabase가 2.4.5라 `httpx_client` 옵션이 없어 실패하는 기존 환경 차이(Render는 더 새 버전, 앱은 폴백으로 동작)이며 이번 변경과 무관.
 - 사용자가 Render Start Command 변경을 완료했다고 알림(적용 값은 제안한 `--workers 1 --threads 4 --timeout 90`으로 가정).
+
+---
+
+# Context Notes — 최적화 6단계 (2026-09-27)
+
+배경: 09-26에 Render Start Command가 `--workers 1 --threads 4 --timeout 90`으로 바뀌어 요청이 동시에 처리된다. 단일 스레드 전제의 코드가 점검 핵심이었다.
+
+- 동시 요청 + HTTP/2: Render와 같은 supabase 2.31.0 venv에서 재빌드 중 동시 요청 240건 → 16건 실패(ReadError, 재시도 62회). HTTP/1.1로 바꾸자 0건·재시도 0회·더 빠름. `_supabase_options`에서 `http2=False`. 로컬 기본 venv의 supabase 2.4.5는 `httpx_client` 옵션을 몰라 재시도 전송 없이 기본 클라이언트(HTTP/2)로 폴백하므로, 운영과 같은 조건은 scratchpad의 venv_render(`pip install -r requirements.txt`)로 시험해야 한다.
+- 공유 캐시: 보조 캐시 스레드가 `_cache["data"]`를 제자리 수정하던 `_apply_kpi_override(target=None)`를 복사 후 교체로 변경. 락 밖 전역 수정 전수 검사(ast)에서 다른 곳은 없음(`_mem_last_logged` 로그용 1건은 무해).
+- PostgREST 1회 최대 10,000행: `/api/welder-daily`가 120일치 14,402건 중 1만 건만 읽어 119일 전부 과소 집계(합계 45,856→68,350). 페이지 분할로 수정. `/api/weekly-actuals`도 같은 문제였으나 호출처가 없어 제거.
+- 정렬 없는 페이지 분할 18곳에 `order("id")`, testpkg-joints/RT에 id 동점 정렬 추가. 수정 전후 응답 비교로 값 동일 확인.
+- 범위 밖 offset(PGRST103) 500 → 빈 페이지+건수(`_exec_page`), 새 검색 시 1페이지 초기화, 탭별 검색창 350ms 디바운스.
+- Support sync 부분 upsert: postgrest가 열 목록을 키 합집합으로 보내 빠진 칸을 NULL로 덮어씀 → `_upsert_partial`(키 구성별 묶음). 현재 JM에서 채울 수 있는데 빈 support phase 170/package 1,140건(원인 구분 불가, Sync 버튼으로 채울 수 있음, 실행은 사용자 판단).
+- Support PATCH의 직접 캐시 삭제 제거(프런트 scope=support clear가 대신함). Delete·Test Package 저장은 후속 clear가 없어 유지.
+- 누락 기능: Welder 개별 분석 차트 2개가 늘 비어 있었음 → `/api/welder-detail` 추가(상위 12명 합계·작업일 수 RPC와 일치).
+- 성능: area-field-quantities 1천→1만 건 단위(13.4s→3.2s). 일일 보고서 날짜 조회 500→2000(5일 누락 방지).
+- 제거: `/api/test`, `/api/weekly-actuals`, `/api/joints/sync-phase-package`(gitignore된 Raw File 엑셀 의존, 어디서도 동작 불가). Procfile을 실제 Start Command와 일치.
+- 보류(사용자 확인 필요): `dashboard_cache` 테이블이 앱 키로 조회 시 비어 있어 `_build`의 빠른 경로가 한 번도 쓰이지 않음(빌드 513회 중 512회 MISS). `refresh_dashboard_cache()`가 이 테이블에 쓰는 함수라 RLS로 읽기가 막힌 것으로 추정. 읽기 정책 추가는 권한 변경이라 하지 않음.
