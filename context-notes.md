@@ -167,3 +167,15 @@
 - 보류(사용자 확인 필요): `dashboard_cache` 테이블이 앱 키로 조회 시 비어 있어 `_build`의 빠른 경로가 한 번도 쓰이지 않음(빌드 513회 중 512회 MISS). `refresh_dashboard_cache()`가 이 테이블에 쓰는 함수라 RLS로 읽기가 막힌 것으로 추정. 읽기 정책 추가는 권한 변경이라 하지 않음.
 - 후속(2026-09-27): (1) Support Sync Phase/Package를 수정된 코드로 실행 — phase 170·package 1,140건 채움, 기존 값 변경 0칸(백업 `Reports/SM_PhasePkg_Backup_20260927_0129.json`, id·phase·package 전체). (2) `dashboard_cache`: 앱 키가 anon이고 anon에게 행이 안 보임(RLS). anon 키로는 정책을 못 바꿔 SQL Editor 실행용 SQL을 사용자에게 전달. (3) `--threads 4` 적용 후(09-26 08:53Z~20:24Z) Render 로그: OOM 이벤트 0, RSS 최대 321MB·cgroup 366/512MB, WORKER TIMEOUT 0, 5xx 1건(배포 직후 콜드 스타트에 보낸 시험 요청, 같은 순간 v2 RPC statement timeout), HTTP/2 끊김 재시도 36회 전부 복구. HTTP/1.1 전환(f07b2f6)은 20:23Z 배포라 이 로그엔 거의 반영 안 됨.
 - dashboard_cache 정책 적용 확인(2026-09-27, 사용자가 SQL Editor에서 `anon read dashboard_cache` SELECT 정책 실행): 앱 키로 행 1개(`main`, v17/v2/ep/wa) 조회 가능. `refresh_dashboard_cache` 직후 빌드 비교 — 빠른 경로 3.7s vs RPC 경로 11.2s, 결과는 EP(ep_kpi/ep_sys/ep_area/ep_weekly)를 포함해 모든 키 동일(같은 sub_area 캐시 상태에서 시작 시). 빠른 경로는 캐시가 2시간 이내일 때만 쓰이는데 keep-alive가 하루 4~6번만 돌아 적중률은 제한적.
+
+---
+
+# Context Notes — 공정 관리 관점 개선 적용 (2026-09-27)
+
+- 해석: "1번부터 3번까지" = 추천 답변 1~3절. DDL이 필요한 수정 이력·Test Package 단계 칸은 SQL 전달 후 연결, Support 가중치는 값 확인 필요.
+- 검사 합격 판정 `_joint_accepted`(용접+VT PASS+지정 NDE PASS+PWHT 대상이면 PASS)를 Test Pkg Joint Check·준비도·Backlog가 공유. RT는 재촬영(rt_2) PASS도 합격(8건이 PENDING이던 버그).
+- P91 PWHT 빈 값 3,095건을 Y로(백업 `Reports/P91_PWHT_Backup_20260927_0144.json`). P91은 면제가 없어서 적용했고, P22는 두께·구경 면제 규정이 있어 손대지 않음. P91인데 N으로 명시된 2건(HS-021-1 #4, ST-461-1 #1)은 확인 필요.
+- 품질 스캔 `_scan_qa`(조인트 전체 1회, ~14초, 5분 캐시, 만료 시 이전 결과 즉시 + 백그라운드 갱신, 보조 캐시에서 순차 선계산, joint scope clear 시 삭제). `QA_CHECKS`와 `_apply_quick_filter`는 반드시 같은 조건이어야 카드 숫자와 목록 건수가 맞는다. postgrest 빌더는 자기 자신을 수정하므로 공통 조건을 함수 앞에서 만들면 안 된다(Rev 필터가 0건이 됐던 원인).
+- Drawing DB 프로젝트는 1회 최대 1,000행(`DRAW_DB_PAGE`). 기존 Sync from Drawing이 support_latest 21,204건 중 1,000건만 읽던 버그 수정(실행은 하지 않음).
+- 검증: 용접사 ID `IWP-000`/`IWP-K-000`, 검사일 >= 용접일(날짜를 건드리는 저장에만). 저장 실패 사유를 토스트로 표시.
+- 결과(현재): 용접 16,663 중 검사 합격 1,720(10.3%). 검사 방법 미지정 13,087, VT 미실시 14,783, NDE 미실시 44, PWHT 미실시 346, Package 미배정 11,679, 날짜 오류 30, Rev 불일치 4 ISO(기존 예외). 용접사 ID 오류 20종.
