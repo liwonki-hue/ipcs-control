@@ -1651,7 +1651,7 @@ def api_daily_actuals():
             .not_.is_("date_completed", "null")
             .gt("di", 0)
             .order("date_completed", desc=True)
-            .limit(500).execute())
+            .limit(2000).execute())  # 최근 5개 작업일을 찾기 위한 날짜만 조회. 500건이면 하루 125건 넘는 날이 이어지면 4일만 나올 수 있다
         all_dates = dates_res.data or []
         del dates_res
 
@@ -3211,7 +3211,7 @@ def _compute_daily_report():
         .not_.is_("date_completed", "null")
         .gt("di", 0)
         .order("date_completed", desc=True)
-        .limit(500).execute())
+        .limit(2000).execute())  # 최근 5개 작업일을 찾기 위한 날짜만 조회. 500건이면 하루 125건 넘는 날이 이어지면 4일만 나올 수 있다
     all_dates = dates_res.data or []
     del dates_res
 
