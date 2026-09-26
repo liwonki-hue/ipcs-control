@@ -424,3 +424,12 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
   .kpi-card { flex-basis: 100%; }
   .grid-4, .grid-6 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 }
+/* ── Post-Weld Backlog (Overview) ── */
+.backlog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.backlog-card { border:1px solid var(--border); border-left:3px solid var(--muted); border-radius:6px; padding:8px 10px; cursor:pointer; background:var(--panel); }
+.backlog-card:hover { border-color:var(--accent); }
+.backlog-card.warn { border-left-color:var(--orange); }
+.backlog-card.ok { border-left-color:var(--green); }
+.backlog-card .bl-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
+.backlog-card .bl-count { font-size:20px; font-family:'DM Mono',monospace; color:var(--text); margin:2px 0; }
+.backlog-card .bl-age { font-size:10px; color:var(--text-dim); }
