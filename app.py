@@ -210,6 +210,14 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
+def _audit(via=""):
+    """수정 이력 칸(updated_at/updated_by). 로그인이 admin/editor 공용 계정이라 사람 이름 대신 역할이 남는다.
+    via: 'sync'처럼 일괄 동기화로 바뀐 경우 표시."""
+    who = session.get("role") or "system"
+    return {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "updated_by": f"{who} ({via})" if via else who}
+
+
 def get_sb():
     """Singleton Supabase client. Re-creates on connection error."""
     global _sb
@@ -1982,7 +1990,7 @@ def api_joints_patch(jid):
             insp = body["inspection"] if "inspection" in body else existing.get("inspection")
             if not weld or not insp:
                 return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
-        sb.table("joint_master").update(body).eq("id", jid).execute()
+        sb.table("joint_master").update({**body, **_audit()}).eq("id", jid).execute()
         # 여기서 _cache를 비우지 않는다: 프런트가 저장 뒤 /api/cache/clear?scope=joint(디바운스)를 부르는데,
         # 저장마다 캐시를 비우면 다음 대시보드 요청이 디바운스를 우회해 즉시 재빌드를 시작한다.
         return jsonify({"ok": True})
@@ -2027,7 +2035,7 @@ def api_joints_bulk_date():
         updated = 0
         for i in range(0, len(ids), _BULK_DATE_CHUNK):
             try:
-                res = sb.table("joint_master").update({"date_completed": date_completed}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute()
+                res = sb.table("joint_master").update({"date_completed": date_completed, **_audit("bulk")}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute()
             except Exception as e:  # 앞 묶음은 이미 저장됐을 수 있어 몇 건이 반영됐는지 알린다(같은 값 재시도는 안전)
                 return jsonify({"error": f"{updated} of {len(ids)} joints were updated before the failure: {e}", "updated": updated}), 500
             updated += len(res.data or [])
@@ -3080,7 +3088,7 @@ def api_support_get():
 @login_required
 def api_support_patch(rid):
     try:
-        get_sb().table("support_master").update(request.get_json()).eq("id", rid).execute()
+        get_sb().table("support_master").update({**(request.get_json() or {}), **_audit()}).eq("id", rid).execute()
         # Joint PATCH와 같은 이유로 여기서 캐시를 비우지 않는다: 프런트가 저장마다 /api/cache/clear?scope=support
         # (30초 병합)를 부르고 그 호출이 대시보드·EP·Area·Support 집계 캐시를 모두 비운다. 저장마다 직접 비우면
         # 다음 대시보드 요청이 병합을 건너뛰고 곧바로 전체 재빌드를 시작한다.
@@ -3172,7 +3180,8 @@ def api_support_sync_phase_package():
                 upsert_records.append(patch)
 
         try:
-            updated = _upsert_partial(sb, "support_master", upsert_records)
+            stamp = _audit("sync")
+            updated = _upsert_partial(sb, "support_master", [{**r, **stamp} for r in upsert_records])
         except Exception as ue:
             print(f"[sm-sync] upsert error: {ue}")
             return jsonify({"ok": False, "error": f"upsert failed: {ue}"}), 500
@@ -3250,7 +3259,8 @@ def api_support_sync_drawing():
             if len(patch) > 1:
                 update_batch.append(patch)
 
-        updated = _upsert_partial(sb, "support_master", update_batch)
+        stamp = _audit("sync")
+        updated = _upsert_partial(sb, "support_master", [{**r, **stamp} for r in update_batch])
         del update_batch
 
         # 5. 누락 행 추가 (Typical 제외, JM 매칭 가능한 것만)
@@ -3286,7 +3296,7 @@ def api_support_sync_drawing():
 
         inserted = 0
         for i in range(0, len(insert_batch), 500):
-            sb.table("support_master").insert(insert_batch[i:i+500]).execute()
+            sb.table("support_master").insert([{**r, **_audit("sync")} for r in insert_batch[i:i+500]]).execute()
             inserted += len(insert_batch[i:i+500])
         del insert_batch
 
@@ -3408,7 +3418,7 @@ def api_testpkg_get():
 @login_required
 def api_testpkg_patch(rid):
     try:
-        get_sb().table("test_package_master").update(request.get_json()).eq("id", rid).execute()
+        get_sb().table("test_package_master").update({**(request.get_json() or {}), **_audit()}).eq("id", rid).execute()
         with _lock:
             _cache.clear()
             _pkg_stats_cache.clear()
@@ -3469,7 +3479,7 @@ def api_testpkg_sync():
 
         inserted = 0
         for i in range(0, len(to_insert), 500):
-            res = sb.table("test_package_master").insert(to_insert[i:i+500]).execute()
+            res = sb.table("test_package_master").insert([{**r, **_audit("sync")} for r in to_insert[i:i+500]]).execute()
             inserted += len(res.data or [])
         del to_insert
 
