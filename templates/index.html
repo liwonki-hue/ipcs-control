@@ -533,6 +533,22 @@
         </div>
       </div>
 
+      <!-- 용접사별 RT 촬영률 (용접 대비 촬영) -->
+      <div class="panel">
+        <div class="panel-title">Welder RT Shooting Rate <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">RT shots / welded joints, lowest first</span></div>
+        <div class="table-wrap" style="max-height:264px;overflow-y:auto;scrollbar-gutter:stable">
+          <table class="data-table" style="width:100%;table-layout:fixed">
+            <thead><tr>
+              <th style="text-align:center">Welder</th>
+              <th style="text-align:center">Welded Joints</th>
+              <th style="text-align:center">RT Shots</th>
+              <th style="text-align:center">RT Rate</th>
+            </tr></thead>
+            <tbody id="rtRateBody"></tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Repair 상세 목록 -->
       <div class="panel">
         <div class="panel-title">Repair Joint List <span id="rtRepairCount" style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px"></span></div>

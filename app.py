@@ -2876,8 +2876,16 @@ def api_rt_quality():
             key=lambda x: -x["count"]
         )
 
+        # 용접사별 RT 촬영률: 용접 완료 조인트 대비 RT 촬영 조인트(복수 용접사 조인트는 각자에게 1건). 촬영이 0건인 용접사도 포함
+        welded_by = (_get_qa() or {}).get("welded_by_welder") or {}
+        rt_rate = sorted(
+            ({"welder": w, "welded": n, "rt_shots": w_tot.get(w, 0), "rate": pct(w_tot.get(w, 0), n)}
+             for w, n in welded_by.items() if WELDER_ID_RE.fullmatch(w)),
+            key=lambda x: (x["rate"], -x["welded"]))
+
         result = {
             "kpi":         kpi,
+            "rt_rate":     rt_rate,
             "by_welder":   by_welder,
             "by_system":   by_system,
             "by_month":    by_month,

@@ -3320,6 +3320,7 @@ async function loadRtQuality() {
         _renderRtMonthlyChart(_rtData.by_month);
         _renderRtSystemTable(_rtData.by_system);
         _renderRtWelderTable(_rtData.by_welder);
+        _renderRtRateTable(_rtData.rt_rate || []);
         _renderRtRepairList(_rtData.repair_list);
     } catch(e) {
         console.error("RT Quality load failed", e);
@@ -3543,6 +3544,18 @@ function _renderRtWelderTable(byWelder) {
     tbody.innerHTML = byWelder.map(r =>
         _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.welder}</td>`, r)
     ).join("");
+}
+
+function _renderRtRateTable(rows) {
+    const tbody = document.getElementById("rtRateBody");
+    if (!tbody) return;
+    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">No data</td></tr>`; return; }
+    tbody.innerHTML = rows.map(r => `<tr>
+        <td style="text-align:center;color:var(--text-dim)">${r.welder}</td>
+        <td style="text-align:center">${fmtNum(r.welded, 0)}</td>
+        <td style="text-align:center">${fmtNum(r.rt_shots, 0)}</td>
+        <td style="text-align:center;color:${r.rt_shots === 0 ? "var(--orange)" : "inherit"}">${r.rate.toFixed(1)}%</td>
+    </tr>`).join("");
 }
 
 function _renderRtRepairList(repairList) {
