@@ -2028,7 +2028,10 @@ def api_joints_bulk_date():
         sb = get_sb()
         updated = 0
         for i in range(0, len(ids), _BULK_DATE_CHUNK):
-            res = sb.table("joint_master").update({"date_completed": date_completed}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute()
+            try:
+                res = sb.table("joint_master").update({"date_completed": date_completed}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute()
+            except Exception as e:  # 앞 묶음은 이미 저장됐을 수 있어 몇 건이 반영됐는지 알린다(같은 값 재시도는 안전)
+                return jsonify({"error": f"{updated} of {len(ids)} joints were updated before the failure: {e}", "updated": updated}), 500
             updated += len(res.data or [])
         # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
         return jsonify({"ok": True, "updated": updated, "requested": len(ids)})
