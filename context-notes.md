@@ -180,3 +180,4 @@
 - 검증: 용접사 ID `IWP-000`/`IWP-K-000`, 검사일 >= 용접일(날짜를 건드리는 저장에만). 저장 실패 사유를 토스트로 표시.
 - 결과(현재): 용접 16,663 중 검사 합격 1,720(10.3%). 검사 방법 미지정 13,087, VT 미실시 14,783, NDE 미실시 44, PWHT 미실시 346, Package 미배정 11,679, 날짜 오류 30, Rev 불일치 4 ISO(기존 예외). 용접사 ID 오류 20종.
 - 사용자 결정(2026-09-27): (1) Support 진척 가중치 없음 — EA 수량 그대로. (2) P91인데 PWHT=N이던 2건(HS-021-1 #4, ST-461-1 #1)을 Y로 수정 — 둘 다 PWHT 날짜가 이미 있어 입력 오류였음(백업 `Reports/P91_PWHT_N_Backup_20260927_0210.json`). (3) 용접사 ID는 협력사별로 형식이 달라 현재 값 유지 → 저장 시 형식 검증 제거, 추천 목록·RT 촬영률은 모든 ID.
+- 수정 이력·Test Package 단계(2026-09-27, 사용자 SQL 실행): `_audit(via)`가 {updated_at(UTC ISO), updated_by(role 또는 "role (bulk|sync)")}를 모든 쓰기 경로(JM PATCH·bulk-date, Support PATCH·sync-phase-package·sync-drawing upsert/insert, Test Pkg PATCH·sync insert)에 붙인다. 공용 계정이라 사람 이름은 남지 않는다. Test Pkg Register 칸 순서는 Line Check → Punch A Clear → 시험(기존 date_completed/completed) → Reinstatement. `scratch/test_bulk_date.py`의 운영 DB 시험은 이제 이력을 남기므로 `--live`일 때만 실행.
