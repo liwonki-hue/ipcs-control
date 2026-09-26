@@ -1453,8 +1453,15 @@ async function loadJMPackages() {
     } catch(e) { console.error("PKG load failed", e); }
 }
 
-// ISO 검색창 입력용: 글자마다 요청하지 않고 입력이 멈춘 뒤 한 번만 조회한다(서버 워커 1개에서 요청이 줄을 서 검색이 갈수록 느려지는 문제)
+// 검색창 입력용: 글자마다 요청하지 않고 입력이 멈춘 뒤 한 번만 조회한다(서버에서 요청이 줄을 서 검색이 갈수록 느려지는 문제)
+const _debounceTimers = {};
+function debounced(key, fn, ms = 350) {
+    clearTimeout(_debounceTimers[key]);
+    _debounceTimers[key] = setTimeout(fn, ms);
+}
+
 function loadJointMasterDebounced() {
+    jmCurrentPage = 0;   // 새 ISO를 검색하면 1페이지부터(이전 페이지 번호로 조회하면 결과 범위를 벗어난다)
     clearTimeout(_jmDebounceTimer);
     _jmDebounceTimer = setTimeout(loadJointMaster, 350);
 }

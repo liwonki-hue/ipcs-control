@@ -333,7 +333,7 @@
           <select id="jm-status" class="filter-sel" style="min-width:100px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <select id="jm-pwht" class="filter-sel" style="min-width:80px;"><option value="">PWHT</option></select>
-          <button class="btn-primary" onclick="loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="jmCurrentPage=0;loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex; gap:6px; align-items:center; margin-left:auto;">
             <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
@@ -561,9 +561,9 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Support Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <input id="sm-search" class="filter-sel" type="text" placeholder="Search Drawing / ISO / Line No" oninput="smCurrentPage=0;loadSupportMaster()" style="width:280px;">
+          <input id="sm-search" class="filter-sel" type="text" placeholder="Search Drawing / ISO / Line No" oninput="smCurrentPage=0;debounced('sm',loadSupportMaster)" style="width:280px;">
           <select id="sm-phase" class="filter-sel" style="min-width:130px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
-          <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;loadSupportMaster()" style="width:170px;">
+          <input id="sm-package" class="filter-sel" type="text" placeholder="Package" oninput="smCurrentPage=0;debounced('sm',loadSupportMaster)" style="width:170px;">
           <select id="sm-unit" class="filter-sel" style="min-width:125px;"><option value="">Unit</option></select>
           <select id="sm-subarea" class="filter-sel" style="min-width:145px;"><option value="">Sub Area</option></select>
           <select id="sm-system" class="filter-sel" style="min-width:145px;"><option value="">System</option></select>
@@ -573,7 +573,7 @@
             <option value="ongoing" style="color:#000;background:#d1fae5">&#9679; Ongoing</option>
             <option value="completed" style="color:#000;background:#dbeafe">&#9679; Completed</option>
           </select>
-          <button class="btn-primary" onclick="loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="smCurrentPage=0;loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-primary auth-write" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="Match Phase/Package from Joint Master by ISO Drawing">&#8635; Sync Phase/Pkg</button>
@@ -625,7 +625,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">NDE &amp; PWHT</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <input id="nde-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadNdePwht()" style="width:160px;">
+          <input id="nde-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="ndeCurrentPage=0;debounced('nde',loadNdePwht)" style="width:160px;">
           <select id="nde-unit" class="filter-sel" style="min-width:80px;"><option value="">Unit</option></select>
           <select id="nde-system" class="filter-sel" style="min-width:100px;"><option value="">System</option></select>
           <select id="nde-insp" class="filter-sel" onchange="ndeCurrentPage=0;loadNdePwht()" style="min-width:100px;">
@@ -634,7 +634,7 @@
             <option value="MT">MT</option>
             <option value="RT">VT/RT</option>
           </select>
-          <input id="nde-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="ndeCurrentPage=0;loadNdePwht()" style="width:120px;">
+          <input id="nde-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="ndeCurrentPage=0;debounced('nde',loadNdePwht)" style="width:120px;">
           <button class="btn-primary" onclick="ndeCurrentPage=0;loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
           
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
@@ -683,8 +683,8 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Pkg Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:160px;">
-          <input id="tp-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="tpCurrentPage=0;loadTestPkgMaster()" style="width:120px;">
+          <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;debounced('tp',loadTestPkgMaster)" style="width:160px;">
+          <input id="tp-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="tpCurrentPage=0;debounced('tp',loadTestPkgMaster)" style="width:120px;">
           <select id="tp-system" class="filter-sel" style="min-width:100px;" onchange="tpCurrentPage=0;loadSystemPackages();loadTestPkgMaster()"><option value="">System</option></select>
           <select id="tp-package" class="filter-sel" style="min-width:130px;" onchange="tpCurrentPage=0;loadTestPkgMaster()"><option value="">All Packages</option></select>
           <select id="tp-status"  class="filter-sel" style="min-width:100px;">
@@ -692,7 +692,7 @@
             <option value="completed">Completed</option>
             <option value="pending">PENDING</option>
           </select>
-          <button class="btn-primary" onclick="loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="tpCurrentPage=0;loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
             <button class="btn-de btn-de-print" onclick="printPage('testpkg_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
@@ -857,7 +857,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.41"></script>
+<script defer src="/static/js/dashboard.js?v=7.42"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">
