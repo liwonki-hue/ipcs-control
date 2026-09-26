@@ -2369,14 +2369,20 @@ def api_welder_daily():
     try:
         sb  = get_sb()
         cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
-        res = sb.table("joint_master") \
-            .select("date_completed, welder, di") \
-            .gte("date_completed", cutoff) \
-            .not_.is_("date_completed", "null") \
-            .not_.is_("welder", "null") \
-            .execute()
-        rows = res.data or []
-        del res
+        # 120일치 완료 조인트는 1만 건(PostgREST 1회 최대 행 수)을 넘으므로 페이지를 나눠 모두 읽는다
+        # (한 번에 읽던 때는 14,402건 중 1만 건만 집계돼 일별 용접사 실적이 누락됐다, 2026-09-27)
+        rows, off = [], 0
+        while True:
+            page = sb.table("joint_master") \
+                .select("date_completed, welder, di") \
+                .gte("date_completed", cutoff) \
+                .not_.is_("date_completed", "null") \
+                .not_.is_("welder", "null") \
+                .order("id").range(off, off + 9999).execute().data or []
+            rows.extend(page)
+            if len(page) < 10000:
+                break
+            off += 10000
         daily = defaultdict(lambda: {"welders": set(), "total_di": 0.0})
         for row in rows:
             day = str(row.get("date_completed") or "")[:10]
