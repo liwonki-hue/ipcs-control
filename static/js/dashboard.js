@@ -119,6 +119,7 @@ function _fullDateVal(id) {
 let jmData = [];
 let jmCurrentPage = 0;
 const JM_PAGE_SIZE = 30;
+let _jmAbort = null, _jmSeq = 0, _jmDebounceTimer = null;   // Joint Master 조회: 이전 요청 취소 + 응답 순서 확인 + 입력 디바운스
 
 let metaData = { units: [], systems: [] };
 
@@ -381,7 +382,7 @@ const _apiCache = new Map();   // url → {data, exp}
 const _CACHE_TTL = 120_000;    // 2분 — 읽기전용 API 재사용 TTL
 const _NO_CACHE_PATTERNS = ["/api/joints", "/api/support-master", "/api/testpkg-master", "/api/testpkg-joints", "/api/rt-quality"];
 
-async function apiFetch(url, { noCache = false } = {}) {
+async function apiFetch(url, { noCache = false, signal } = {}) {
     const useCache = !noCache && !_NO_CACHE_PATTERNS.some(p => url.startsWith(p));
     if (useCache) {
         const hit = _apiCache.get(url);
@@ -389,7 +390,7 @@ async function apiFetch(url, { noCache = false } = {}) {
     }
     const ts = new Date().getTime();
     const separator = url.includes("?") ? "&" : "?";
-    const res = await fetch(API + url + separator + "_t=" + ts, { cache: "no-store" });
+    const res = await fetch(API + url + separator + "_t=" + ts, { cache: "no-store", signal });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     const data = await res.json();
     if (useCache) _apiCache.set(url, { data, exp: Date.now() + _CACHE_TTL });
@@ -1452,7 +1453,17 @@ async function loadJMPackages() {
     } catch(e) { console.error("PKG load failed", e); }
 }
 
+// ISO 검색창 입력용: 글자마다 요청하지 않고 입력이 멈춘 뒤 한 번만 조회한다(서버 워커 1개에서 요청이 줄을 서 검색이 갈수록 느려지는 문제)
+function loadJointMasterDebounced() {
+    clearTimeout(_jmDebounceTimer);
+    _jmDebounceTimer = setTimeout(loadJointMaster, 350);
+}
+
 async function loadJointMaster() {
+    clearTimeout(_jmDebounceTimer);   // 필터/페이지/Search 버튼의 즉시 조회가 대기 중인 디바운스를 대신한다
+    if (_jmAbort) _jmAbort.abort();   // 아직 끝나지 않은 이전 조회는 취소
+    _jmAbort = new AbortController();
+    const seq = ++_jmSeq, signal = _jmAbort.signal;
     const unit=document.getElementById("jm-unit")?.value||"", system=document.getElementById("jm-system")?.value||"",
           status=document.getElementById("jm-status")?.value||"", isoVal=document.getElementById("jm-iso")?.value?.trim()||"",
           subarea=document.getElementById("jm-subarea")?.value||"", phase=document.getElementById("jm-phase")?.value||"",
@@ -1472,12 +1483,13 @@ async function loadJointMaster() {
         if(pwht)params.set("pwht",pwht);
         if(mat)params.set("mat",mat);
         if(size)params.set("size",size);
-        const res=await apiFetch(`/api/joints?${params}`);
+        const res=await apiFetch(`/api/joints?${params}`,{signal});
+        if(seq!==_jmSeq)return;   // 더 최근 조회가 시작됐으면 이 응답은 버린다
         jmData=res.data;
         document.getElementById("jm-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
         _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, JM_PAGE_SIZE, "jmGoto");
         renderJMTable(jmData); updateIsoBulkPanel(isoVal,jmData);
-    } catch(e) { console.error("JM load failed",e); }
+    } catch(e) { if(e.name==="AbortError")return; console.error("JM load failed",e); }
 }
 
 function updateIsoBulkPanel(isoVal,rows){

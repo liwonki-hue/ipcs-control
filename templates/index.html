@@ -323,7 +323,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Joint Master Data</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
-          <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMaster()" style="width:200px;">
+          <input id="jm-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="loadJointMasterDebounced()" style="width:200px;">
           <select id="jm-phase" class="filter-sel" style="min-width:80px;"><option value="">Phase</option><option value="EP">EP</option><option value="Phase 2">Phase 2</option></select>
           <select id="jm-system" class="filter-sel" style="min-width:100px;" onchange="loadJMPackages()"><option value="">System</option></select>
           <select id="jm-package" class="filter-sel" style="min-width:110px;" onchange="jmCurrentPage=0;loadJointMaster()"><option value="">All PKG</option></select>
@@ -857,7 +857,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.40"></script>
+<script defer src="/static/js/dashboard.js?v=7.41"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

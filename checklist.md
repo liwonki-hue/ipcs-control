@@ -105,7 +105,7 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 가정: "진행" = 제안한 4개 중 코드로 할 수 있는 1·3·4번. 2번(Render Start Command `--threads 4 --timeout 90`)은 대시보드 설정이라 안내만 한다.
 
 - [x] 1. 일괄 저장: `POST /api/joints/bulk-date`(로그인 필요, ids 200개씩 단일 UPDATE) + Apply to All/Clear를 요청 1회로 (PATCH N회 제거)
-- [ ] 3. 검색 디바운스(350ms) + 이전 요청 취소(AbortController) + 응답 순서 확인 (`loadJointMaster`)
+- [x] 3. 검색 디바운스(350ms) + 이전 요청 취소(AbortController) + 응답 순서 확인 (`loadJointMaster`)
 - [x] 4. `/api/joints` 경계 ISO 재조회를 페이지 앞뒤에 같은 ISO 행이 있을 수 있을 때만 수행(DB 왕복 2회 → 보통 1회)
-- [ ] 검증: 정렬 결과가 이전과 동일한지(모의 DB 전수 + 실제 DB 표본), bulk 엔드포인트(값이 안 바뀌는 조회성 갱신으로만), 브라우저에서 입력 시 요청 수, 문법/컴파일
+- [x] 검증: 정렬 결과가 이전과 동일한지(모의 DB 전수 + 실제 DB 표본), bulk 엔드포인트(값이 안 바뀌는 조회성 갱신으로만), 브라우저에서 입력 시 요청 수, 문법/컴파일
 - [ ] 2. Render Start Command 변경 방법 안내(사용자 작업)
