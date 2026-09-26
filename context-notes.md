@@ -116,3 +116,12 @@
 - 최종 결과(2026-09-24): 비교 3,960 도면 중 일치 2,961, 차이 999(JM에만 있는 조인트 1,035개[그중 완료 183개], ISO Drawing에만 있는 번호 2,748개), 대조 불가 13(원형 Joint No 표기가 없는 도면). 산출물 `Reports/Large_Bore_Master_20260924.xlsx`(JM에만 175 / ISO Drawing에만 1,455), `Reports/Small_Bore_Master_20260924.xlsx`(JM에만 860 / ISO Drawing에만 1,293). 시트: JointMaster(기존 JM 열 + "비교 REMARK"), 요약, Revision 불일치·VOID, 대조 불가 도면.
 - Bore 규칙: JM 행은 SIZE>2 Large, ≤2 Small. ISO Drawing에만 있는 번호는 SIZE가 없어 (1) 같은 ISO의 JM 조인트가 한 Bore뿐이면 그 Bore (2) 혼합이면 도면 Line No의 앞 크기(≤2" Small) 순으로 배정하고 근거를 REMARK에 적었다. 한 ISO가 Large+Small이 섞여 있을 때는 추정임을 감안해야 한다.
 - 해석 주의: "ISO Drawing에만 있음"은 HS/ST/LS 계통에 집중돼 있다(상세도/단면도에 같은 번호가 다시 표기되거나 지지대 용접 상세 번호가 섞인 것으로 추정). 상세도 영역은 도면마다 그려진 방식이 달라 자동 구분하지 못했다. `0` 원은 다른 도면과의 연결 지점 표기로 보이나 확정은 아니다. 조인트 번호 앞자리 0은 비교 시 제거('09'→'9').
+
+---
+
+# Context Notes — Joint Master 검색 반복 시 급격한 지연 진단 (2026-09-26)
+
+- 증상: Joint Master에서 ISO Drawing No를 바꿔 가며 검색할수록 Data Loading이 급격히 길어진다.
+- 원인(재현 확인): `templates/index.html`의 `#jm-iso`가 `oninput="loadJointMaster()"`라 글자마다 `/api/joints`를 호출한다(디바운스 없음). `apiFetch`는 요청 취소(AbortController)나 응답 순서 확인이 없고 `/api/joints`는 캐시도 안 한다. 27자 ISO를 치면 요청 25개가 4초 안에 나가고, 각 요청은 서버에서 약 1.3초(DB 왕복 2회: 메인 쿼리+경계 ISO 재조회 `_sort_joints_numeric`)라 Render처럼 요청을 하나씩 처리하는 sync 워커(`gunicorn app:app`)에서는 줄을 선다. 단일 스레드 서버로 재현: 1번째 검색 마지막 글자 응답까지 35s, 2번째 64s, 3번째 92s(앞 검색의 대기 요청 때문에 누적). 순차 요청은 누적 악화가 없었다(12개 ISO 검색이 각 약 3s→3s).
+- DB 쪽은 원인이 아니다: 쿼리 단독 0.5s 내외(가장 가벼운 조회도 0.47s = 네트워크 왕복), 결과 행 수와 무관.
+- 아직 수정하지 않았다(사용자가 확인만 요청). 후보: (1) 프런트 디바운스 300~400ms + 이전 요청 취소 + 응답 순서 확인, (2) `/api/joints` 쿼리를 1회로 줄이기(경계 재조회 제거 또는 조건부), (3) Render Start Command에 `--threads`(대시보드 변경, 메모리 영향 확인 필요).
