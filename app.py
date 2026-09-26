@@ -2644,9 +2644,9 @@ def api_area_field_quantities():
     ]
     try:
         sb = get_sb()
-        # Field DI: sf='F' 인 조인트만 집계 (배치 페이징)
+        # Field DI: sf='F' 인 조인트만 집계 (배치 페이징). PostgREST 1회 최대 행 수(1만)로 읽는다 - 1천씩이면 왕복이 수십 번이라 11~12초 걸렸다
         di_by_sub = {}
-        batch, offset = 1000, 0
+        batch, offset = 10000, 0
         while True:
             res = (sb.table("joint_master")
                      .select("sub_area, di")
