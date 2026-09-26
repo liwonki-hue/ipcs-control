@@ -2832,6 +2832,21 @@ def api_support_delete(rid):
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def _upsert_partial(sb, table, records, chunk=500):
+    """id + 일부 컬럼만 담은 레코드들을 upsert한다. 한 요청에 키 구성이 다른 레코드를 섞으면 postgrest가 열 목록을
+    모든 키의 합집합으로 보내고 빠진 칸을 NULL로 채워, 충돌(기존 행) 시 보내지 않은 컬럼까지 NULL로 덮어쓴다
+    (예: {id, package}만 보낸 행의 phase가 지워짐). 그래서 키 구성이 같은 레코드끼리 묶어 보낸다. 반영 건수를 반환."""
+    groups = defaultdict(list)
+    for rec in records:
+        groups[tuple(sorted(rec))].append(rec)
+    done = 0
+    for recs in groups.values():
+        for i in range(0, len(recs), chunk):
+            sb.table(table).upsert(recs[i:i + chunk]).execute()
+            done += len(recs[i:i + chunk])
+    return done
+
+
 @app.route("/api/support-master/sync-phase-package", methods=["POST"])
 @login_required
 def api_support_sync_phase_package():
@@ -2885,14 +2900,11 @@ def api_support_sync_phase_package():
             if len(patch) > 1:  # has more than just "id"
                 upsert_records.append(patch)
 
-        updated = 0
-        for i in range(0, len(upsert_records), 500):
-            chunk = upsert_records[i:i + 500]
-            try:
-                sb.table("support_master").upsert(chunk).execute()
-                updated += len(chunk)
-            except Exception as ue:
-                print(f"[sm-sync] upsert chunk error: {ue}")
+        try:
+            updated = _upsert_partial(sb, "support_master", upsert_records)
+        except Exception as ue:
+            print(f"[sm-sync] upsert error: {ue}")
+            return jsonify({"ok": False, "error": f"upsert failed: {ue}"}), 500
         del upsert_records
 
         with _lock: _cache.clear()
@@ -2967,10 +2979,7 @@ def api_support_sync_drawing():
             if len(patch) > 1:
                 update_batch.append(patch)
 
-        updated = 0
-        for i in range(0, len(update_batch), 500):
-            sb.table("support_master").upsert(update_batch[i:i+500]).execute()
-            updated += len(update_batch[i:i+500])
+        updated = _upsert_partial(sb, "support_master", update_batch)
         del update_batch
 
         # 5. 누락 행 추가 (Typical 제외, JM 매칭 가능한 것만)
