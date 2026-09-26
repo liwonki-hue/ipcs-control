@@ -177,6 +177,7 @@ def _supabase_options(schema, timeout_s):
 DRAWING_SUPABASE_URL = os.environ.get("DRAWING_SUPABASE_URL", "")
 DRAWING_SUPABASE_KEY = os.environ.get("DRAWING_SUPABASE_KEY", "")
 _draw_sb = None
+DRAW_DB_PAGE = 1000   # Drawing DB 프로젝트는 PostgREST 1회 최대 행 수가 1,000이다(앱 DB는 10,000) — 페이지를 이 크기로 나눠야 전부 읽힌다
 _draw_sb_lock = threading.Lock()
 
 def get_draw_sb():
@@ -2960,11 +2961,11 @@ def api_support_sync_drawing():
         while True:
             r = draw_sb.table("support_latest") \
                 .select("support_drawing,type,revision,iso_drawing,line_no,system") \
-                .order("id").range(_doff, _doff + 9999).execute()
+                .order("id").range(_doff, _doff + DRAW_DB_PAGE - 1).execute()
             draw_rows.extend(r.data or [])
-            if len(r.data or []) < 10000: del r; break
+            if len(r.data or []) < DRAW_DB_PAGE: del r; break
             del r
-            _doff += 10000
+            _doff += DRAW_DB_PAGE
 
         draw_map = {row["support_drawing"].strip(): row for row in draw_rows if row.get("support_drawing")}
         del draw_rows
