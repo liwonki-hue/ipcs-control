@@ -134,3 +134,11 @@
 - Supabase 끊김: 재시도(`connection dropped ... retrying once`) 290회, `CRITICAL BUILD ERROR` 0, `/api/dashboard` 503 0, `PATCH /api/joints` 500 0(기준선 3.6일: 24 / 106 / 9). 5xx는 7일간 18건: 09-21 02:36~03:42Z에 gunicorn WORKER TIMEOUT(기본 30s)으로 워커 13회 kill(support-master·welder-summary 500 13건), 09-24 03:46·03:50Z와 09-26 06:00·06:53Z의 `/api/joints` 500 5건(같은 시각 `ConnectionTerminated` 재시도 실패, 백그라운드 재빌드의 joint_master 스캔과 겹침). 로그의 "SIGKILL! Perhaps out of memory?"는 타임아웃 kill의 일반 문구였고 OOM이 아니다.
 - 종료 신호 없는 컨테이너 20개: 마지막 줄이 정상 200 응답이고 메모리 이상이 없으며 server_failed도 없다(유휴 종료 때 로그가 안 남는 것으로 보임). 재빌드: clear 실행 154/58/54/99/44회(09-21~25)로 30초 병합이 작동.
 - JM 검색 지연 정정: 이전 진단(글자마다 요청 → 워커 대기열)은 손으로 타이핑할 때만 해당한다. 운영 로그의 ISO 검색 892건 중 807건이 완성형(25자 이상)이라 실제 작업은 "ISO 붙여넣기 → 조인트별 PATCH → 다음 ISO"다. 연속 저장 구간 336개에서 PATCH 완료 간격 중앙값 2.7초(90%가 11.4초), "Apply to All" 22건이 77~102초 걸렸다(건당 3.5~4.6초). sync 워커 1개라 저장이 줄줄이 처리되는 동안 검색이 대기하고, 저장 뒤 cache/clear(scope=joint) 재빌드도 같은 프로세스에서 돈다(재빌드 중 검색 1.0s→1.1~2.1s, 재빌드 19s). 로컬 urllib 측정 3.1s는 `localhost`의 IPv6 우선 지연 때문이었고 실제 요청은 1.0~1.3s다.
+
+---
+
+# Context Notes — Joint Master 검색/저장 지연 개선 (2026-09-26)
+
+- 범위 가정: 사용자의 "진행"을 제안 4개 중 코드로 가능한 1·3·4번으로 해석. 2번(Render Start Command)은 대시보드 설정이라 안내만 한다.
+- 1) 일괄 저장: `POST /api/joints/bulk-date`(`@login_required`, 기존 PATCH와 동일 권한). ids는 정수 목록 1~1000개, date_completed는 YYYY-MM-DD 또는 null. PostgREST URL 길이 때문에 200개씩 나눠 `.in_("id", chunk)`로 UPDATE(보통 ISO 하나가 수십 건이라 1회). PATCH처럼 서버에서 `_cache`를 비우지 않는다(프런트가 저장 뒤 cache/clear scope=joint 호출). 응답 `updated`가 요청 수와 다르면 프런트가 오류로 처리한다. 기존 코드는 PATCH 응답을 확인하지 않아 실패해도 "saved"로 표시했는데, 요청 1회로 바꾸면 그 실패가 전체 실패가 되므로 `res.ok`/`updated`를 확인하도록 했다. `_runConcurrent`는 이 두 곳에서만 쓰여 함께 제거.
+- 시험은 운영 DB에 연결된 환경이라 값이 바뀌지 않는 갱신만 사용(이미 null인 250건 null 저장, 같은 날짜 3건 재저장) — `scratch/test_bulk_date.py`(gitignore).

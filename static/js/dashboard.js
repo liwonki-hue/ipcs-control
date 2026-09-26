@@ -1490,15 +1490,13 @@ function updateIsoBulkPanel(isoVal,rows){
     document.getElementById("jm-iso-info").textContent=`${isoVal}  ·  ${isoRows.length} joints  ·  ${completedCount} completed`;
 }
 
-async function _runConcurrent(items, worker, limit=5){
-    let i=0;
-    async function runNext(){
-        while(i<items.length){
-            const idx=i++;
-            await worker(items[idx]);
-        }
-    }
-    await Promise.all(Array.from({length:Math.min(limit,items.length)}, runNext));
+// 조인트 여러 건의 date_completed를 요청 1회로 저장(조인트마다 PATCH를 보내면 서버 워커 1개에서 줄을 서 검색까지 막힌다)
+async function _bulkSetDate(ids, dateVal){
+    const res=await fetch(`${API}/api/joints/bulk-date`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,date_completed:dateVal})});
+    const out=await res.json().catch(()=>({}));
+    if(!res.ok)throw new Error(out.error||`HTTP ${res.status}`);
+    if(out.updated!==ids.length)throw new Error(`only ${out.updated} of ${ids.length} joints were updated`);
+    return out.updated;
 }
 
 async function applyIsoBulkDate(){
@@ -1512,12 +1510,10 @@ async function applyIsoBulkDate(){
     const btn=document.getElementById("jm-bulk-apply-btn");
     if(btn){btn.disabled=true;btn.textContent="Saving...";}
     try{
-        let saved=0;
-        await _runConcurrent(targets, async (r)=>{
-            await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:dateVal})});
+        const saved=await _bulkSetDate(targets.map(r=>r.id), dateVal);
+        targets.forEach(r=>{
             const el=document.getElementById(`date-${r.id}`);
             if(el){el.value=dateVal.slice(2);el.dataset.fullDate=dateVal;el.classList.remove("date-empty");}
-            saved++;
         });
         toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
@@ -1533,8 +1529,8 @@ async function clearIsoBulkDate(){
     if(targets.length===0){toast("No joints found for this ISO","error");return;}
     if(!confirm(`${isoVal}\nDelete dates for all ${targets.length} joints?`))return;
     try{
-        await _runConcurrent(targets, async (r)=>{
-            await fetch(`${API}/api/joints/${r.id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:null})});
+        await _bulkSetDate(targets.map(r=>r.id), null);
+        targets.forEach(r=>{
             const el=document.getElementById(`date-${r.id}`);if(el){el.value="";delete el.dataset.fullDate;el.classList.add("date-empty");}
         });
         toast(`✓ ${targets.length} joints cleared (${isoVal}) — KPI updating...`);

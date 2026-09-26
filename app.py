@@ -2000,6 +2000,39 @@ def api_joints_patch(jid):
         return jsonify({"error": str(e)}), 500
 
 
+_BULK_DATE_MAX_IDS = 1000   # 한 요청에 받는 최대 조인트 수(ISO 하나는 보통 수십 건)
+_BULK_DATE_CHUNK = 200      # PostgREST URL 길이 제한을 피하려고 id를 나눠 보내는 단위
+
+@app.route("/api/joints/bulk-date", methods=["POST"])
+@login_required
+def api_joints_bulk_date():
+    """ISO 일괄 저장(Apply to All / Clear): 여러 조인트의 date_completed를 한 번에 바꾼다.
+    조인트마다 PATCH를 보내면 Render의 sync 워커 1개에서 건당 3~4초씩 줄을 서 검색까지 막았다(22건에 77~102초)."""
+    try:
+        body = request.get_json(silent=True) or {}
+        ids = body.get("ids")
+        if (not isinstance(ids, list) or not ids or len(ids) > _BULK_DATE_MAX_IDS
+                or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+            return jsonify({"error": f"ids must be a non-empty list of integers (max {_BULK_DATE_MAX_IDS})"}), 400
+        if "date_completed" not in body:
+            return jsonify({"error": "date_completed is required (YYYY-MM-DD or null)"}), 400
+        date_completed = body["date_completed"]
+        if date_completed is not None:
+            try:
+                date_completed = datetime.strptime(str(date_completed), "%Y-%m-%d").strftime("%Y-%m-%d")
+            except ValueError:
+                return jsonify({"error": "date_completed must be YYYY-MM-DD or null"}), 400
+        sb = get_sb()
+        updated = 0
+        for i in range(0, len(ids), _BULK_DATE_CHUNK):
+            res = sb.table("joint_master").update({"date_completed": date_completed}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute()
+            updated += len(res.data or [])
+        # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
+        return jsonify({"ok": True, "updated": updated, "requested": len(ids)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ── Weekly Last-Week System/SubArea Breakdown ─────────────────────────
 @app.route("/api/weekly-last-breakdown")
 def api_weekly_last_breakdown():
