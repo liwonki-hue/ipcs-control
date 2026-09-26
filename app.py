@@ -2448,6 +2448,39 @@ def api_welder_detail():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+def _rt_passed(r):
+    """RT 합격: 1차 PASS, 또는 1차 Repair 후 재촬영(rt_2) PASS."""
+    return (bool(r.get("rt_date")) and r.get("rt_result") == "PASS") or \
+           (bool(r.get("rt_2_date")) and r.get("rt_2_result") == "PASS")
+
+
+def _joint_accepted(r):
+    """조인트가 시험(Test Package) 가능한 상태인지 — 용접 완료 + VT PASS + 지정 NDE PASS + (PWHT 대상이면) PWHT PASS.
+    Test Package Joint Check 화면의 Completed/PENDING, Test Package 준비도, Backlog 집계가 모두 이 기준을 쓴다.
+    예전에는 RT를 1차 결과로만 봐서 Repair 후 재촬영 합격 조인트가 계속 PENDING이었다(2026-09-27 수정)."""
+    if not r.get("date_completed"):
+        return False
+    insp = (r.get("inspection") or "").upper()
+    vt_ok = bool(r.get("vt_date")) and r.get("vt_result") == "PASS"
+    pwht_ok = r.get("pwht") != "Y" or r.get("pwht_result") == "PASS"
+    if insp == "RT":
+        nde_ok = _rt_passed(r)
+    elif insp == "PT":
+        nde_ok = bool(r.get("pt_date")) and r.get("pt_result") == "PASS"
+    elif insp == "MT":
+        nde_ok = bool(r.get("mt_date")) and r.get("mt_result") == "PASS"
+    else:
+        # VT 전용 또는 inspection 미지정: 실시된 NDE가 있으면 그 결과가 모두 PASS여야 한다
+        nde_ok = True
+        if r.get("mt_date") and r.get("mt_result") != "PASS":
+            nde_ok = False
+        if r.get("pt_date") and r.get("pt_result") != "PASS":
+            nde_ok = False
+        if r.get("rt_date") and not _rt_passed(r):
+            nde_ok = False
+    return vt_ok and nde_ok and pwht_ok
+
+
 # ── Test Package Joints (joint-level inspection view) ──────────────────
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
@@ -2486,44 +2519,7 @@ def api_testpkg_joints():
         # Compute STATUS per row
         rows = []
         for r in (res.data or []):
-            pending = True  # default PENDING
-
-            if r.get("date_completed"):  # 용접 완료된 경우만 추가 판단
-                insp     = (r.get("inspection") or "").upper()
-                has_pwht = r.get("pwht") == "Y"
-                vt_ok    = bool(r.get("vt_date")) and r.get("vt_result") == "PASS"
-
-                if insp == "RT":
-                    # RT 조인트: VT PASS + RT PASS 둘 다 필수
-                    rt_ok = bool(r.get("rt_date")) and r.get("rt_result") == "PASS"
-                    pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
-                    pending = not (vt_ok and rt_ok and pwht_ok)
-                elif insp in ("PT", "MT"):
-                    # PT/MT 조인트: VT PASS + 해당 NDE PASS 필수
-                    nde_ok = True
-                    if insp == "PT" and (not r.get("pt_date") or r.get("pt_result") != "PASS"):
-                        nde_ok = False
-                    if insp == "MT" and (not r.get("mt_date") or r.get("mt_result") != "PASS"):
-                        nde_ok = False
-                    pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
-                    pending = not (vt_ok and nde_ok and pwht_ok)
-                else:
-                    # VT 전용 또는 inspection 없음: VT PASS만으로 Completed
-                    has_any_nde = any([r.get("mt_date"), r.get("pt_date"),
-                                       r.get("rt_date"), r.get("rt_2_date")])
-                    if has_any_nde:
-                        nde_ok = True
-                        if r.get("mt_date")   and r.get("mt_result")   != "PASS": nde_ok = False
-                        if r.get("pt_date")   and r.get("pt_result")   != "PASS": nde_ok = False
-                        if r.get("rt_date")   and r.get("rt_result")   != "PASS": nde_ok = False
-                        if r.get("rt_2_date") and r.get("rt_2_result") != "PASS": nde_ok = False
-                        pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
-                        pending = not (vt_ok and nde_ok and pwht_ok)
-                    else:
-                        pwht_ok = (not has_pwht) or (r.get("pwht_result") == "PASS")
-                        pending = not (vt_ok and pwht_ok)
-
-            r["status"] = "PENDING" if pending else "Completed"
+            r["status"] = "Completed" if _joint_accepted(r) else "PENDING"
             rows.append(r)
 
         return jsonify({"data": rows, "count": res.count})
