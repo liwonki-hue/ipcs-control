@@ -2469,7 +2469,7 @@ function renderWelder(data) {
     if (drillPanel) drillPanel.style.display = "none";
 }
 
-function drillWelder(welderId) {
+async function drillWelder(welderId) {
     if (!_welderData) return;
     _selectedWelder = welderId;
     const wInfo = _welderData.ranking.find(r => r.welder === welderId);
@@ -2484,6 +2484,16 @@ function drillWelder(welderId) {
     document.getElementById("drill-total-di").textContent     = fmtNum(wInfo.total_di, 1);
     document.getElementById("drill-working-days").textContent = wInfo.working_days || "-";
     document.getElementById("drill-avg-di-day").textContent   = fmtNum(wInfo.avg_di_per_day, 2);
+
+    // 일별/시스템별 목록은 welder-summary에 없어 선택한 용접사만 따로 받는다
+    if (!wInfo.daily_list) {
+        try {
+            const d = await apiFetch(`/api/welder-detail?welder=${encodeURIComponent(welderId)}`);
+            wInfo.daily_list  = d.daily_list  || [];
+            wInfo.system_list = d.system_list || [];
+        } catch(e) { console.error("Welder detail load failed", e); }
+        if (_selectedWelder !== welderId) return;   // 그 사이 다른 용접사를 눌렀으면 그쪽이 그린다
+    }
 
     // Per-welder daily trend
     destroyChart("drillDailyChart");

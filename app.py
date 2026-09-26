@@ -2412,6 +2412,39 @@ def api_welder_daily():
         return jsonify([]), 500
 
 
+# ── Welder Detail (드릴다운 차트용) ────────────────────────────────────
+@app.route("/api/welder-detail")
+def api_welder_detail():
+    """용접사 1명의 일별 DI와 시스템별 DI. Welder 탭 개별 분석(Individual Analysis)의 두 차트용 —
+    welder-summary(RPC v4)는 이 목록을 주지 않아 차트가 늘 비어 있었다(2026-09-27).
+    복수 용접사 조인트(IWP-001/IWP-002)는 v4와 같이 DI를 인원수로 나눈다."""
+    welder = request.args.get("welder", "").strip()
+    if not welder:
+        return jsonify({"error": "welder is required"}), 400
+    try:
+        sb = get_sb()
+        daily, by_sys = defaultdict(float), defaultdict(float)
+        off = 0
+        while True:
+            page = sb.table("joint_master").select("date_completed,di,system,welder")                 .not_.is_("date_completed", "null").ilike("welder", f"%{welder}%")                 .order("id").range(off, off + 9999).execute().data or []
+            for r in page:
+                parts = [w.strip() for w in (r.get("welder") or "").split("/") if w.strip()]
+                if welder not in parts:  # ilike 부분 일치(IWP-05 ⊂ IWP-052) 제외
+                    continue
+                di_each = float(r.get("di") or 0) / len(parts)
+                daily[str(r["date_completed"])[:10]] += di_each
+                by_sys[r.get("system") or "-"] += di_each
+            if len(page) < 10000:
+                break
+            off += 10000
+        return jsonify({
+            "welder":      welder,
+            "daily_list":  [{"date": d, "di": round(v, 1)} for d, v in sorted(daily.items())],
+            "system_list": sorted(({"system": k, "di": round(v, 1)} for k, v in by_sys.items()), key=lambda x: -x["di"]),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 # ── Test Package Joints (joint-level inspection view) ──────────────────
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
