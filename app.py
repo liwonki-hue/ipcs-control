@@ -3,6 +3,7 @@ import os
 import gc
 import gzip
 import bisect
+import copy
 import hmac
 import re
 import signal
@@ -730,11 +731,17 @@ def _apply_kpi_override(ko, target=None):
     if target is not None:
         _mutate(target)
     else:
+        # 요청 스레드가 락 없이 _cache["data"]를 JSON으로 직렬화하므로(gunicorn --threads) 제자리 수정 대신
+        # 복사본을 고친 뒤 통째로 교체한다 - 직렬화 도중 값이 반쯤 바뀐 응답이 나가지 않게.
         with _lock:
             cur = _cache.get("data")
-            if not cur:
-                return
-            _mutate(cur)
+        if not cur:
+            return
+        fresh = copy.deepcopy(cur)
+        _mutate(fresh)
+        with _lock:
+            if _cache.get("data") is cur:  # 그 사이 재빌드로 교체됐으면 새 데이터를 덮어쓰지 않는다
+                _cache["data"] = fresh
 
 
 def _build_secondary_caches():
