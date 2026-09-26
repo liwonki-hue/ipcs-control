@@ -3191,7 +3191,7 @@ function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Pkg Master.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
         return;
     }
     const iopt = v => v ? ` selected` : "";
@@ -3309,7 +3309,7 @@ async function deleteTMRow(id) {
 }
 
 async function syncTestMaster() {
-    if (!confirm("Auto-register the package list from Pkg Master into Test Master.\nAlready-registered packages will be skipped. Continue?")) return;
+    if (!confirm("Auto-register the package list from Test Pkg Joint Check into Test Pkg Register.\nAlready-registered packages will be skipped. Continue?")) return;
     try {
         const res  = await fetch("/api/testpkg-master/sync", { method: "POST" });
         const data = await res.json();

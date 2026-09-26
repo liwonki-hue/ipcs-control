@@ -24,16 +24,18 @@
   <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Overall Productivity</button>
   <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
   <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
-  <div class="nav-section">Analysis</div>
-  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
-  <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon">&#128269;</span> RT Quality Performance</button>
-  <div class="nav-section">Data Input</div>
+  <!-- 공사 순서: 시공(용접·서포트) → 품질(검사·PWHT·용접사) → 시험·인계(Test Package) -->
+  <div class="nav-section">Construction</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
-  <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
-  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Pkg Master</button>
-  <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Master</button>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=markedpid" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#9998;</span> Marked PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <div class="nav-section">Quality</div>
+  <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
+  <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon">&#128269;</span> RT Quality Performance</button>
+  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
+  <div class="nav-section">Test &amp; Handover</div>
+  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Joint Check</button>
+  <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Pkg Register</button>
   <div class="nav-section">Report</div>
   <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon">&#128203;</span> Daily Report</button>
   <div class="nav-section">Link</div>
@@ -712,7 +714,7 @@
 
     <!-- ═══════════ TEST PACKAGE MASTER ═══════════ -->
     <div class="page hidden" id="page-testpkg_master">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Pkg Master Data</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Joint Check</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;debounced('tp',loadTestPkgMaster)" style="width:160px;">
@@ -766,7 +768,7 @@
 
     <!-- ═══════════ TEST MASTER ═══════════ -->
     <div class="page hidden" id="page-test_master">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Master</div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Register</div></div>
       <div class="panel">
         <div class="jm-top-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;height:auto;">
           <input id="tm-search" class="filter-sel" type="text" style="min-width:380px;" placeholder="System / Pkg No. / Method / Test Pressure" onkeydown="if(event.key==='Enter'){tmCurrentPage=0;loadTestMaster();}">
@@ -889,7 +891,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.44"></script>
+<script defer src="/static/js/dashboard.js?v=7.45"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">
