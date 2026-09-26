@@ -1957,6 +1957,10 @@ def _validate_joint_update(sb, jid, body):
     if not any(c in body for c in date_cols):
         return None
     cur = (sb.table("joint_master").select(",".join(date_cols)).eq("id", jid).limit(1).execute().data or [{}])[0]
+    # 값이 실제로 바뀌는 날짜가 있을 때만 검사한다. JM 저장은 용접일을 늘 같이 보내므로, 그대로 두면
+    # 날짜 오류가 있는 기존 조인트는 용접사만 고치는 저장도 막힌다.
+    if not any(c in body and str(body[c] or "")[:10] != str(cur.get(c) or "")[:10] for c in date_cols):
+        return None
     merged = {c: (body[c] if c in body else cur.get(c)) for c in date_cols}
     weld = merged.get("date_completed")
     if not weld:
@@ -2017,9 +2021,11 @@ def api_joints_bulk_date():
         if date_completed:
             late = []
             for i in range(0, len(ids), _BULK_DATE_CHUNK):
-                rows = sb.table("joint_master").select("id,joint_no," + ",".join(_INSP_DATE_COLS)) \
+                rows = sb.table("joint_master").select("id,joint_no,date_completed," + ",".join(_INSP_DATE_COLS)) \
                     .in_("id", ids[i:i + _BULK_DATE_CHUNK]).execute().data or []
-                late += [r["joint_no"] for r in rows if any(r.get(c) and str(r[c])[:10] < date_completed for c in _INSP_DATE_COLS)]
+                late += [r["joint_no"] for r in rows
+                         if str(r.get("date_completed") or "")[:10] != date_completed   # 같은 날짜 재저장은 막지 않는다
+                         and any(r.get(c) and str(r[c])[:10] < date_completed for c in _INSP_DATE_COLS)]
             if late:
                 return jsonify({"error": f"Weld date {date_completed} is later than an inspection date on joint(s) {', '.join(map(str, late[:10]))}"
                                          + (f" and {len(late) - 10} more" if len(late) > 10 else "")}), 400
