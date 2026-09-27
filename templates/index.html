@@ -9,7 +9,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/css/index.css?v=7.1">
+<link rel="stylesheet" href="/static/css/index.css?v=7.2">
 </head>
 <body>
 
@@ -673,7 +673,9 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1330px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1412px !important; table-layout:fixed !important;">
+            <!-- fixed 표는 첫 줄 머리글 너비만 쓰는데 Finding은 둘째 줄에 있어 무시됐다 → colgroup으로 칸 너비 지정 -->
+            <colgroup><col style="width:235px"><col style="width:56px"><col style="width:70px"><col style="width:165px"><col style="width:46px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:140px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:90px"></colgroup>
             <thead>
               <tr>
                 <th rowspan="2" style="width:235px">ISO Drawing No</th>
@@ -714,9 +716,15 @@
       <div class="panel">
         <div class="jm-top-row" style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; height:auto;">
           <input id="tp-iso" class="filter-sel" type="text" placeholder="Search ISO No." oninput="tpCurrentPage=0;debounced('tp',loadTestPkgMaster)" style="width:160px;">
-          <input id="tp-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="tpCurrentPage=0;debounced('tp',loadTestPkgMaster)" style="width:120px;">
           <select id="tp-system" class="filter-sel" style="min-width:100px;" onchange="tpCurrentPage=0;loadSystemPackages();loadTestPkgMaster()"><option value="">System</option></select>
           <select id="tp-package" class="filter-sel" style="min-width:130px;" onchange="tpCurrentPage=0;loadTestPkgMaster()"><option value="">All Packages</option></select>
+          <select id="tp-insp" class="filter-sel" style="min-width:110px;" onchange="tpCurrentPage=0;loadTestPkgMaster()">
+            <option value="">All Inspection</option>
+            <option value="VT">VT</option>
+            <option value="RT">VT/RT</option>
+            <option value="PT">PT</option>
+            <option value="MT">MT</option>
+          </select>
           <select id="tp-status"  class="filter-sel" style="min-width:100px;">
             <option value="">All Status</option>
             <option value="completed">Completed</option>
@@ -729,7 +737,7 @@
           </div>
         </div>
         <div class="table-wrap" style="overflow-x:auto;overflow-y:auto;max-height:calc(100vh - 230px);">
-          <table class="data-table" id="tpTable" style="width:100%;min-width:1200px;table-layout:fixed;">
+          <table class="data-table" id="tpTable" style="width:100%;min-width:1080px;table-layout:fixed;">
             <thead>
               <tr>
                 <th style="width:4%">Sys</th>
@@ -748,7 +756,7 @@
                 <th style="width:4%">RT Res</th>
                 <th style="width:5%">PWHT Date</th>
                 <th style="width:4%">PWHT Res</th>
-                <th style="width:5.5%">STATUS</th>
+                <th style="width:7%">STATUS</th>
                 <th style="width:4%">Save</th>
               </tr>
             </thead>
@@ -890,7 +898,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.52"></script>
+<script defer src="/static/js/dashboard.js?v=7.55"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

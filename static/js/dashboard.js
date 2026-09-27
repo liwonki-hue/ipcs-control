@@ -2098,7 +2098,7 @@ async function printPage(pageId){
         },
         "testpkg_master": {
             endpoint: "/api/testpkg-joints",
-            params: () => _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]),
+            params: () => _readFilters([["tp-iso","iso"],["tp-package","package"],["tp-system","system"],["tp-insp","inspection"],["tp-status","status"]]),
             render: d => renderTPTable(d), restore: () => renderTPTable(tpData)
         },
         "test_master": {
@@ -2901,8 +2901,8 @@ const TP_PAGE = 30;
 
 async function loadTestPkgMaster() {
     const iso    = document.getElementById("tp-iso")?.value?.trim() || "";
-    const welder = document.getElementById("tp-welder")?.value?.trim() || "";
     const pkg    = document.getElementById("tp-package")?.value?.trim() || "";
+    const insp   = document.getElementById("tp-insp")?.value || "";
     const system = document.getElementById("tp-system")?.value  || "";
     const status = document.getElementById("tp-status")?.value  || "";
     const offset = tpCurrentPage * TP_PAGE;
@@ -2910,11 +2910,13 @@ async function loadTestPkgMaster() {
     try {
         const tpSys = document.getElementById("tp-system");
         if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
+        const tpPkg = document.getElementById("tp-package");
+        if (tpPkg && !loadSystemPackages._seq) loadSystemPackages();   // 첫 화면: System 없이도 전체 Package를 고를 수 있게
 
         const params = new URLSearchParams({limit: TP_PAGE, offset});
         if (iso)    params.set("iso",     iso);
-        if (welder) params.set("welder",  welder);
         if (pkg)    params.set("package", pkg);
+        if (insp)   params.set("inspection", insp);
         if (system) params.set("system",  system);
         if (status) params.set("status",  status);
         const res = await apiFetch(`/api/testpkg-joints?${params}`);
@@ -2931,10 +2933,11 @@ async function loadSystemPackages() {
     const system = document.getElementById("tp-system")?.value || "";
     const pkgSel = document.getElementById("tp-package");
     if (!pkgSel) return;
+    const seq = loadSystemPackages._seq = (loadSystemPackages._seq || 0) + 1;   // 요청이 겹치면 마지막 요청만 반영(목록 중복 방지)
     pkgSel.innerHTML = '<option value="">All Packages</option>';
-    if (!system) return;
     try {
         const pkgs = await apiFetch(`/api/joints/packages?system=${encodeURIComponent(system)}`);
+        if (seq !== loadSystemPackages._seq) return;
         if (Array.isArray(pkgs)) {
             pkgs.forEach(p => pkgSel.add(new Option(p, p)));
         }
@@ -2976,7 +2979,7 @@ function renderTPTable(rows) {
           <td style="text-align:center;font-size:11px;color:${inspColor}">${inspLabel}</td>
           <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLocked?'':'onclick="_pickDate(this)"'} readonly ${vtLockAttrs}></td>
           <td style="padding:2px;text-align:center">
-            <select class="cell-input" id="tp-vt-res-${r.id}" style="padding:3px 4px;text-align:center;text-align-last:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
+            <select class="cell-input" id="tp-vt-res-${r.id}" style="width:100%;box-sizing:border-box;padding:3px 4px;text-align:center;text-align-last:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
               <option value="" style="color:#000">-</option>
               <option value="PASS" style="color:#000" ${r.vt_result==="PASS"?"selected":""}>PASS</option>
               <option value="FAIL" style="color:#000" ${r.vt_result==="FAIL"?"selected":""}>FAIL</option>
@@ -3081,7 +3084,7 @@ async function exportNDEExcel() {
 async function exportTPExcel() {
     await ensureXlsx();
     toast("Loading data...", "info");
-    const params = _readFilters([["tp-iso","iso"],["tp-welder","welder"],["tp-package","package"],["tp-system","system"],["tp-status","status"]]);
+    const params = _readFilters([["tp-iso","iso"],["tp-package","package"],["tp-system","system"],["tp-insp","inspection"],["tp-status","status"]]);
     const data = await _fetchAllFiltered("/api/testpkg-joints", params);
     if (!data.length) { toast("No data", "error"); return; }
     const rows = data.map(r => ({

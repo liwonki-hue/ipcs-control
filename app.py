@@ -1862,6 +1862,11 @@ def api_joints_get():
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 
+def _pkgs_for(by_sys, system):
+    """system을 고르면 그 시스템의 package, 비우면 전체 package(Test Package Joint Check는 System 없이도 고를 수 있어야 함)."""
+    return by_sys.get(system, []) if system else sorted({p for v in by_sys.values() for p in v})
+
+
 @app.route("/api/joints/packages", methods=["GET"])
 def api_joints_packages():
     """시스템별 distinct package 목록 반환 — 캐시 우선, 미스 시 RPC 단일 쿼리"""
@@ -1875,7 +1880,7 @@ def api_joints_packages():
             cached_age  = now - _pkg_cache.get("time", 0)
 
         if cached_data and cached_age < 3600:
-            return jsonify(cached_data.get(system, []))
+            return jsonify(_pkgs_for(cached_data, system))
 
         # 캐시 미스: RPC 단일 쿼리로 전체 패키지 목록 로딩
         sb = get_sb()
@@ -1891,7 +1896,7 @@ def api_joints_packages():
             with _lock:
                 _pkg_cache["data"] = {s: sorted(v) for s, v in by_sys.items()}
                 _pkg_cache["time"] = time.time()
-            return jsonify(_pkg_cache["data"].get(system, []))
+            return jsonify(_pkgs_for(_pkg_cache["data"], system))
         except Exception:
             # fallback: per-system paginated query
             q = sb.table("joint_master").select("package").not_.is_("package", "null")
@@ -2810,7 +2815,7 @@ def api_testpkg_joints():
         system  = request.args.get("system",   "").strip()
         status  = request.args.get("status",   "").strip()
         iso     = request.args.get("iso",      "").strip()
-        welder  = request.args.get("welder",   "").strip()
+        insp    = request.args.get("inspection", "").strip()
 
         q = sb.table("joint_master").select(
             "id,system,package,iso_drawing,joint_no,date_completed,welder,"
@@ -2822,7 +2827,7 @@ def api_testpkg_joints():
 
         if pkg:    q = q.ilike("package",     f"%{pkg}%")
         if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
-        if welder: q = q.ilike("welder",      f"%{welder}%")
+        if insp:   q = q.eq("inspection", insp)
         if system: q = q.eq("system",  system)
 
         # status 필터: completed = vt_result=PASS + date_completed, pending = 그 외

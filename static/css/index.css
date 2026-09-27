@@ -366,7 +366,7 @@ select:focus, input:focus { border-color: var(--accent); }
     opacity: 0.5;
 }
 input.cell-input { box-sizing: border-box !important; text-align: center !important; min-width: 0 !important; }
-select.cell-input { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; text-align: center !important; text-align-last: center !important; }
+select.cell-input { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; text-align: center !important; text-align-last: center !important; box-sizing: border-box !important; min-width: 0 !important; }   /* 전역 select min-width:120px 때문에 표 칸 밖으로 넘치던 문제 */
 
 /* date input 빈 값일 때 "연도-월-일" 숨김 */
 input[type="date"].date-empty::-webkit-datetime-edit { color: transparent; }
