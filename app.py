@@ -2008,6 +2008,7 @@ def api_joints_patch(jid):
             if not weld or not insp:
                 return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
         sb.table("joint_master").update({**body, **_audit()}).eq("id", jid).execute()
+        _clear_tp_status_cache()
         # 여기서 _cache를 비우지 않는다: 프런트가 저장 뒤 /api/cache/clear?scope=joint(디바운스)를 부르는데,
         # 저장마다 캐시를 비우면 다음 대시보드 요청이 디바운스를 우회해 즉시 재빌드를 시작한다.
         return jsonify({"ok": True})
@@ -2056,6 +2057,7 @@ def api_joints_bulk_date():
             except Exception as e:  # 앞 묶음은 이미 저장됐을 수 있어 몇 건이 반영됐는지 알린다(같은 값 재시도는 안전)
                 return jsonify({"error": f"{updated} of {len(ids)} joints were updated before the failure: {e}", "updated": updated}), 500
             updated += len(res.data or [])
+        _clear_tp_status_cache()
         # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
         return jsonify({"ok": True, "updated": updated, "requested": len(ids)})
     except Exception as e:
@@ -2674,7 +2676,8 @@ def _sync_rev_from_drawing():
     try:
         dwg, off = {}, 0
         while True:
-            page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id")                 .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
+            page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id") \
+                .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
             for d in page:
                 no, rv = (d.get("drawing_no") or "").strip(), (d.get("revision") or "").strip()
                 if no and rv:                        # revision이 비어 있으면 JM 값을 지우지 않는다
@@ -2805,6 +2808,19 @@ def _joint_accepted(r):
 
 
 # ── Test Package Joints (joint-level inspection view) ──────────────────
+# Status 필터 결과(전체를 읽어 거르는 데 ~3초) 1분 캐시. 페이지 이동마다 다시 읽지 않도록. 조인트 저장 시 비운다.
+_tp_status_cache: dict = {}
+_TP_STATUS_TTL = 60
+
+
+def _clear_tp_status_cache():
+    with _lock:
+        _tp_status_cache.clear()
+
+
+_TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,vt_date,vt_result,"
+                  "inspection,mt_date,mt_result,pt_date,pt_result,"
+                  "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result")
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
     try:
@@ -2817,29 +2833,38 @@ def api_testpkg_joints():
         iso     = request.args.get("iso",      "").strip()
         insp    = request.args.get("inspection", "").strip()
 
-        q = sb.table("joint_master").select(
-            "id,system,package,iso_drawing,joint_no,date_completed,welder,"
-            "vt_date,vt_result,"
-            "inspection,mt_date,mt_result,pt_date,pt_result,"
-            "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result",
-            count="exact"
-        ).or_("package.not.is.null,inspection.in.(VT,RT)")
+        def query(count=None):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
+            q = sb.table("joint_master").select(_TP_JOINT_COLS, count=count).or_("package.not.is.null,inspection.in.(VT,RT)")
+            if pkg:    q = q.ilike("package",     f"%{pkg}%")
+            if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
+            if insp:   q = q.eq("inspection", insp)
+            if system: q = q.eq("system",  system)
+            return q.order("package").order("iso_drawing").order("joint_no").order("id")
 
-        if pkg:    q = q.ilike("package",     f"%{pkg}%")
-        if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
-        if insp:   q = q.eq("inspection", insp)
-        if system: q = q.eq("system",  system)
+        if status in ("completed", "pending"):
+            # 완료 기준(_joint_accepted: VT + 지정 NDE(RT 재촬영 포함) + PWHT)은 DB 조건식으로 옮기면 표의 STATUS와
+            # 어긋나기 쉬워, 같은 조건의 행을 모두 읽어 같은 함수로 거른 뒤 페이지를 나눈다(예전 필터는 VT만 봐서 159건 불일치).
+            want, key = status == "completed", (status, pkg, system, iso, insp)
+            with _lock:
+                hit = _tp_status_cache.get(key)
+            if hit and time.time() - hit[0] < _TP_STATUS_TTL:
+                matched = hit[1]
+            else:
+                matched, off = [], 0
+                while True:
+                    page = query().range(off, off + 9999).execute().data or []
+                    matched += [r for r in page if _joint_accepted(r) == want]
+                    if len(page) < 10000:
+                        break
+                    off += 10000
+                with _lock:
+                    if len(_tp_status_cache) >= 4:        # 조건 조합이 쌓여 메모리를 차지하지 않도록 최근 몇 개만
+                        _tp_status_cache.clear()
+                    _tp_status_cache[key] = (time.time(), matched)
+            rows = [{**r, "status": "Completed" if want else "PENDING"} for r in matched[offset:offset + limit]]
+            return jsonify({"data": rows, "count": len(matched)})
 
-        # status 필터: completed = vt_result=PASS + date_completed, pending = 그 외
-        if status == "completed":
-            q = q.not_.is_("date_completed", "null").eq("vt_result", "PASS")
-        elif status == "pending":
-            q = q.or_("date_completed.is.null,vt_result.neq.PASS,vt_result.is.null")
-
-        res = _exec_page(q.order("package").order("iso_drawing").order("joint_no").order("id")
-                         .range(offset, offset + limit - 1))
-
-        # Compute STATUS per row
+        res = _exec_page(query("exact").range(offset, offset + limit - 1))
         rows = []
         for r in (res.data or []):
             r["status"] = "Completed" if _joint_accepted(r) else "PENDING"
