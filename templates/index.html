@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
-<link rel="stylesheet" href="/static/css/index.css?v=6.8">
+<link rel="stylesheet" href="/static/css/index.css?v=7.1">
 </head>
 <body>
 
@@ -295,7 +295,7 @@
         </div>
         <div class="panel" id="weeklyMaterialPanel">
           <div class="panel-title" id="weeklyMaterialTitle">Breakdown &mdash; By Material</div>
-          <div class="table-wrap"><table class="data-table" id="weeklyMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Material</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-wrap"><table class="data-table" id="weeklyMaterialTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup><thead><tr><th>Material</th><th class="bd-date">Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
 
@@ -303,15 +303,15 @@
       <div class="rg3" style="margin-top:14px;align-items:start">
         <div class="panel" id="weeklySystemPanel">
           <div class="panel-title" id="weeklySystemTitle">Breakdown &mdash; By System</div>
-          <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>System</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-wrap"><table class="data-table" id="weeklySystemTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup><thead><tr><th>System</th><th class="bd-date">Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="panel" id="weeklySubareaPanel">
           <div class="panel-title" id="weeklySubareaTitle">Breakdown &mdash; By Sub Area (1)</div>
-          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Sub Area</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable" style="table-layout:fixed;width:100%"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup><thead><tr><th>Sub Area</th><th class="bd-date">Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
         </div>
         <div class="panel" id="weeklySubareaPanel2">
           <div class="panel-title" id="weeklySubareaTitle2">Breakdown &mdash; By Sub Area (2)</div>
-          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable2" style="table-layout:fixed;width:100%"><colgroup><col style="width:28%"><col style="width:30%"><col style="width:14%"><col style="width:14%"><col style="width:14%"></colgroup><thead><tr><th>Sub Area</th><th>Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
+          <div class="table-wrap"><table class="data-table" id="weeklySubareaTable2" style="table-layout:fixed;width:100%"><colgroup><col style="width:34%"><col style="width:22%"><col style="width:22%"><col style="width:22%"></colgroup><thead><tr><th>Sub Area</th><th class="bd-date">Date</th><th>Fab</th><th>Erect</th><th>Done</th></tr></thead><tbody></tbody></table></div>
         </div>
       </div>
     </div>
@@ -684,7 +684,7 @@
                 <th rowspan="2" style="width:56px">Rev</th>
                 <th rowspan="2" style="width:70px">Jnt</th>
                 <th rowspan="2" style="width:165px">Welder</th>
-                <th rowspan="2" style="width:42px">Inspec</th>
+                <th rowspan="2" style="width:46px" title="Inspection">Insp.</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">PT</th>
                 <th colspan="2" style="border-bottom:1px solid var(--border)">MT</th>
                 <th colspan="3" style="border-bottom:1px solid var(--border)">RT 1st</th>
@@ -894,7 +894,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.46"></script>
+<script defer src="/static/js/dashboard.js?v=7.50"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

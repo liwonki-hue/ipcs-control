@@ -425,7 +425,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
   .grid-4, .grid-6 { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
 }
 /* ── Post-Weld Backlog (Overview) ── */
-.backlog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:8px; }
+.backlog-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px; }   /* 카드 8개: 8 → 4x2 → 2x4로 항상 고르게 */
 .backlog-card { border:1px solid var(--border); border-left:3px solid var(--muted); border-radius:6px; padding:8px 10px; cursor:pointer; background:var(--panel); }
 .backlog-card:hover { border-color:var(--accent); }
 .backlog-card.warn { border-left-color:var(--orange); }
@@ -433,3 +433,26 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 .backlog-card .bl-label { font-size:10px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.05em; }
 .backlog-card .bl-count { font-size:20px; font-family:'DM Mono',monospace; color:var(--text); margin:2px 0; }
 .backlog-card .bl-age { font-size:10px; color:var(--text-dim); }
+
+/* ── 해상도 대응: 글자를 자르지 않고 칸 안에 맞춘다 (2026-09-27) ──
+   기존 표는 모든 칸이 한 줄 고정 + 말줄임이라 1280~1600px 화면에서 머리글("COMPLETED")과
+   ISO/Line/Package 번호가 잘렸다. 칸이 좁으면 줄을 바꾸고(번호는 '-'에서, 머리글은 단어 단위),
+   숫자(1,322.0)는 쪼개지 않는다 — 공백·하이픈에서만 줄을 바꾼다. */
+.data-table th { white-space: normal; word-break: keep-all; overflow-wrap: normal; line-height: 1.25; }
+.data-table td { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: normal; }
+
+@media (max-width:1600px) {
+  .data-table th { letter-spacing: 0.02em; padding: 5px 4px; }
+  .data-table td { padding: 4px 4px; }
+  .cell-input { padding: 3px 2px; font-size: 10px !important; }
+}
+
+/* KPI 라벨: 좁은 화면에서 한 카드만 두 줄이 되면 숫자 높이가 어긋나므로 자간을 줄여 한 줄로 */
+@media (max-width:1600px) {
+  .kpi-label { letter-spacing: 0.04em; }
+}
+@media (max-width:1700px) { .backlog-grid { grid-template-columns:repeat(4,minmax(0,1fr)); } }
+@media (max-width:960px)  { .backlog-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* 주간 Breakdown 표: 날짜는 패널 제목에 표시하고 칸은 숨김(엑셀 내보내기용으로 DOM에는 유지) */
+.bd-date { display:none; }

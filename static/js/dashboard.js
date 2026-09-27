@@ -3,7 +3,8 @@
 // Chart.js 초기화 — defer 로드 순서 보장 (chart.js → datalabels → this)
 if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
     Chart.register(ChartDataLabels);
-    Chart.defaults.set('plugins.datalabels', { display: false });
+    // clamp: 가장자리 점의 라벨이 축 눈금·범례와 겹치지 않도록 차트 영역 안으로 당긴다(좁은 화면에서 겹침)
+    Chart.defaults.set('plugins.datalabels', { display: false, clamp: true });
 }
 
 // 인증 역할: null | 'editor' | 'admin'
@@ -214,6 +215,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
+        loadBacklog();   // 첫 화면은 loadOverview를 거치지 않으므로 여기서도 부른다
     } catch(e) {
         _loadError = true;
         console.error("[BOP] Init error:", e);
@@ -555,7 +557,7 @@ async function loadBacklog(retry = 0) {
     if (!box) return;
     try {
         const res = await fetch(`${API}/api/backlog`, { cache: "no-store" });
-        if (res.status === 202) { if (retry < 10) setTimeout(() => loadBacklog(retry + 1), 3000); return; }
+        if (res.status === 202) { if (retry < 20) setTimeout(() => loadBacklog(retry + 1), 3000); return; }   // 서버 시작 직후 품질 스캔(~15초)을 기다림
         if (!res.ok) throw new Error(await _respError(res));
         const b = await res.json();
         const pct = b.welded ? (b.accepted / b.welded * 100) : 0;
@@ -776,7 +778,7 @@ async function renderOverview(kpi, wkData, units, systems) {
                 {label:"Actual Work",type:"line",data:last4Wks.map(w=>w.completed_di||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,1):''}},
                 {label:"Weekly DI",data:last4Wks.map(w=>(w.completed_di>0)?w.completed_di:null),backgroundColor:"rgba(37,99,235,0.3)",borderColor:"rgba(37,99,235,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
             ]},
-            options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
+            options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true,grace:"20%"}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
 
         document.getElementById("unitOverview").innerHTML = units.map(u => {
@@ -1230,7 +1232,7 @@ async function loadDailyTrend() {
                   borderColor: "#2563eb", borderWidth: 2.5, pointRadius: 6,
                   pointBackgroundColor: "#22d3a1", pointBorderColor: "#fff", pointBorderWidth: 2,
                   tension: 0.2,
-                  datalabels: { display: true, align: "top", offset: 5, color: "#60a5fa",
+                  datalabels: { display: true, align: "top", offset: 5, color: "#60a5fa", backgroundColor: "rgba(15,23,42,0.75)", borderRadius: 3, padding: 2,
                     font: { size: 10, weight: "700", family: "DM Mono, monospace" },
                     formatter: v => v > 0 ? fmtNum(v, 0) : "" }
                 }
@@ -1250,7 +1252,7 @@ async function loadWeekly() {
         charts["weeklyTrend"]=new Chart(document.getElementById("weeklyTrend").getContext("2d"),{
             type:"line",
             data:{labels:displayWks.map(w=>w.week_label),datasets:[
-                {label:"Actual DI",data:displayWks.map(w=>w.completed_di),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
+                {label:"Actual DI",data:displayWks.map(w=>w.completed_di),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",backgroundColor:"rgba(15,23,42,0.75)",borderRadius:3,padding:2,font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
             ]},
             options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
         });
@@ -1280,7 +1282,7 @@ async function loadWeekly() {
             charts["monthlyTrend"]=new Chart(moEl.getContext("2d"),{
                 type:"line",
                 data:{labels:monthlyData.map(([mo])=>mo.slice(5)),datasets:[
-                    {label:"Monthly DI",data:monthlyData.map(([,v])=>Math.round(v.completed)),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
+                    {label:"Monthly DI",data:monthlyData.map(([,v])=>Math.round(v.completed)),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",backgroundColor:"rgba(15,23,42,0.75)",borderRadius:3,padding:2,font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
                 ]},
                 options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
             });
@@ -1322,9 +1324,11 @@ async function loadWeekly() {
             const bd = loadWeekly._bdCache;
             const weekLabel = bd.week_label || "";
             const dateRange = bd.week_start && bd.week_end ? `${bd.week_start.slice(5)} ~ ${bd.week_end.slice(5)}` : "";
-            document.getElementById("weeklySystemTitle").textContent  = `${weekLabel} Breakdown — By System`;
-            document.getElementById("weeklyMaterialTitle").textContent = `${weekLabel} Breakdown — By Material`;
-            document.getElementById("weeklySubareaTitle").textContent = `${weekLabel} Breakdown — By Sub Area`;
+            // 모든 행이 같은 주간이라 날짜는 제목에 한 번만 보여주고 표의 날짜 칸은 숨긴다(엑셀 내보내기에는 남음)
+            const wkTag = dateRange ? `${weekLabel} (${dateRange})` : weekLabel;
+            document.getElementById("weeklySystemTitle").textContent  = `${wkTag} Breakdown — By System`;
+            document.getElementById("weeklyMaterialTitle").textContent = `${wkTag} Breakdown — By Material`;
+            document.getElementById("weeklySubareaTitle").textContent = `${wkTag} Breakdown — By Sub Area`;
             const mkTotalRow = arr => {
                 const sf=arr.reduce((s,r)=>s+(r.fab_di||0),0);
                 const se=arr.reduce((s,r)=>s+(r.erect_di||0),0);
@@ -1332,7 +1336,7 @@ async function loadWeekly() {
                 const bld="font-weight:700";
                 return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
                     <td style="${bld};color:var(--accent)">Total</td>
-                    <td style="${bld};font-size:11px;color:var(--text-dim)">${dateRange}</td>
+                    <td class="bd-date" style="${bld};font-size:11px;color:var(--text-dim)">${dateRange}</td>
                     <td style="${bld}">${fmtNum(sf,1)}</td>
                     <td style="${bld}">${fmtNum(se,1)}</td>
                     <td style="${bld};color:var(--accent)">${fmtNum(sc,1)}</td>
@@ -1340,14 +1344,14 @@ async function loadWeekly() {
             };
             const mkSysRows = arr => arr.map(r=>`<tr>
                 <td style="color:var(--accent)">${r.system||r.mat||r.name||""}</td>
-                <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
+                <td class="bd-date" style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
                 <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
             </tr>`).join("") + mkTotalRow(arr);
             const mkSubRows = (arr, showTotal=false, totalArr=null) => arr.map(r=>`<tr>
                 <td style="color:var(--accent)">${r.sub_area||r.name||""}</td>
-                <td style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
+                <td class="bd-date" style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
                 <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
@@ -1361,7 +1365,7 @@ async function loadWeekly() {
             document.querySelector("#weeklySubareaTable tbody").innerHTML  = mkSubRows(allSubs.slice(0, mid), false);
             document.querySelector("#weeklySubareaTable2 tbody").innerHTML = mkSubRows(allSubs.slice(mid), true, allSubs);
             const title2El = document.getElementById("weeklySubareaTitle2");
-            if (title2El) title2El.textContent = `${weekLabel} Breakdown — By Sub Area (2)`;
+            if (title2El) title2El.textContent = `${wkTag} Breakdown — By Sub Area (2)`;
         } catch(e2) { console.warn("Breakdown fetch failed", e2); }
 
     } catch(e) { console.error("Weekly failed",e); }
@@ -1611,7 +1615,7 @@ function renderJMTable(rows){
             <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
             <td style="text-align:center">${r.system||""}</td>
             <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.sub_area||""}</td>
-            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+            <td title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
             <td style="text-align:center">${r.rev||""}</td>
             <td>${r.mat||""}</td>
             <td style="text-align:center">${r.size_inch||""}</td>
@@ -1940,7 +1944,7 @@ function chartOpts(yLabel){
     return{
         responsive:true,maintainAspectRatio:false,animation:{duration:500},layout:{padding:{right:30, top:20}},
         plugins:{legend:{labels:{color:"#7a95b8",font:{family:"DM Mono, monospace",size:11},boxWidth:12,padding:14}},tooltip:{backgroundColor:"#111827",borderColor:"#1e2d45",borderWidth:1,titleColor:"#e2eaf6",bodyColor:"#7a95b8",padding:10}},
-        scales:{x:{ticks:{color:"#7a95b8",font:{family:"DM Mono, monospace",size:10},maxRotation:0},grid:{display:false,drawBorder:false}},y:{ticks:{color:"#7a95b8",font:{family:"DM Mono, monospace",size:10}},grid:{display:false,drawBorder:false},title:{display:!!yLabel,text:yLabel,color:"#4a6080",font:{size:10}},beginAtZero:true}}
+        scales:{x:{offset:true,ticks:{color:"#7a95b8",font:{family:"DM Mono, monospace",size:10},maxRotation:0},grid:{display:false,drawBorder:false}},y:{ticks:{color:"#7a95b8",font:{family:"DM Mono, monospace",size:10}},grid:{display:false,drawBorder:false},title:{display:!!yLabel,text:yLabel,color:"#4a6080",font:{size:10}},beginAtZero:true,grace:"12%"}}
     };
 }
 
@@ -2949,7 +2953,7 @@ function renderTPTable(rows) {
         return `<tr id="tprow-${r.id}">
           <td style="text-align:center">${r.system||""}</td>
           <td style="color:var(--indigo)">${r.package||""}</td>
-          <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
+          <td style="font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td style="text-align:center">${r.joint_no||""}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
           <td style="text-align:center;font-size:11px;color:${inspColor}">${inspLabel}</td>
@@ -3234,7 +3238,7 @@ function renderTMTable(data) {
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-desc-${r.id}" value="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400"></td>
+            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="2" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
             <td style="padding:0">${readinessCell}</td>
             ${_tmDateCell("tm-linecheck", r.id, r.line_check_date)}
             ${_tmDateCell("tm-puncha", r.id, r.punch_a_clear_date)}
