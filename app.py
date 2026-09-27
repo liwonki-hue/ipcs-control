@@ -14,7 +14,7 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict, Counter
 from concurrent.futures import ThreadPoolExecutor
-from flask import Flask, render_template, jsonify, request, session
+from flask import Flask, render_template, jsonify, request, session, has_request_context
 from functools import wraps
 from types import SimpleNamespace
 import httpx
@@ -213,7 +213,7 @@ def admin_required(f):
 def _audit(via=""):
     """수정 이력 칸(updated_at/updated_by). 로그인이 admin/editor 공용 계정이라 사람 이름 대신 역할이 남는다.
     via: 'sync'처럼 일괄 동기화로 바뀐 경우 표시."""
-    who = session.get("role") or "system"
+    who = (session.get("role") if has_request_context() else None) or "system"   # 백그라운드 동기화는 요청 밖에서 돈다
     return {"updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "updated_by": f"{who} ({via})" if via else who}
 
@@ -1748,7 +1748,9 @@ def api_refresh_db_cache():
                 rebuild_started = True
             else:
                 rebuild_started = False
-        return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress"})
+        threading.Thread(target=_sync_rev_from_drawing, daemon=True).start()
+        return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress",
+                        "rev_sync_last": _rev_sync_last})
     except Exception as e:
         print(f"[refresh-db-cache] Error: {e}")
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -2635,6 +2637,70 @@ def _get_qa(wait=True):
         threading.Thread(target=_refresh_qa, daemon=True).start()
         return data
     return _refresh_qa()
+
+
+# ── ISO Revision 자동 적용: JM rev를 항상 Drawing DB(dwg_latest) revision에 맞춘다 ──
+# ISO 도면은 계속 개정되므로 keep-alive(12분마다)가 돌 때 어긋난 조인트만 고친다. 화면에서 rev를 바꿔도 다음 동기화에서 Drawing DB 값으로 돌아간다.
+# 단, Drawing DB 쪽이 더 낮은 Revision이면(2026-09-19 확인된 4개 ISO처럼 Drawing DB가 늦게 올라온 경우) JM을 내리지 않고 건너뛴다.
+_rev_sync_lock = threading.Lock()
+_rev_sync_last: dict = {"time": None, "updated": 0, "isos": 0, "skipped_older": [], "error": None}
+_REV_RE = re.compile(r"C(\d+)([A-Z]?)")
+
+
+def _rev_older(new, cur):
+    """new가 cur보다 이전 Revision인가(C01 < C01A < C01B < C01C < C03). VOID 등 형식이 다르면 비교하지 않는다(False)."""
+    a, b = _REV_RE.fullmatch(new.upper()), _REV_RE.fullmatch(cur.upper())
+    return bool(a and b) and (int(a[1]), a[2]) < (int(b[1]), b[2])
+
+
+def _sync_rev_from_drawing():
+    if not _rev_sync_lock.acquire(blocking=False):   # 이전 동기화가 아직 도는 중
+        return
+    try:
+        dwg, off = {}, 0
+        while True:
+            page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id")                 .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
+            for d in page:
+                no, rv = (d.get("drawing_no") or "").strip(), (d.get("revision") or "").strip()
+                if no and rv:                        # revision이 비어 있으면 JM 값을 지우지 않는다
+                    dwg[no] = rv
+            if len(page) < DRAW_DB_PAGE:
+                break
+            off += DRAW_DB_PAGE
+        if not dwg:
+            raise RuntimeError("Drawing DB에서 revision을 하나도 못 읽음")
+        fix, older, off = defaultdict(list), set(), 0   # 새 rev → 고칠 조인트 id / Drawing DB가 더 낮아 건너뛴 ISO
+        while True:
+            page = _sb_exec(lambda sb, o=off: sb.table("joint_master").select("id,iso_drawing,rev")
+                            .order("id").range(o, o + 9999).execute()).data or []
+            for r in page:
+                iso = (r.get("iso_drawing") or "").strip()
+                new, cur = dwg.get(iso), (r.get("rev") or "").strip()
+                if new and cur != new:
+                    if _rev_older(new, cur):
+                        older.add(iso)
+                    else:
+                        fix[new].append(r["id"])
+            if len(page) < 10000:
+                break
+            off += 10000
+        updated, stamp = 0, _audit("rev-sync")
+        for new, ids in fix.items():
+            for i in range(0, len(ids), 200):
+                res = _sb_exec(lambda sb, chunk=ids[i:i + 200]: sb.table("joint_master")
+                               .update({"rev": new, **stamp}).in_("id", chunk).execute())
+                updated += len(res.data or [])
+        if updated:
+            with _lock:
+                _qa_cache["time"] = 0                # Rev 불일치 집계를 다시 계산하도록
+            print(f"[rev-sync] JM rev {updated}건을 Drawing DB revision으로 갱신")
+        _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), updated=updated, isos=len(dwg),
+                              skipped_older=sorted(older), error=None)
+    except Exception as e:
+        print(f"[rev-sync] failed: {e}")
+        _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), error=str(e))
+    finally:
+        _rev_sync_lock.release()
 
 
 @app.route("/api/backlog")
