@@ -1752,8 +1752,9 @@ def api_refresh_db_cache():
         return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress",
                         "rev_sync_last": _rev_sync_last})
     except Exception as e:
-        print(f"[refresh-db-cache] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        # 로그인 없이 부르는 주소라 오류 문구(접속 키가 섞일 수 있음) 대신 오류 종류만 돌려준다. 로그도 같다.
+        print(f"[refresh-db-cache] Error: {type(e).__name__}")
+        return jsonify({"ok": False, "error": type(e).__name__}), 500
 
 # ── Joint Master ───────────────────────────────────────────────────────
 _RANGE_ROWS_RE = re.compile(r"only (\d+) rows")
