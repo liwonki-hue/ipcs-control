@@ -95,7 +95,7 @@ function _pickDate(el) {
     if (el.dataset.fullDate) p.value = el.dataset.fullDate;
     document.body.appendChild(p);
     p.addEventListener("change", () => {
-        if (p.value) {
+        if (p.value && _inspOrderOk(el, p.value)) {
             el.value = p.value.slice(2);
             el.dataset.fullDate = p.value;
             el.classList.remove("date-empty");
@@ -108,6 +108,24 @@ function _pickDate(el) {
     });
     p.focus();
     try { p.showPicker(); } catch(e) { p.click(); }
+}
+
+// 검사일(VT/RT/PT/MT/PWHT)은 용접일과 같거나 뒤여야 한다. 행(tr)의 data-weld(용접일)·data-insp-min(가장 이른 검사일)과 비교해
+// 어긋나면 입력을 받지 않고 바로 알린다. 저장 시 서버도 같은 규칙으로 한 번 더 막는다(_validate_joint_update).
+function _inspOrderOk(el, d) {
+    const tr = el.closest("tr");
+    if (!tr) return true;
+    if (el.id.startsWith("date-")) {             // Joint Master의 용접일 칸
+        const first = tr.dataset.inspMin;
+        if (first && d > first) { toast(`Weld date ${d} is later than the inspection date ${first}. Inspection date must be on or after the weld date.`, "error"); return false; }
+        return true;
+    }
+    const weld = tr.dataset.weld;
+    if (weld && d < weld) { toast(`Inspection date ${d} is earlier than the weld date ${weld}. It must be on or after the weld date.`, "error"); return false; }
+    return true;
+}
+function _inspMin(r) {
+    return ["vt_date", "rt_date", "rt_2_date", "pt_date", "mt_date", "pwht_date"].map(c => (r[c] || "").substring(0, 10)).filter(Boolean).sort()[0] || "";
 }
 
 // data-full-date(YYYY-MM-DD) 우선, 없으면 "20"+value(YY-MM-DD) 반환
@@ -1608,7 +1626,7 @@ function renderJMTable(rows){
         const wVal=r.welder||"";
         const phaseVal=r.phase||"";
         const pkgVal=r.package||"";
-        return `<tr id="jmrow-${r.id}"${_lastUpdatedTitle(r)}>
+        return `<tr id="jmrow-${r.id}" data-insp-min="${_inspMin(r)}"${_lastUpdatedTitle(r)}>
             <td style="display:none">${r.id}</td>
             <td style="padding:2px"><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 4px"></td>
             <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
@@ -1688,7 +1706,7 @@ function renderNdeTable(rows){
         const rt_date = r.rt_date ? r.rt_date.substring(0,10) : "";
         const pwht_date = r.pwht_date ? r.pwht_date.substring(0,10) : "";
         
-        return `<tr id="nderow-${r.id}">
+        return `<tr id="nderow-${r.id}" data-weld="${(r.date_completed||"").substring(0,10)}">
             <td style="text-align:center" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
             <td style="text-align:center">${r.rev||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
@@ -2949,7 +2967,7 @@ function renderTPTable(rows) {
         const inspLabel = insp === "RT" ? "VT/RT" : insp || "-";
         const vtLocked = !r.date_completed || !r.inspection;
         const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date and Inspection first"` : "";
-        return `<tr id="tprow-${r.id}">
+        return `<tr id="tprow-${r.id}" data-weld="${(weldDate||"").substring(0,10)}">
           <td style="text-align:center">${r.system||""}</td>
           <td style="color:var(--indigo)">${r.package||""}</td>
           <td style="font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
