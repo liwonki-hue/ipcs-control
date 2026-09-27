@@ -28,7 +28,6 @@
   <div class="nav-section">Construction</div>
   <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
   <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
-  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=markedpid" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#9998;</span> Marked PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <div class="nav-section">Quality</div>
   <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
   <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon">&#128269;</span> RT Quality Performance</button>
@@ -36,6 +35,7 @@
   <div class="nav-section">Test &amp; Handover</div>
   <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Joint Check</button>
   <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Pkg Register</button>
+  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=markedpid" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#9998;</span> Marked PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <div class="nav-section">Report</div>
   <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon">&#128203;</span> Daily Report</button>
   <div class="nav-section">Link</div>
@@ -95,11 +95,6 @@
           <div class="panel"><div class="panel-title">Progress by Unit</div><div id="unitOverview"></div></div>
           <div class="panel" style="margin-top:8px"><div class="panel-title">Test Package Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="testpkgGaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="testpkgGaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">TEST PKG PROGRESS</text></svg></div><div class="stat-list" id="testpkgStats"></div></div>
         </div>
-      </div>
-      <!-- 용접 후 대기 물량: 용접은 끝났는데 다음 단계(검사·PWHT·Package)가 안 된 조인트 -->
-      <div class="panel" id="backlogPanel">
-        <div class="panel-title">Post-Weld Backlog <span id="backlogSub" style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px"></span></div>
-        <div id="backlogCards" class="backlog-grid"><div style="color:var(--text-dim);font-size:12px;padding:8px">Loading...</div></div>
       </div>
       <!-- By System: single merged-header table -->
       <div style="margin-top:0">
@@ -894,7 +889,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.50"></script>
+<script defer src="/static/js/dashboard.js?v=7.51"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

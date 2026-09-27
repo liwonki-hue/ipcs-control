@@ -215,7 +215,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems);
-        loadBacklog();   // 첫 화면은 loadOverview를 거치지 않으므로 여기서도 부른다
     } catch(e) {
         _loadError = true;
         console.error("[BOP] Init error:", e);
@@ -545,13 +544,13 @@ function renderKPI(d, wkData) {
 async function loadOverview() {
     const data = await getDashData();
     renderOverview(data.kpi, data.weekly, data.units, data.systems);
-    loadBacklog();
 }
 
 // 용접 후 대기 물량 카드. 카드 순서는 공사 순서(검사 지정 → VT → NDE → PWHT → Repair → Package), 날짜 오류·Rev 불일치는 데이터 점검 항목
 const _BACKLOG_ORDER = ["insp_none", "vt_wait", "nde_wait", "pwht_wait", "rt_repair", "no_pkg", "date_error"];
 const _BACKLOG_LABEL = { insp_none: "Inspection not set", vt_wait: "VT not done", nde_wait: "NDE not done", pwht_wait: "PWHT not done",
                          rt_repair: "RT repair open", no_pkg: "No test package", date_error: "Inspection before weld" };
+// Post-Weld Backlog 카드 — Overview에서 뺐고(2026-09-27) 별도 탭으로 옮길 예정이라 함수는 남겨 둔다
 async function loadBacklog(retry = 0) {
     const box = document.getElementById("backlogCards"), sub = document.getElementById("backlogSub");
     if (!box) return;
