@@ -2697,8 +2697,11 @@ def _sync_rev_from_drawing():
         _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), updated=updated, isos=len(dwg),
                               skipped_older=sorted(older), error=None)
     except Exception as e:
-        print(f"[rev-sync] failed: {e}")
-        _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), error=str(e))
+        # 오류 문구에 접속 키 같은 값이 섞일 수 있고(예: 잘못 붙여 넣은 환경변수가 헤더 오류에 그대로 찍힘) 이 결과는
+        # 로그인 없는 keep-alive 응답으로 나가므로, 직접 만든 RuntimeError 문구 외에는 오류 종류만 남긴다.
+        msg = str(e) if type(e) is RuntimeError else type(e).__name__
+        print(f"[rev-sync] failed: {msg}")
+        _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), error=msg)
     finally:
         _rev_sync_lock.release()
 
