@@ -218,6 +218,15 @@ def _audit(via=""):
             "updated_by": f"{who} ({via})" if via else who}
 
 
+def _err_text(e):
+    """API 오류 응답 문구. 로그인하지 않은 요청에는 오류 종류만 준다 — 오류 문구에 접속 키 같은 값이 섞일 수 있어서
+    (2026-09-28 잘못 붙여 넣은 환경변수가 헤더 오류 문구로 공개 응답에 찍힘). 자세한 문구는 서버 로그에 남긴다."""
+    if has_request_context() and session.get("role"):
+        return str(e)
+    print(f"[error] {request.path if has_request_context() else '-'}: {e}")
+    return type(e).__name__
+
+
 def get_sb():
     """Singleton Supabase client. Re-creates on connection error."""
     global _sb
@@ -1851,7 +1860,7 @@ def api_joints_get():
         has_after = res.count is None or offset + len(res.data) < res.count
         return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows, offset > 0, has_after), "count": res.count})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/joints/packages", methods=["GET"])
 def api_joints_packages():
@@ -1952,7 +1961,7 @@ def api_joints_filter_values():
             _jm_fv_cache[col] = {"data": vals, "time": time.time()}
         return jsonify({"values": vals})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 def _validate_joint_update(sb, jid, body):
     """저장 전 검증. 오류 메시지(영문, 화면 토스트용) 또는 None.
@@ -1998,7 +2007,7 @@ def api_joints_patch(jid):
         # 저장마다 캐시를 비우면 다음 대시보드 요청이 디바운스를 우회해 즉시 재빌드를 시작한다.
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 _BULK_DATE_MAX_IDS = 1000   # 한 요청에 받는 최대 조인트 수(ISO 하나는 보통 수십 건)
@@ -2045,7 +2054,7 @@ def api_joints_bulk_date():
         # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
         return jsonify({"ok": True, "updated": updated, "requested": len(ids)})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 # ── Weekly Last-Week System/SubArea Breakdown ─────────────────────────
@@ -2142,7 +2151,7 @@ def api_weekly_last_breakdown():
         print(f"[weekly-breakdown] Error: {e}")
         if cached is not None:      # 오류 시 stale 캐시라도 반환
             return jsonify(cached)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 # ── Welder Stats Fallback (direct DB computation) ─────────────────────
@@ -2420,7 +2429,7 @@ def api_welder_summary():
             return jsonify(result)
         except Exception as e:
             print(f"[welder-summary] Fallback failed: {e}")
-            return jsonify({"error": str(e)}), 500
+            return jsonify({"error": _err_text(e)}), 500
 
 
 # ── Welder Daily Stats ─────────────────────────────────────────────────
@@ -2509,7 +2518,7 @@ def api_welder_detail():
             "system_list": sorted(({"system": k, "di": round(v, 1)} for k, v in by_sys.items()), key=lambda x: -x["di"]),
         })
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 # ── 공정 품질 스캔: 용접 뒤 단계(검사·PWHT·Package)의 대기 물량 ─────────
 _QA_COLS = ("id,iso_drawing,rev,package,welder,date_completed,inspection,pwht,pwht_date,pwht_result,"
@@ -2717,7 +2726,7 @@ def api_backlog():
         return jsonify({k: qa[k] for k in ("as_of", "welded", "accepted", "checks")} |
                        {"rev_mismatch_isos": len(qa["rev_mismatch_isos"])})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 @app.route("/api/welders")
@@ -2729,7 +2738,7 @@ def api_welders():
             return jsonify({"building": True}), 202
         return jsonify(sorted(qa["welded_by_welder"]))
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 def _apply_quick_filter(q, quick):
@@ -2833,7 +2842,7 @@ def api_testpkg_joints():
 
         return jsonify({"data": rows, "count": res.count})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 # ── RT Quality Performance ─────────────────────────────────────────────
@@ -2975,7 +2984,7 @@ def api_rt_quality():
         print(f"[rt-quality] Error: {e}")
         if cached_rt is not None:          # 오류 시 stale 캐시라도 반환
             return jsonify(cached_rt)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 # ── Area별 Field DI / Support EA 집계 ─────────────────────────────────
@@ -3033,7 +3042,7 @@ def api_area_field_quantities():
             cached = _area_field_cache.get("data")
         if cached is not None:          # 오류 시 stale 캐시라도 반환
             return jsonify(cached)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 # ── Support Master CRUD ───────────────────────────────────────────────
 @app.route("/api/ep-support-summary")
@@ -3070,7 +3079,7 @@ def api_ep_support_summary():
             _ep_sup_cache["time"] = time.time()
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 
 @app.route("/api/support-master", methods=["GET"])
@@ -3152,7 +3161,7 @@ def api_support_get():
 
         return jsonify({"data": sm_rows, "count": total_count})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/support-master/<int:rid>", methods=["PATCH"])
 @login_required
@@ -3164,7 +3173,7 @@ def api_support_patch(rid):
         # 다음 대시보드 요청이 병합을 건너뛰고 곧바로 전체 재빌드를 시작한다.
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/support-master/<int:rid>", methods=["DELETE"])
 @admin_required
@@ -3179,7 +3188,7 @@ def api_support_delete(rid):
             _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 def _upsert_partial(sb, table, records, chunk=500):
     """id + 일부 컬럼만 담은 레코드들을 upsert한다. 한 요청에 키 구성이 다른 레코드를 섞으면 postgrest가 열 목록을
@@ -3261,7 +3270,7 @@ def api_support_sync_phase_package():
         return jsonify({"ok": True, "updated": updated, "iso_matched": len(iso_map)})
     except Exception as e:
         print(f"[sm-sync-phase-pkg] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
 @app.route("/api/support-master/sync-drawing", methods=["POST"])
@@ -3384,7 +3393,7 @@ def api_support_sync_drawing():
         })
     except Exception as e:
         print(f"[sm-sync-drawing] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
 # ── Test Package Master CRUD ──────────────────────────────────────────
@@ -3482,7 +3491,7 @@ def api_testpkg_get():
                 _testpkg_all_cache["time"] = time.time()
         return jsonify(result)
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/testpkg-master/<int:rid>", methods=["PATCH"])
 @login_required
@@ -3495,7 +3504,7 @@ def api_testpkg_patch(rid):
             _testpkg_all_cache["data"] = None
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/testpkg-master/<int:rid>", methods=["DELETE"])
 @admin_required
@@ -3509,7 +3518,7 @@ def api_testpkg_delete(rid):
             _testpkg_all_cache["time"] = 0
         return jsonify({"ok": True})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _err_text(e)}), 500
 
 @app.route("/api/testpkg-master/sync", methods=["POST"])
 @login_required
@@ -3557,7 +3566,7 @@ def api_testpkg_sync():
         return jsonify({"ok": True, "inserted": inserted, "total": len(seen)})
     except Exception as e:
         print(f"[testpkg-sync] Error: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
 def _compute_daily_report():
