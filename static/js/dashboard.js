@@ -348,7 +348,6 @@ function navigate(page) {
                 _loadJMFilterSel("jm-size", "size_inch", "Size");
                 _loadJMFilterSel("jm-pwht", "pwht",      "PWHT");
             }
-            _loadWelderIdList();
             loadJointMaster(); break;
         case "welder":      loadWelder();       break;
         case "rt_quality":  loadRtQuality();    break;
@@ -562,41 +561,6 @@ function renderKPI(d, wkData) {
 async function loadOverview() {
     const data = await getDashData();
     renderOverview(data.kpi, data.weekly, data.units, data.systems);
-}
-
-// 용접 후 대기 물량 카드. 카드 순서는 공사 순서(검사 지정 → VT → NDE → PWHT → Repair → Package), 날짜 오류·Rev 불일치는 데이터 점검 항목
-const _BACKLOG_ORDER = ["insp_none", "vt_wait", "nde_wait", "pwht_wait", "rt_repair", "no_pkg", "date_error"];
-const _BACKLOG_LABEL = { insp_none: "Inspection not set", vt_wait: "VT not done", nde_wait: "NDE not done", pwht_wait: "PWHT not done",
-                         rt_repair: "RT repair open", no_pkg: "No test package", date_error: "Inspection before weld" };
-// Post-Weld Backlog 카드 — Overview에서 뺐고(2026-09-27) 별도 탭으로 옮길 예정이라 함수는 남겨 둔다
-async function loadBacklog(retry = 0) {
-    const box = document.getElementById("backlogCards"), sub = document.getElementById("backlogSub");
-    if (!box) return;
-    try {
-        const res = await fetch(`${API}/api/backlog`, { cache: "no-store" });
-        if (res.status === 202) { if (retry < 20) setTimeout(() => loadBacklog(retry + 1), 3000); return; }   // 서버 시작 직후 품질 스캔(~15초)을 기다림
-        if (!res.ok) throw new Error(await _respError(res));
-        const b = await res.json();
-        const pct = b.welded ? (b.accepted / b.welded * 100) : 0;
-        if (sub) sub.textContent = `Welded ${fmtNum(b.welded, 0)} · Inspection accepted ${fmtNum(b.accepted, 0)} (${pct.toFixed(1)}%) · as of ${b.as_of}`;
-        const card = (key, label, count, age) => `<div class="backlog-card ${count ? "warn" : "ok"}" onclick="openJmQuick('${key}')" title="Open Joint Master filtered by this item">
-            <div class="bl-label">${label}</div><div class="bl-count">${fmtNum(count, 0)}</div><div class="bl-age">${age}</div></div>`;
-        const cards = _BACKLOG_ORDER.filter(k => b.checks[k]).map(k => {
-            const c = b.checks[k];
-            const age = c.count ? `&gt;7d ${fmtNum(c.over7, 0)} · &gt;14d ${fmtNum(c.over14, 0)} · oldest ${c.oldest_days}d` : "none";
-            return card(k, _BACKLOG_LABEL[k] || c.label, c.count, age);
-        });
-        cards.push(card("rev_mismatch", "Rev ≠ Drawing DB (ISO)", b.rev_mismatch_isos, "JM revision differs from Drawing DB"));
-        box.innerHTML = cards.join("");
-    } catch (e) { box.innerHTML = `<div style="color:var(--text-dim);font-size:12px;padding:8px">Backlog load failed: ${e.message}</div>`; }
-}
-
-function openJmQuick(key) {
-    ["jm-iso", "jm-phase", "jm-system", "jm-package", "jm-subarea", "jm-mat", "jm-size", "jm-status", "jm-inspection", "jm-pwht"]
-        .forEach(id => { const el = document.getElementById(id); if (el) el.value = ""; });
-    const q = document.getElementById("jm-quick"); if (q) q.value = key;
-    jmCurrentPage = 0;
-    navigate("joint_master");
 }
 
 async function renderOverview(kpi, wkData, units, systems) {
@@ -1638,7 +1602,7 @@ function renderJMTable(rows){
             <td style="text-align:center">${r.size_inch||""}</td>
             <td style="text-align:center">${r.sf||""}</td>
             <td style="text-align:center">${r.joint_no||""}</td>
-            <td><input class="cell-input" id="welder-${r.id}" type="text" list="welder-id-list" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
+            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
             <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="text" value="${dStr?dStr.slice(2):''}" data-full-date="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
@@ -1785,20 +1749,6 @@ function renderNdeTable(rows){
 async function _respError(r){
     try { const j = await r.json(); if (j && j.error) return j.error; } catch(e) {}
     return "HTTP " + r.status;
-}
-
-// 용접 기록에 나온 용접사 ID를 입력 추천 목록으로 한 번 불러온다(형식 제한 없음)
-let _welderIdsLoaded = false;
-async function _loadWelderIdList(){
-    if (_welderIdsLoaded) return;
-    try {
-        const ids = await apiFetch("/api/welders");
-        if (!Array.isArray(ids)) return;
-        let dl = document.getElementById("welder-id-list");
-        if (!dl) { dl = document.createElement("datalist"); dl.id = "welder-id-list"; document.body.appendChild(dl); }
-        dl.innerHTML = ids.map(w => `<option value="${w}">`).join("");
-        _welderIdsLoaded = true;
-    } catch(e) { console.error("welder list load failed", e); }
 }
 
 async function saveNdeRow(id){
@@ -3231,27 +3181,25 @@ function renderTMTable(data) {
         const res = r.completed ? "PASS" : (dc ? "FAIL" : "");
         const pt = r.piping_total     || 0;
         const pc = r.piping_completed || 0;   // 용접 완료
-        const pa = r.piping_accepted;         // 검사까지 합격(서버 품질 스캔). 아직 없으면 용접 완료로 대신
         const st = r.support_total    || 0;
         const si = r.support_installed|| 0;
         const pw = pt > 0 ? (pc / pt) * 100 : 0;
-        const pp = pt > 0 ? ((pa ?? pc) / pt) * 100 : 0;
         const sp = st > 0 ? (si / st) * 100 : 0;
-        const op = pp * 0.7 + sp * 0.3;
+        const op = pw * 0.7 + sp * 0.3;
         const mU = (r.method||"").toUpperCase();
         const mdU = (r.media||"").toUpperCase();
         const readinessCell = `<div style="padding:3px 8px">
             <div style="font-size:11px;font-weight:400;color:#3b82f6;text-align:center;margin-bottom:4px;font-family:'DM Mono',monospace">${op.toFixed(1)}%</div>
             <div style="display:flex;gap:2px;margin:0 2px">
-                <div style="flex:7;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Piping inspection accepted ${pp.toFixed(1)}% (welded ${pw.toFixed(1)}%)">
-                    <div style="width:${Math.min(pp,100).toFixed(1)}%;height:100%;background:#3b82f6;border-radius:2px"></div>
+                <div style="flex:7;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Piping welded ${pw.toFixed(1)}%">
+                    <div style="width:${Math.min(pw,100).toFixed(1)}%;height:100%;background:#3b82f6;border-radius:2px"></div>
                 </div>
                 <div style="flex:3;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Support ${sp.toFixed(1)}%">
                     <div style="width:${Math.min(sp,100).toFixed(1)}%;height:100%;background:#a78bfa;border-radius:2px"></div>
                 </div>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:2px;padding:0 2px">
-                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace" title="${pa == null ? "Inspection status is still being calculated on the server - showing welded basis" : "Inspection accepted / welded"}">P:${pp.toFixed(1)}% <span style="opacity:.7">${pa == null ? "(W basis)" : `(W ${pw.toFixed(0)}%)`}</span></span>
+                <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace">P:${pw.toFixed(1)}%</span>
                 <span style="font-size:9px;color:#94a3b8;font-family:'DM Mono',monospace">S:${sp.toFixed(1)}%</span>
             </div>
         </div>`;
@@ -3408,7 +3356,6 @@ async function loadRtQuality() {
         _renderRtMonthlyChart(_rtData.by_month);
         _renderRtSystemTable(_rtData.by_system);
         _renderRtWelderTable(_rtData.by_welder);
-        _renderRtRateTable(_rtData.rt_rate || []);
         _renderRtRepairList(_rtData.repair_list);
     } catch(e) {
         console.error("RT Quality load failed", e);
@@ -3632,18 +3579,6 @@ function _renderRtWelderTable(byWelder) {
     tbody.innerHTML = byWelder.map(r =>
         _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.welder}</td>`, r)
     ).join("");
-}
-
-function _renderRtRateTable(rows) {
-    const tbody = document.getElementById("rtRateBody");
-    if (!tbody) return;
-    if (!rows.length) { tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">No data</td></tr>`; return; }
-    tbody.innerHTML = rows.map(r => `<tr>
-        <td style="text-align:center;color:var(--text-dim)">${r.welder}</td>
-        <td style="text-align:center">${fmtNum(r.welded, 0)}</td>
-        <td style="text-align:center">${fmtNum(r.rt_shots, 0)}</td>
-        <td style="text-align:center;color:${r.rt_shots === 0 ? "var(--orange)" : "inherit"}">${r.rate.toFixed(1)}%</td>
-    </tr>`).join("");
 }
 
 function _renderRtRepairList(repairList) {

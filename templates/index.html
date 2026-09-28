@@ -336,7 +336,7 @@
           <select id="jm-status" class="filter-sel" style="min-width:100px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <select id="jm-pwht" class="filter-sel" style="min-width:80px;"><option value="">PWHT</option></select>
-          <select id="jm-quick" class="filter-sel" style="min-width:150px;" onchange="jmCurrentPage=0;loadJointMaster()" title="Same conditions as the Overview Post-Weld Backlog cards">
+          <select id="jm-quick" class="filter-sel" style="min-width:150px;" onchange="jmCurrentPage=0;loadJointMaster()" title="Welded joints still waiting for the next step">
             <option value="">Quick filter</option>
             <option value="insp_none">Inspection not set</option>
             <option value="vt_wait">VT not done</option>
@@ -344,8 +344,6 @@
             <option value="pwht_wait">PWHT not done</option>
             <option value="rt_repair">RT repair open</option>
             <option value="no_pkg">No test package</option>
-            <option value="date_error">Inspection before weld</option>
-            <option value="rev_mismatch">Rev ≠ Drawing DB</option>
           </select>
           <button class="btn-primary" onclick="jmCurrentPage=0;loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex; gap:6px; align-items:center; margin-left:auto;">
@@ -544,22 +542,6 @@
               <tbody id="rtWelderBody"></tbody>
             </table>
           </div>
-        </div>
-      </div>
-
-      <!-- 용접사별 RT 촬영률 (용접 대비 촬영) -->
-      <div class="panel">
-        <div class="panel-title">Welder RT Shooting Rate <span style="font-size:11px;color:var(--text-dim);font-weight:400;margin-left:8px">RT shots / welded joints, lowest first</span></div>
-        <div class="table-wrap" style="max-height:264px;overflow-y:auto;scrollbar-gutter:stable">
-          <table class="data-table" style="width:100%;table-layout:fixed">
-            <thead><tr>
-              <th style="text-align:center">Welder</th>
-              <th style="text-align:center">Welded Joints</th>
-              <th style="text-align:center">RT Shots</th>
-              <th style="text-align:center">RT Rate</th>
-            </tr></thead>
-            <tbody id="rtRateBody"></tbody>
-          </table>
         </div>
       </div>
 
@@ -898,7 +880,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.56"></script>
+<script defer src="/static/js/dashboard.js?v=7.57"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

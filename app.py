@@ -468,8 +468,6 @@ _welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분
 _jm_iso_stats_cache: dict = {"data": None, "time": 0}  # ISO Drawing별 joint 완료 통계 5분 캐시
 _jm_iso_stats_building: bool = False  # 중복 빌드 방지 플래그
 _secondary_building: bool = False  # _build_secondary_caches() 중복 실행 방지 플래그 (겹치면 joint_master 풀스캔이 이중으로 돌아 OOM 위험)
-_qa_cache: dict = {"data": None, "time": 0}   # 공정 품질 스캔(Backlog·Package 준비도·Rev 불일치·용접사 ID) 5분 캐시
-_qa_building: bool = False
 
 def _get_jm_iso_stats(force: bool = False) -> dict:
     """joint_master의 iso_drawing별 완료 통계를 반환 (total, completed). 5분 캐시.
@@ -962,15 +960,7 @@ def _build_secondary_caches_impl():
                 print(f"[secondary_cache] sub_area scan attempt {_attempt+1} error: {_e}")
         print("[secondary_cache] sub_area scan failed after 3 attempts")
 
-    # QA·ISO 통계는 결과가 아예 없을 때(서버 시작 직후)만 여기서 채운다. 만료된 값은 쓰는 요청이 백그라운드로 갱신한다.
-    def _load_qa():
-        if _qa_cache.get("data") is not None:
-            return
-        try:
-            _get_qa(wait=True)
-        except Exception as e:
-            print(f"[secondary_cache] qa scan failed: {e}")
-
+    # ISO 통계는 결과가 아예 없을 때(서버 시작 직후)만 여기서 채운다. 만료된 값은 쓰는 요청이 백그라운드로 갱신한다.
     def _load_jm_iso_stats():
         if _jm_iso_stats_cache.get("data") is not None:
             return
@@ -1011,7 +1001,6 @@ def _build_secondary_caches_impl():
         _load_sub_areas()
     except Exception as _e:
         print(f"[secondary_cache] sub_areas timeout/error: {_e}")
-    _load_qa()   # 공정 품질 스캔도 joint_master 전체 스캔이라 병렬 풀이 아니라 순차 실행
     # kpi_override 실패 시 재시도 (소켓 오류 등 일시적 실패 대응)
     if _kpi_override_cache.get("data") is None:
         print("[secondary_cache] kpi_override retry...")
@@ -1551,9 +1540,8 @@ def _run_cache_clear(scopes):
             _kpi_override_cache["time"] = 0
             _welder_daily_cache["data"] = None
             _welder_daily_cache["time"] = 0
-            # QA·ISO 통계는 결과를 버리지 않고 만료만 시킨다 — 다음에 그 값을 쓰는 요청이 옛 값을 받으면서
+            # ISO 통계는 결과를 버리지 않고 만료만 시킨다 — 다음에 그 값을 쓰는 요청이 옛 값을 받으면서
             # 백그라운드로 새로 계산한다. 버리면 저장(30초 창)마다 재빌드가 전체 스캔을 다시 돌려 메모리가 쌓였다(2026-09-28 OOM 8회).
-            _qa_cache["time"] = 0
             _jm_iso_stats_cache["time"] = 0
             _jm_iso_stats_building = False
         if support:
@@ -2556,134 +2544,7 @@ def api_welder_detail():
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 
-# ── 공정 품질 스캔: 용접 뒤 단계(검사·PWHT·Package)의 대기 물량 ─────────
-_QA_COLS = ("id,iso_drawing,rev,package,welder,date_completed,inspection,pwht,pwht_date,pwht_result,"
-            "vt_date,vt_result,rt_date,rt_result,rt_2_date,rt_2_result,pt_date,pt_result,mt_date,mt_result")
-_INSP_DATE_COLS = ("vt_date", "rt_date", "rt_2_date", "pt_date", "mt_date", "pwht_date")
-# Backlog 항목. /api/joints?quick=<key>의 DB 필터(_apply_quick_filter)와 반드시 같은 조건이어야 카드 숫자와 목록 건수가 맞는다.
-QA_CHECKS = {
-    "insp_none": ("검사 방법 미지정", lambda r: not r.get("inspection")),
-    "vt_wait":   ("VT 미실시",       lambda r: not r.get("vt_date")),
-    "nde_wait":  ("NDE 미실시",      lambda r: ((r.get("inspection") == "RT" and not r.get("rt_date")) or
-                                                (r.get("inspection") == "PT" and not r.get("pt_date")) or
-                                                (r.get("inspection") == "MT" and not r.get("mt_date")))),
-    "pwht_wait": ("PWHT 미실시",     lambda r: r.get("pwht") == "Y" and not r.get("pwht_date")),
-    "rt_repair": ("RT Repair 미처리", lambda r: r.get("rt_result") not in (None, "", "PASS") and not r.get("rt_2_date")),
-    "no_pkg":    ("Package 미배정",   lambda r: not r.get("package")),
-    "date_error": ("검사일이 용접일보다 빠름", lambda r: any(r.get(c) and str(r[c])[:10] < str(r["date_completed"])[:10] for c in _INSP_DATE_COLS)),
-}
-
-
-def _welder_parts(raw):
-    return [w.strip() for w in (raw or "").split("/") if w.strip()]
-
-
-def _scan_qa():
-    """joint_master 전체를 한 번 읽어 공정 관리 지표를 만든다. 용접 완료 조인트 기준(Backlog 항목은 모두 '용접은 끝났는데 다음 단계가 안 된 것')."""
-    today = datetime.now(ALMT).date()
-    checks = {k: {"label": lbl, "count": 0, "over7": 0, "over14": 0, "oldest_days": 0} for k, (lbl, _) in QA_CHECKS.items()}
-    date_error_ids, pkg, iso_revs, welded = [], {}, defaultdict(set), Counter()
-    accepted_total = welded_count = 0
-    # 전체 행(20칸)을 리스트에 다 모았다가 집계하면 스캔 동안 메모리가 크게 오른다 — 페이지를 받는 대로 집계하고 버린다
-    off = 0
-    while True:
-        page = _sb_exec(lambda sb, o=off: sb.table("joint_master").select(_QA_COLS)
-                        .order("id").range(o, o + 9999).execute()).data or []
-        for r in page:
-            iso = (r.get("iso_drawing") or "").strip()
-            if iso:
-                iso_revs[iso].add((r.get("rev") or "").strip().upper())
-            pk = r.get("package")
-            if pk:
-                st = pkg.setdefault(pk, {"total": 0, "welded": 0, "accepted": 0})
-                st["total"] += 1
-            if not r.get("date_completed"):
-                continue
-            welded_count += 1
-            acc = _joint_accepted(r)
-            accepted_total += acc
-            if pk:
-                st["welded"] += 1
-                st["accepted"] += acc
-            for w in _welder_parts(r.get("welder")):
-                welded[w] += 1
-            try:
-                age = (today - datetime.strptime(str(r["date_completed"])[:10], "%Y-%m-%d").date()).days
-            except ValueError:
-                age = 0
-            for key, (_, test) in QA_CHECKS.items():
-                if test(r):
-                    c = checks[key]
-                    c["count"] += 1
-                    c["over7"] += age > 7
-                    c["over14"] += age > 14
-                    c["oldest_days"] = max(c["oldest_days"], age)
-                    if key == "date_error":
-                        date_error_ids.append(r["id"])
-        if len(page) < 10000:
-            break
-        off += 10000
-        del page
-    # 도면 Revision 불일치 ISO: JM rev가 Drawing DB(dwg_latest) revision과 하나라도 다른 ISO
-    rev_mismatch = []
-    try:
-        dwg = {}
-        off = 0
-        while True:
-            page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id")                 .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
-            for d in page:
-                dwg[(d.get("drawing_no") or "").strip()] = (d.get("revision") or "").strip().upper()
-            if len(page) < DRAW_DB_PAGE:
-                break
-            off += DRAW_DB_PAGE
-        rev_mismatch = sorted(iso for iso, revs in iso_revs.items() if iso in dwg and any(rv != dwg[iso] for rv in revs))
-    except Exception as e:
-        print(f"[qa] drawing revision check failed: {e}")
-    return {
-        "as_of": datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"),
-        "welded": welded_count,
-        "accepted": accepted_total,
-        "checks": checks,
-        "date_error_ids": date_error_ids,
-        "rev_mismatch_isos": rev_mismatch,
-        "pkg": pkg,
-        "welded_by_welder": dict(welded),
-    }
-
-
-def _refresh_qa():
-    global _qa_building
-    try:
-        data = _scan_qa()
-        with _lock:
-            _qa_cache["data"] = data
-            _qa_cache["time"] = time.time()
-        return data
-    except Exception as e:
-        print(f"[qa] scan failed: {e}")
-        return None
-    finally:
-        with _lock:
-            _qa_building = False
-
-
-def _get_qa(wait=True):
-    """품질 스캔 결과(5분 캐시). 전체 스캔이 ~14초라 만료된 결과가 있으면 그것을 바로 돌려주고 백그라운드에서 새로 계산한다.
-    결과가 아예 없을 때만 wait=True면 기다린다. 이미 다른 스레드가 계산 중이면 중복 스캔하지 않는다."""
-    global _qa_building
-    with _lock:
-        data, age = _qa_cache.get("data"), time.time() - _qa_cache.get("time", 0)
-        if data is not None and age < 300:
-            return data
-        start = not _qa_building
-        if start:
-            _qa_building = True
-    if not start:
-        return data
-    if data is not None or not wait:
-        threading.Thread(target=_refresh_qa, daemon=True).start()
-        return data
-    return _refresh_qa()
+_INSP_DATE_COLS = ("vt_date", "rt_date", "rt_2_date", "pt_date", "mt_date", "pwht_date")   # 검사일 칸(용접일보다 빠르면 저장 거절)
 
 
 # ── ISO Revision 자동 적용: JM rev를 항상 Drawing DB(dwg_latest) revision에 맞춘다 ──
@@ -2739,8 +2600,6 @@ def _sync_rev_from_drawing():
                                .update({"rev": new, **stamp}).in_("id", chunk).execute())
                 updated += len(res.data or [])
         if updated:
-            with _lock:
-                _qa_cache["time"] = 0                # Rev 불일치 집계를 다시 계산하도록
             print(f"[rev-sync] JM rev {updated}건을 Drawing DB revision으로 갱신")
         _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), updated=updated, isos=len(dwg),
                               skipped_older=sorted(older), error=None)
@@ -2754,33 +2613,8 @@ def _sync_rev_from_drawing():
         _rev_sync_lock.release()
 
 
-@app.route("/api/backlog")
-def api_backlog():
-    """Overview의 '용접 후 대기 물량' 카드용."""
-    try:
-        qa = _get_qa()
-        if qa is None:
-            return jsonify({"building": True}), 202
-        return jsonify({k: qa[k] for k in ("as_of", "welded", "accepted", "checks")} |
-                       {"rev_mismatch_isos": len(qa["rev_mismatch_isos"])})
-    except Exception as e:
-        return jsonify({"error": _err_text(e)}), 500
-
-
-@app.route("/api/welders")
-def api_welders():
-    """용접 기록에 나온 용접사 ID 전체 — 입력 추천용(형식 제한 없음)."""
-    try:
-        qa = _get_qa()
-        if qa is None:
-            return jsonify({"building": True}), 202
-        return jsonify(sorted(qa["welded_by_welder"]))
-    except Exception as e:
-        return jsonify({"error": _err_text(e)}), 500
-
-
 def _apply_quick_filter(q, quick):
-    """Backlog 카드와 같은 조건으로 Joint Master 목록을 거른다(QA_CHECKS와 짝). 알 수 없는 값이면 None.
+    """Joint Master Quick 필터 — 용접은 끝났는데 다음 단계(검사·PWHT·Package)가 안 된 조인트. 알 수 없는 값이면 None.
     postgrest 빌더는 복사본이 아니라 자기 자신을 수정하므로 '용접 완료' 조건은 해당 분기에서만 붙인다."""
     done = lambda: q.not_.is_("date_completed", "null")
     if quick == "insp_none":
@@ -2795,12 +2629,6 @@ def _apply_quick_filter(q, quick):
         return done().not_.is_("rt_result", "null").neq("rt_result", "PASS").neq("rt_result", "").is_("rt_2_date", "null")
     if quick == "no_pkg":
         return done().is_("package", "null")
-    if quick == "date_error":
-        qa = _get_qa() or {}
-        return q.in_("id", (qa.get("date_error_ids") or [])[:1000] or [-1])
-    if quick == "rev_mismatch":   # 용접 여부와 무관하게 해당 ISO의 조인트 전체
-        qa = _get_qa() or {}
-        return q.in_("iso_drawing", (qa.get("rev_mismatch_isos") or [])[:300] or ["__none__"])
     return None
 
 
@@ -3020,16 +2848,8 @@ def api_rt_quality():
             key=lambda x: -x["count"]
         )
 
-        # 용접사별 RT 촬영률: 용접 완료 조인트 대비 RT 촬영 조인트(복수 용접사 조인트는 각자에게 1건). 촬영이 0건인 용접사도 포함
-        welded_by = (_get_qa() or {}).get("welded_by_welder") or {}
-        rt_rate = sorted(
-            ({"welder": w, "welded": n, "rt_shots": w_tot.get(w, 0), "rate": pct(w_tot.get(w, 0), n)}
-             for w, n in welded_by.items()),
-            key=lambda x: (x["rate"], -x["welded"]))
-
         result = {
             "kpi":         kpi,
-            "rt_rate":     rt_rate,
             "by_welder":   by_welder,
             "by_system":   by_system,
             "by_month":    by_month,
@@ -3532,15 +3352,10 @@ def api_testpkg_get():
                 with _lock:
                     _pkg_stats_cache["data"] = pkg_stats
                     _pkg_stats_cache["time"] = time.time()
-            # Piping 준비도는 '용접 완료'가 아니라 '검사까지 합격(_joint_accepted)'한 조인트 기준으로 본다.
-            # 품질 스캔이 아직 없으면(첫 요청) RPC의 용접 완료 수로 대신한다.
-            qa_pkg = (_get_qa() or {}).get("pkg") or {}
             for row in rows:
                 s = pkg_stats.get(row.get("test_pkg_no") or "", {})
-                q = qa_pkg.get(row.get("test_pkg_no") or "")
-                row["piping_total"]      = q["total"] if q else s.get("piping_total", 0)
-                row["piping_completed"]  = q["welded"] if q else s.get("piping_completed", 0)
-                row["piping_accepted"]   = q["accepted"] if q else None
+                row["piping_total"]      = s.get("piping_total", 0)
+                row["piping_completed"]  = s.get("piping_completed", 0)
                 row["support_total"]     = s.get("support_total",    0)
                 row["support_installed"] = s.get("support_installed",0)
 
