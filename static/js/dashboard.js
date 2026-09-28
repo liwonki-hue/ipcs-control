@@ -1914,7 +1914,8 @@ async function _refreshAfterSave() {
         _dashData = fresh;
         renderKPI(fresh.kpi, fresh.weekly);
         const visPage = document.querySelector(".page:not(.hidden)")?.id?.replace("page-", "");
-        if (visPage) navigate(visPage);
+        // Joint Master 표는 저장 시 이미 화면·jmData에 반영됨 — 다시 그리면 같은 조회가 한 번 더 나가고 진행 중인 검색이 취소된다
+        if (visPage && visPage !== "joint_master") navigate(visPage);
     } catch(e) { console.warn("[refresh-after-save]", e); }
     finally {
         _refreshPending = false;
