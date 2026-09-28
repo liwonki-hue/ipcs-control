@@ -33,6 +33,23 @@ try:
 except ImportError:
     resource = None  # Windows 로컬 개발 환경엔 없음
 
+# glibc malloc은 스레드마다 arena를 따로 만들고, 해제된 메모리를 OS에 잘 돌려주지 않는다. gunicorn --threads 4 전환 뒤
+# 재빌드(매번 새 스레드)마다 RSS가 40~60MB씩 오르고 내려오지 않아 저장이 이어지면 몇 분 만에 512MB를 넘었다(2026-09-28 OOM 8회).
+# arena 수를 제한하고(스레드 생성 전, import 시점) 빌드가 끝날 때마다 malloc_trim으로 빈 메모리를 반납한다. glibc가 아니면 아무 일도 안 한다.
+try:
+    import ctypes
+    _libc = ctypes.CDLL("libc.so.6")
+    _libc.mallopt(-8, 2)   # M_ARENA_MAX = 2
+except (OSError, AttributeError):
+    _libc = None
+
+def _malloc_trim():
+    if _libc is not None:
+        try:
+            _libc.malloc_trim(0)
+        except Exception:  # 진단/최적화용이라 실패해도 요청 처리를 깨면 안 됨
+            pass
+
 def _rss_mb():
     """현재 프로세스 RSS(MB). resource 모듈 없는 환경(Windows)에서는 None."""
     if resource is None:
@@ -1416,6 +1433,8 @@ def _build():
             }
             _meta_cache["time"] = time.time()
             _build_fail = False
+        gc.collect()
+        _malloc_trim()
         print(f"[cache] Build SUCCESS. Overall: {kpi_pct}% ({_mem_status()})")
         _maybe_self_recycle(_rss_mb())
         def _run_secondary():
@@ -1425,6 +1444,8 @@ def _build():
                 print(f"[secondary_cache] CRITICAL: {_sce}")
                 traceback.print_exc()
             finally:
+                gc.collect()
+                _malloc_trim()
                 print(f"[secondary_cache] done ({_mem_status()})")
                 _maybe_self_recycle(_rss_mb())
         threading.Thread(target=_run_secondary, daemon=True).start()
