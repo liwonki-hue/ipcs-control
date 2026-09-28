@@ -2552,47 +2552,49 @@ def _welder_parts(raw):
 def _scan_qa():
     """joint_master 전체를 한 번 읽어 공정 관리 지표를 만든다. 용접 완료 조인트 기준(Backlog 항목은 모두 '용접은 끝났는데 다음 단계가 안 된 것')."""
     today = datetime.now(ALMT).date()
-    rows, off = [], 0
+    checks = {k: {"label": lbl, "count": 0, "over7": 0, "over14": 0, "oldest_days": 0} for k, (lbl, _) in QA_CHECKS.items()}
+    date_error_ids, pkg, iso_revs, welded = [], {}, defaultdict(set), Counter()
+    accepted_total = welded_count = 0
+    # 전체 행(20칸)을 리스트에 다 모았다가 집계하면 스캔 동안 메모리가 크게 오른다 — 페이지를 받는 대로 집계하고 버린다
+    off = 0
     while True:
         page = _sb_exec(lambda sb, o=off: sb.table("joint_master").select(_QA_COLS)
                         .order("id").range(o, o + 9999).execute()).data or []
-        rows.extend(page)
+        for r in page:
+            iso = (r.get("iso_drawing") or "").strip()
+            if iso:
+                iso_revs[iso].add((r.get("rev") or "").strip().upper())
+            pk = r.get("package")
+            if pk:
+                st = pkg.setdefault(pk, {"total": 0, "welded": 0, "accepted": 0})
+                st["total"] += 1
+            if not r.get("date_completed"):
+                continue
+            welded_count += 1
+            acc = _joint_accepted(r)
+            accepted_total += acc
+            if pk:
+                st["welded"] += 1
+                st["accepted"] += acc
+            for w in _welder_parts(r.get("welder")):
+                welded[w] += 1
+            try:
+                age = (today - datetime.strptime(str(r["date_completed"])[:10], "%Y-%m-%d").date()).days
+            except ValueError:
+                age = 0
+            for key, (_, test) in QA_CHECKS.items():
+                if test(r):
+                    c = checks[key]
+                    c["count"] += 1
+                    c["over7"] += age > 7
+                    c["over14"] += age > 14
+                    c["oldest_days"] = max(c["oldest_days"], age)
+                    if key == "date_error":
+                        date_error_ids.append(r["id"])
         if len(page) < 10000:
             break
         off += 10000
-    checks = {k: {"label": lbl, "count": 0, "over7": 0, "over14": 0, "oldest_days": 0} for k, (lbl, _) in QA_CHECKS.items()}
-    date_error_ids, pkg, iso_revs, welded = [], {}, defaultdict(set), Counter()
-    accepted_total = 0
-    for r in rows:
-        iso = (r.get("iso_drawing") or "").strip()
-        if iso:
-            iso_revs[iso].add((r.get("rev") or "").strip().upper())
-        pk = r.get("package")
-        if pk:
-            st = pkg.setdefault(pk, {"total": 0, "welded": 0, "accepted": 0})
-            st["total"] += 1
-        if not r.get("date_completed"):
-            continue
-        acc = _joint_accepted(r)
-        accepted_total += acc
-        if pk:
-            st["welded"] += 1
-            st["accepted"] += acc
-        for w in _welder_parts(r.get("welder")):
-            welded[w] += 1
-        try:
-            age = (today - datetime.strptime(str(r["date_completed"])[:10], "%Y-%m-%d").date()).days
-        except ValueError:
-            age = 0
-        for key, (_, test) in QA_CHECKS.items():
-            if test(r):
-                c = checks[key]
-                c["count"] += 1
-                c["over7"] += age > 7
-                c["over14"] += age > 14
-                c["oldest_days"] = max(c["oldest_days"], age)
-                if key == "date_error":
-                    date_error_ids.append(r["id"])
+        del page
     # 도면 Revision 불일치 ISO: JM rev가 Drawing DB(dwg_latest) revision과 하나라도 다른 ISO
     rev_mismatch = []
     try:
@@ -2608,7 +2610,6 @@ def _scan_qa():
         rev_mismatch = sorted(iso for iso, revs in iso_revs.items() if iso in dwg and any(rv != dwg[iso] for rv in revs))
     except Exception as e:
         print(f"[qa] drawing revision check failed: {e}")
-    welded_count = sum(1 for r in rows if r.get("date_completed"))
     return {
         "as_of": datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"),
         "welded": welded_count,
