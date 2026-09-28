@@ -472,9 +472,9 @@ def _get_jm_iso_stats(force: bool = False) -> dict:
             return _jm_iso_stats_cache.get("data") or {}
         _jm_iso_stats_building = True
     if not force:
-        # 캐시 없으면 백그라운드 빌드 시작 후 빈 dict 반환
+        # 백그라운드 빌드 시작 후 만료된 값(없으면 빈 dict) 반환
         threading.Thread(target=_scan_jm_iso_stats, daemon=True).start()
-        return {}
+        return cached or {}
     return _scan_jm_iso_stats()
 
 def _scan_jm_iso_stats() -> dict:
@@ -945,13 +945,18 @@ def _build_secondary_caches_impl():
                 print(f"[secondary_cache] sub_area scan attempt {_attempt+1} error: {_e}")
         print("[secondary_cache] sub_area scan failed after 3 attempts")
 
+    # QA·ISO 통계는 결과가 아예 없을 때(서버 시작 직후)만 여기서 채운다. 만료된 값은 쓰는 요청이 백그라운드로 갱신한다.
     def _load_qa():
+        if _qa_cache.get("data") is not None:
+            return
         try:
             _get_qa(wait=True)
         except Exception as e:
             print(f"[secondary_cache] qa scan failed: {e}")
 
     def _load_jm_iso_stats():
+        if _jm_iso_stats_cache.get("data") is not None:
+            return
         try:
             _get_jm_iso_stats(force=True)
         except Exception as e:
@@ -978,10 +983,13 @@ def _build_secondary_caches_impl():
             _weekly_sched = (_cache.get("data") or {}).get("weekly")
         ko = _scan_kpi_override_data(_weekly_sched)
         _apply_kpi_override(ko, target=None)
-    try:
-        _refresh_kpi_override()
-    except Exception as _e:
-        print(f"[secondary_cache] kpi_override timeout/error: {_e}")
+    # _build()가 캐시 저장 전에 이미 보정을 적용했으므로, 그때 스캔이 실패한 경우에만 다시 한다
+    # (매번 하면 캐시 전체를 deepcopy해 재빌드마다 메모리가 한 번 더 뛴다)
+    if _kpi_override_cache.get("data") is None:
+        try:
+            _refresh_kpi_override()
+        except Exception as _e:
+            print(f"[secondary_cache] kpi_override timeout/error: {_e}")
     try:
         _load_sub_areas()
     except Exception as _e:
@@ -1522,8 +1530,8 @@ def _run_cache_clear(scopes):
             _kpi_override_cache["time"] = 0
             _welder_daily_cache["data"] = None
             _welder_daily_cache["time"] = 0
-            _jm_iso_stats_cache["data"] = None
-            _qa_cache["data"] = None
+            # QA·ISO 통계는 결과를 버리지 않고 만료만 시킨다 — 다음에 그 값을 쓰는 요청이 옛 값을 받으면서
+            # 백그라운드로 새로 계산한다. 버리면 저장(30초 창)마다 재빌드가 전체 스캔을 다시 돌려 메모리가 쌓였다(2026-09-28 OOM 8회).
             _qa_cache["time"] = 0
             _jm_iso_stats_cache["time"] = 0
             _jm_iso_stats_building = False
