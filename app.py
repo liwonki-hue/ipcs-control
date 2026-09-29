@@ -12,7 +12,7 @@ import threading
 import time
 import traceback
 from datetime import datetime, timedelta, timezone
-from collections import defaultdict, Counter
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from flask import Flask, render_template, jsonify, request, session, has_request_context
 from functools import wraps
@@ -466,7 +466,6 @@ _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
 CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
 _ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
-_area_field_cache: dict = {}  # /api/area-field-quantities 메모리 캐시
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
 _daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 캐시
@@ -1531,7 +1530,6 @@ def _run_cache_clear(scopes):
         # 모든 범위 공통: 대시보드 결과와 조인트·지원 양쪽에서 파생되는 캐시
         _cache.clear()
         _ep_sup_cache.clear()
-        _area_field_cache.clear()
         _pkg_stats_cache.clear()
         _testpkg_all_cache["data"] = None
         _testpkg_all_cache["time"] = 0
@@ -2885,63 +2883,6 @@ def api_rt_quality():
         return jsonify({"error": _err_text(e)}), 500
 
 
-# ── Area별 Field DI / Support EA 집계 ─────────────────────────────────
-@app.route("/api/area-field-quantities")
-def api_area_field_quantities():
-    """sub_area별 Field joints(sf='F') DI 합산 및 Support EA 카운트를 단일 호출로 반환."""
-    global _area_field_cache
-    with _lock:
-        cached = _area_field_cache.get("data")
-        if cached and time.time() - _area_field_cache.get("time", 0) < CACHE_TTL:
-            return jsonify(cached)
-    TARGET_SUBS = [
-        "PR #3", "PR #4", "PR #5", "PR #6", "PR #7",
-        "MB STR", "HRSG #11 PR", "GT #11", "HRSG #12 PR", "GT #12"
-    ]
-    try:
-        sb = get_sb()
-        # Field DI: sf='F' 인 조인트만 집계 (배치 페이징). PostgREST 1회 최대 행 수(1만)로 읽는다 - 1천씩이면 왕복이 수십 번이라 11~12초 걸렸다
-        di_by_sub = {}
-        batch, offset = 10000, 0
-        while True:
-            res = (sb.table("joint_master")
-                     .select("sub_area, di")
-                     .eq("sf", "F")
-                     .in_("sub_area", TARGET_SUBS)
-                     .order("id").range(offset, offset + batch - 1)
-                     .execute())
-            for row in res.data or []:
-                sub = row.get("sub_area", "")
-                di_by_sub[sub] = di_by_sub.get(sub, 0) + (row.get("di") or 0)
-            if not res.data or len(res.data) < batch:
-                break
-            offset += batch
-
-        # Support EA: 단일 쿼리로 sub_area 필터 후 Python에서 집계 (N+1 제거)
-        ea_rows, ea_off = [], 0
-        while True:
-            r = (sb.table("support_master")
-                   .select("sub_area")
-                   .in_("sub_area", TARGET_SUBS)
-                   .order("id").range(ea_off, ea_off + 9999).execute())
-            ea_rows.extend(r.data or [])
-            if len(r.data or []) < 10000:
-                break
-            ea_off += 10000
-        ea_by_sub = dict(Counter(r["sub_area"] for r in ea_rows if r.get("sub_area")))
-
-        result = {"di": di_by_sub, "ea": ea_by_sub}
-        with _lock:
-            _area_field_cache["data"] = result
-            _area_field_cache["time"] = time.time()
-        return jsonify(result)
-    except Exception as e:
-        with _lock:
-            cached = _area_field_cache.get("data")
-        if cached is not None:          # 오류 시 stale 캐시라도 반환
-            return jsonify(cached)
-        return jsonify({"error": _err_text(e)}), 500
-
 # ── Support Master CRUD ───────────────────────────────────────────────
 @app.route("/api/ep-support-summary")
 def api_ep_support_summary():
@@ -3081,7 +3022,6 @@ def api_support_delete(rid):
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
-            _area_field_cache.clear()
             _sup_test_cache["data"] = None
             _sup_test_cache["time"] = 0
         return jsonify({"ok": True})
@@ -3280,7 +3220,6 @@ def api_support_sync_drawing():
         with _lock:
             _cache.clear()
             _ep_sup_cache.clear()
-            _area_field_cache.clear()
 
         return jsonify({
             "ok": True,
