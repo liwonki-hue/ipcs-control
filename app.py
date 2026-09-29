@@ -635,7 +635,6 @@ def _scan_kpi_override_data(weekly_schedule):
     20분 캐시(_kpi_override_cache) — fresh하면 스캔 없이 캐시된 값 반환.
     weekly_schedule: 주차 경계 판정에 쓸 week_start/week_end/week_no 리스트
     (호출 시점에 따라 _build() 안의 로컬 data 또는 _cache["data"]의 weekly를 넘겨받음)."""
-    global _kpi_override_cache
     with _lock:
         _ko_age  = time.time() - _kpi_override_cache.get("time", 0)
         _ko_data = _kpi_override_cache.get("data")
@@ -815,7 +814,6 @@ def _build_secondary_caches():
 
 
 def _build_secondary_caches_impl():
-    global _pkg_stats_cache, _pkg_cache
 
     def _load_pkg_stats():
         try:
@@ -886,7 +884,6 @@ def _build_secondary_caches_impl():
 
     def _load_daily_report():
         """서버 시작 직후 daily report 캐시 pre-warm — 첫 접속 시 빈 화면 방지"""
-        global _daily_report_cache
         with _lock:
             _dr_age  = time.time() - _daily_report_cache.get("time", 0)
             _dr_data = _daily_report_cache.get("data")
@@ -903,7 +900,6 @@ def _build_secondary_caches_impl():
 
     def _load_sub_areas():
         """joint_master 단일 스캔 → sub_area 드롭다운 목록 + 진행률 집계 동시 수행."""
-        global _sub_area_cache
         with _lock:
             _sa_age    = time.time() - _sub_area_cache.get("time", 0)
             _sa_cached = _sub_area_cache.get("data")
@@ -1221,7 +1217,6 @@ def _build():
             print("[cache] WARNING: kpi empty after all RPCs!")
 
         # ── Support & TestPkg: system/unit/area/sub_area 전체 스캔 집계 (2h 캐시) ──
-        global _sup_test_cache
         try:
             with _lock:
                 _st_age  = time.time() - _sup_test_cache.get("time", 0)
@@ -1424,7 +1419,6 @@ def _build():
             print(f"[cache] kpi_override sync-apply error (non-critical): {_koe}")
         kpi_pct = (data.get("kpi") or {}).get("overall_pct", "N/A")
 
-        global _meta_cache
         with _lock:
             _cache["data"] = data
             _cache["time"] = time.time()
@@ -1478,7 +1472,7 @@ def _finish_build():
 
 
 def get_cache(force=False):
-    global _building, _build_fail, _build_fail_time
+    global _building, _build_fail
     with _lock:
         has  = "data" in _cache
         age  = time.time() - _cache.get("time", 0) if has else float("inf")
@@ -1638,7 +1632,6 @@ def api_auth_logout():
 
 @app.route("/api/meta", methods=["GET"])
 def api_meta():
-    global _meta_cache
     if _meta_cache.get("data") and (time.time() - _meta_cache["time"]) < 3600:
         resp = dict(_meta_cache["data"])
         # _sub_area_cache는 joint_master 직접 스캔값 — v17 내부 캐시보다 신뢰
@@ -1700,7 +1693,6 @@ def api_health():
 @app.route("/api/daily-actuals")
 def api_daily_actuals():
     """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
-    global _daily_cache
     with _lock:
         cached = _daily_cache.get("data")
         age    = time.time() - _daily_cache.get("time", 0)
@@ -1903,7 +1895,6 @@ def _pkgs_for(by_sys, system):
 @app.route("/api/joints/packages", methods=["GET"])
 def api_joints_packages():
     """시스템별 distinct package 목록 반환 — 캐시 우선, 미스 시 RPC 단일 쿼리"""
-    global _pkg_cache
     try:
         system = request.args.get("system", "").strip()
         now = time.time()
@@ -2101,7 +2092,6 @@ def api_joints_bulk_date():
 @app.route("/api/weekly-last-breakdown")
 def api_weekly_last_breakdown():
     """주간 breakdown 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
-    global _wkbd_cache
     with _lock:
         cached = _wkbd_cache.get("data")
         age    = time.time() - _wkbd_cache.get("time", 0)
@@ -2475,7 +2465,6 @@ def api_welder_summary():
 # ── Welder Daily Stats ─────────────────────────────────────────────────
 @app.route("/api/welder-daily")
 def api_welder_daily():
-    global _welder_daily_cache
     with _lock:
         _wd_age  = time.time() - _welder_daily_cache.get("time", 0)
         _wd_data = _welder_daily_cache.get("data")
@@ -2886,7 +2875,6 @@ def api_rt_quality():
 # ── Support Master CRUD ───────────────────────────────────────────────
 @app.route("/api/ep-support-summary")
 def api_ep_support_summary():
-    global _ep_sup_cache
     with _lock:
         cached = _ep_sup_cache.get("data")
         if cached and time.time() - _ep_sup_cache.get("time", 0) < CACHE_TTL:
@@ -3236,7 +3224,6 @@ def api_support_sync_drawing():
 # ── Test Package Master CRUD ──────────────────────────────────────────
 @app.route("/api/testpkg-master", methods=["GET"])
 def api_testpkg_get():
-    global _testpkg_all_cache
     try:
         sb      = get_sb()
         limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
@@ -3275,7 +3262,6 @@ def api_testpkg_get():
                 row["piping_total"] = 0; row["piping_completed"] = 0
                 row["support_total"] = 0; row["support_installed"] = 0
         else:
-            global _pkg_stats_cache
             now2 = time.time()
             with _lock:
                 pkg_stats = _pkg_stats_cache.get("data")
@@ -3549,7 +3535,6 @@ def _compute_daily_report():
 @app.route("/api/daily-report")
 def api_daily_report():
     """Daily 실적 — 최근 5 작업일 날짜×용접사 집계 + 날짜별 시스템/자재/서브에어리어 breakdown"""
-    global _daily_report_cache
     with _lock:
         _dr_cached = _daily_report_cache.get("data")
         _dr_age    = time.time() - _daily_report_cache.get("time", 0)
