@@ -185,3 +185,15 @@
 - 용접 전 검사 목록(2026-09-27): `scripts/export_inspection_before_weld.py` → `Reports/Inspection_before_Weld_YYYYMMDD.xlsx`. 시트1 검사일<용접일 30건(QA `date_error`와 같은 조건), 시트2 용접일 없이 검사 기록 1건(id 218434, VT). 검사 방법(inspection)만 지정된 것은 계획값이라 제외.
 - ISO Revision 자동 적용(2026-09-27): keep-alive(`/api/refresh-db-cache`, 12분)가 `_sync_rev_from_drawing`을 백그라운드로 돌려 JM rev를 dwg_latest revision으로 맞춘다(이력 `system (rev-sync)`). **Drawing DB 쪽이 더 낮은 Revision이면 내리지 않는다**(C01<C01A<C01B<C01C<C03, VOID 등은 그대로 적용) — 09-19에 Drawing DB가 구 버전이라 JM 값으로 복구했던 4개 ISO(59 조인트) 때문. 첫 구현(무조건 적용)이 이 59건을 C01로 내렸다가 백업(`Reports/JM_Rev_AutoSync_Backup_20260927.json`)으로 즉시 되돌림. 건너뛴 ISO는 응답의 `rev_sync_last.skipped_older`.
 - 검사일 규칙 정리(2026-09-27, 사용자 요청): 검사일<용접일 30건(VT 19칸·RT 11칸)을 용접일로 수정, 용접일 없는 id 218434의 VT 날짜·결과 삭제(이력 `system (date-fix)`, 백업 `Reports/Insp_Date_Fix_Backup_20260927.json`). 화면은 날짜 선택 즉시 `_inspOrderOk`가 행의 `data-weld`(NDE·Test Pkg Joint Check)/`data-insp-min`(JM 용접일 칸)과 비교해 어긋나면 토스트를 띄우고 입력을 받지 않는다. 서버는 기존대로 PATCH·bulk-date에서 한 번 더 막는다.
+
+---
+
+# Context Notes — OOM 재발 근본 원인 (2026-09-29)
+
+- 09-28 수정(malloc_trim·QA 스캔 제거) 뒤에도 09-29 OOM 17회. 저장 재빌드 사이클은 이제 108→67MB로 내려와 정상이었고, 죽기 직전마다 `GET /api/joints?limit=10000&offset=N`(JM Export·Print, `_fetchAllFiltered`)이 있었다. 컨테이너 수명 1~2분, 한 건에 cur 265~320MB·cgroup 370~420MB, 두 건이 겹치거나 재빌드와 겹치면 512MB 초과.
+- 진짜 원인은 라이브러리: postgrest 2.31 `APIResponse.from_http_request_response`가 `JSONAdapter.validate_json`(pydantic 재귀 Union)으로 파싱해 10,000행 조회 한 건이 네이티브 메모리 +245MB(httpx 수신+json.loads는 +31~37MB). tracemalloc에는 35MB만 잡힌다(힙 밖이라) — 메모리는 프로세스 수준(Windows `GetProcessMemoryInfo` PeakPagefileUsage, Linux VmRSS)으로 재야 한다. `requirements.txt`가 `supabase>=2.0.0`이라 배포 때 새 버전이 들어온 것.
+- 수정: 그 메서드를 json.loads 파싱으로 교체(값·타입 동일 확인), 비공개 메서드라 `supabase==2.31.0` 고정 — **버전을 올릴 땐 `_get_count_from_http_request_response`·`model_construct`가 그대로인지 확인**. 목록 API 상한 `_MAX_PAGE_ROWS=2000`, 프런트는 서버 `count`까지 이어 받는다(상한이 바뀌어도 잘리지 않게).
+- 측정(로컬, 요청 1건 최고 메모리 증가): JM Export 페이지 +229→+9MB, Test Pkg Status 필터 +136→+21MB, Support 전체 +131→+10MB, 전체 빌드 +51→+21MB(KPI 동일). JM 전체 51,114행 Export는 26회 요청 약 50초(로컬).
+- 로컬 .venv도 supabase 2.31.0으로 맞췄다(이전 2.30.0).
+- 불필요 코드 판단(09-22~29 운영 로그 26,205줄 기준 호출 수): 화면 기능 엔드포인트는 모두 호출됨. `/api/area-field-quantities`는 프런트 호출이 없고 로그의 1건도 curl 시험이라 삭제. 호출 0건인 Sync·bulk-date·Support/Test Pkg 수정·삭제는 드물게 쓰는 쓰기 기능이라 1주 기록만으로 지우지 않았다. `/api/welders` 404 56건은 v7.57 이전 JS가 열린 탭(코드엔 없음). app.py·dashboard.js에 참조 없는 함수는 없음.
+- 옛 JS(v7.40 등)가 열린 탭은 Export가 1만 행 기준으로 돌아 2,000행 상한에서 첫 페이지만 받고 멈춘다 → 배포 후 사용자에게 새로고침 안내.

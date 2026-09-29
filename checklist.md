@@ -139,3 +139,16 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] 2 Support 가중치 — 사용자 결정: 가중치 없음(EA 수량 유지)
 - [x] 3 메뉴 재배치·이름 변경, JM 빠른 필터 버튼
 - [x] 검증(시험·브라우저) → 커밋 (push는 finish 때)
+
+---
+
+# Checklist — OOM 재발 근본 원인 및 불필요 코드 정리 (2026-09-29)
+
+- [x] Render events API로 09-28 배포(6858506) 이후 OOM 확인 — 09-29 04:32~04:45Z 8회, 10:02~10:21Z 9회
+- [x] 해당 구간 로그로 원인 요청 확정 — `GET /api/joints?limit=10000`(Export/Print) 한 건에 RSS 60→265~320MB
+- [x] 로컬 재현·단계별 측정 — postgrest `validate_json` 파싱이 +245MB(json.loads +37MB)
+- [x] 수정 1: postgrest 응답 json.loads 파싱 + supabase==2.31.0 고정 (18483c1), 4개 테이블 72,417행 결과 동일 확인
+- [x] 수정 2: 목록 API 2,000행 상한 + 프런트 count 기준 페이지 루프 (4a6d785), 브라우저에서 전체·필터 건수 일치 확인
+- [x] 주간 운영 로그로 엔드포인트 사용 빈도 확인 → 안 쓰는 기능·코드 삭제 (`/api/area-field-quantities`만 해당, ed23fa7)
+- [x] 테스트·빌드 확인(scratch 시험 9개 통과) → 커밋 (push는 finish 때)
+- [ ] 배포 후 확인: Render events API로 OOM 0건, `[memory] GET /api/joints` 급등 사라졌는지
