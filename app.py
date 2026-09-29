@@ -18,8 +18,23 @@ from flask import Flask, render_template, jsonify, request, session, has_request
 from functools import wraps
 from types import SimpleNamespace
 import httpx
+from postgrest.base_request_builder import APIResponse as _PgAPIResponse
 from postgrest.exceptions import APIError
 from supabase import create_client
+
+# postgrest 2.x는 모든 조회 응답을 pydantic JSONAdapter.validate_json(재귀 Union 검증)으로 파싱해, 같은 응답을
+# json.loads보다 네이티브 메모리를 약 7배 쓴다(joint_master 10,000행: +245MB vs +37MB). JM Export 한 번이 RSS를
+# 60→320MB로 올려 두 요청이 겹치면 512MB를 넘었다(2026-09-29 OOM 17회). 결과 값은 같으므로 json.loads로 바꾼다.
+# 비공개 메서드에 기대므로 requirements.txt에서 supabase 버전을 고정해 둔다.
+def _pg_response_via_json_loads(request_response):
+    count = _PgAPIResponse._get_count_from_http_request_response(request_response)
+    try:
+        data = request_response.json()
+    except ValueError:  # 원래 구현과 같이 JSON이 아니면 본문 문자열
+        data = request_response.text if len(request_response.text) > 0 else []
+    return _PgAPIResponse.model_construct(data=data, count=count)
+
+_PgAPIResponse.from_http_request_response = staticmethod(_pg_response_via_json_loads)
 
 # gunicorn 아래에서는 stdout이 파이프라 기본이 블록 버퍼링 — 로그가 수 분 뒤/종료 시점에야 나오고
 # SIGKILL 시 마지막 로그가 유실된다. 줄 단위 즉시 출력으로 바꿔 OOM 직전 상황이 보이게 한다.
