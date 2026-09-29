@@ -1799,6 +1799,9 @@ def api_refresh_db_cache():
 
 # ── Joint Master ───────────────────────────────────────────────────────
 _RANGE_ROWS_RE = re.compile(r"only (\d+) rows")
+# 목록 API 한 번에 돌려주는 최대 행 수. Export/Print가 1만 행씩 받던 때는 요청 하나가 메모리를 수백 MB 올렸고
+# gunicorn --threads 4에서 겹치면 OOM이 났다(2026-09-29). 프런트 _fetchAllFiltered가 이 크기로 나눠 받는다.
+_MAX_PAGE_ROWS = 2000
 
 def _exec_page(q):
     """페이지 조회 실행. 결과 행 수보다 큰 offset(PostgREST PGRST103)은 500 대신 빈 페이지와 전체 건수로 돌려준다.
@@ -1846,7 +1849,7 @@ def _sort_joints_numeric(rows, fetch_iso_rows, has_before=True, has_after=True):
 def api_joints_get():
     try:
         sb      = get_sb()
-        limit   = min(int(request.args.get("limit",  50)), 10000)
+        limit   = min(int(request.args.get("limit",  50)), _MAX_PAGE_ROWS)
         offset  = int(request.args.get("offset",  0))
         unit    = request.args.get("unit",     "")
         system  = request.args.get("system",   "")
@@ -2698,7 +2701,7 @@ _TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,
 def api_testpkg_joints():
     try:
         sb      = get_sb()
-        limit   = min(int(request.args.get("limit",  100)), 10000)
+        limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
         offset  = int(request.args.get("offset",   0))
         pkg     = request.args.get("package",  "").strip()
         system  = request.args.get("system",   "").strip()
@@ -2981,7 +2984,7 @@ def api_ep_support_summary():
 def api_support_get():
     try:
         sb      = get_sb()
-        limit   = min(int(request.args.get("limit",  100)), 10000)
+        limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
         offset  = int(request.args.get("offset",   0))
         unit    = request.args.get("unit",     "").strip()
         system  = request.args.get("system",   "").strip()
@@ -3297,7 +3300,7 @@ def api_testpkg_get():
     global _testpkg_all_cache
     try:
         sb      = get_sb()
-        limit   = min(int(request.args.get("limit",  100)), 10000)
+        limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
         offset  = int(request.args.get("offset",   0))
         system   = request.args.get("system",      "").strip()
         subarea  = request.args.get("sub_area",    "").strip()

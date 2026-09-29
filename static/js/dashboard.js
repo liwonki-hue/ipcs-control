@@ -1991,9 +1991,10 @@ function _readFilters(fields) {
     return p;
 }
 
-// 현재 필터 조건으로 전체 데이터 조회 (10000건씩 페이지네이션 — 10000건 이상이면 잘리던 문제 수정)
+// 현재 필터 조건으로 전체 데이터 조회. 서버 목록 API는 한 번에 최대 2000건(_MAX_PAGE_ROWS)만 준다 — 1만 건씩 받던 때
+// 요청 하나가 서버 메모리를 수백 MB 올려 OOM이 났다(2026-09-29). 서버가 준 전체 건수(count)까지 이어 받는다.
 async function _fetchAllFiltered(endpoint, params) {
-    const pageSize = 10000;
+    const pageSize = 2000;
     let offset = 0, all = [];
     while (true) {
         params.set("limit", pageSize);
@@ -2001,8 +2002,9 @@ async function _fetchAllFiltered(endpoint, params) {
         const res = await apiFetch(`${endpoint}?${params}`);
         const rows = res.data || [];
         all = all.concat(rows);
-        if (rows.length < pageSize) break;
-        offset += pageSize;
+        const done = res.count != null ? all.length >= res.count : rows.length < pageSize;
+        if (!rows.length || done) break;
+        offset += rows.length;
     }
     return all;
 }
