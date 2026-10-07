@@ -3142,7 +3142,7 @@ async function loadTestMaster() {
     const status  = document.getElementById("tm-status")?.value  || "";
     const search  = document.getElementById("tm-search")?.value.trim() || "";
     const offset  = tmCurrentPage * TM_PAGE;
-    _tableLoading("tmBody", 13);
+    _tableLoading("tmBody", 15);
     try {
         let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
         if (system) url += `&system=${encodeURIComponent(system)}`;
@@ -3271,7 +3271,7 @@ function renderTMTable(data) {
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
-            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="2" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
+            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(2, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
             <td style="padding:0">${readinessCell}</td>
             ${_tmDateCell("tm-linecheck", r.id, r.line_check_date)}
             ${_tmDateCell("tm-puncha", r.id, r.punch_a_clear_date)}
@@ -3305,7 +3305,6 @@ function renderTMTable(data) {
                     <option value="FAIL"${iopt(res==="FAIL")} style="color:#000">FAIL</option>
                 </select>
             </td>
-            ${_tmDateCell("tm-reinstate", r.id, r.reinstatement_date)}
             <td style="text-align:center;white-space:nowrap">
                 <button class="btn-save-row auth-write" onclick="saveTMRow(${r.id})">Save</button>
                 <button class="btn-del-row auth-admin"  onclick="deleteTMRow(${r.id})">Del</button>
@@ -3344,8 +3343,7 @@ async function saveTMRow(id) {
         completed:       completed,
         description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null,
         line_check_date:    _fullDateVal(`tm-linecheck-${id}`) || null,
-        punch_a_clear_date: _fullDateVal(`tm-puncha-${id}`)    || null,
-        reinstatement_date: _fullDateVal(`tm-reinstate-${id}`) || null
+        punch_a_clear_date: _fullDateVal(`tm-puncha-${id}`)    || null
     };
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, {
@@ -3691,7 +3689,6 @@ async function exportTMExcel() {
         "Holding Time":     r.holding_time     || "",
         "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
         "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
-        "Reinstatement":    (r.reinstatement_date || "").substring(0,10),
         "Description":      r.description      || "",
         "UPDATED AT":       r.updated_at || "",
         "UPDATED BY":       r.updated_by || ""
