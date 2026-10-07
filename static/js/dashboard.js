@@ -785,12 +785,14 @@ async function renderPressureTestChart(allSystems) {
         const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
-            data: {labels: names, datasets: [
+            data: {labels: names.map(n => n.split(" ")), datasets: [
                 {label: "Completed", data: done, backgroundColor: "rgba(34,211,161,0.75)", borderColor: "rgba(34,211,161,1)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
-                {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}}
+                {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
+                 datalabels: {display: ctx => total[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#059669", font: {weight: "bold", size: 8}, offset: 1, clamp: true,
+                              formatter: (v, ctx) => Math.round(done[ctx.dataIndex] / total[ctx.dataIndex] * 100) + "%"}}
             ]},
-            options: {...opts, layout: {padding: {top: 4}},
-                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+            options: {...opts, layout: {padding: {top: 14}},
+                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, font: {...tick.font, size: 8}, autoSkip: false, minRotation: 0, maxRotation: 0}},
                          y: {...opts.scales.y, stacked: true, ticks: {...tick, precision: 0}}},
                 plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}},
                     tooltip: {...opts.plugins.tooltip, callbacks: {
