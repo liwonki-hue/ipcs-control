@@ -202,3 +202,8 @@
 - 작업일 최초 입력 시 Inspection=VT 기본(JM 단건 저장은 프런트, ISO 일괄 저장은 bulk-date 서버). TP Joint Check의 Inspection은 드롭다운으로 변경 가능, VT Save 시 함께 저장.
 - PWHT: CS·SS=N, P91=Y 고정, P22 등은 Y/N 선택. 서버 PATCH도 같은 규칙으로 거절(`_required_pwht`).
 - 작업일 있고 Inspection 빈 기존 10,945건 VT 일괄 입력(사용자 요청). 백업 Reports/Inspection_VT_fill_backup_20261007_183856.json
+
+## 2026-10-07 Overview 차트 개편
+- Weekly DI → Monthly DI Productivity(최근 3개월, `_dashData.monthly` = date_completed 기준, 진행 중인 달은 부분값). 패널 폭 Monthly 1 : Pressure Test 2.
+- Pressure Test Progress: `/api/testpkg-by-system`(test_package_master의 system별 total/completed, 5분 캐시, Test Package PATCH/DELETE·cache clear 시 무효화). 대시보드 System 전체 목록과 합쳐 Package 없는 System은 빈 칸으로 표시. 완료=파란색(Weekly DI 색과 동일), 완료율은 막대 위.
+- 템플릿(index.html)은 Flask가 캐시하므로 로컬 확인 시 서버 재시작 필요.
