@@ -3142,7 +3142,7 @@ async function loadTestMaster() {
     const status  = document.getElementById("tm-status")?.value  || "";
     const search  = document.getElementById("tm-search")?.value.trim() || "";
     const offset  = tmCurrentPage * TM_PAGE;
-    _tableLoading("tmBody", 15);
+    _tableLoading("tmBody", 13);
     try {
         let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
         if (system) url += `&system=${encodeURIComponent(system)}`;
@@ -3273,8 +3273,6 @@ function renderTMTable(data) {
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
             <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(1, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
             <td style="padding:0">${readinessCell}</td>
-            ${_tmDateCell("tm-linecheck", r.id, r.line_check_date)}
-            ${_tmDateCell("tm-puncha", r.id, r.punch_a_clear_date)}
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
                     <option value="" style="color:#000">-</option>
@@ -3314,13 +3312,6 @@ function renderTMTable(data) {
     applyAuthUI(window.authRole);
 }
 
-// 날짜 입력칸(클릭하면 달력) — Test Pkg Register 단계 날짜용
-function _tmDateCell(prefix, id, value) {
-    const dc = value ? String(value).substring(0, 10) : "";
-    return `<td style="text-align:center"><input type="text" class="cell-input${dc ? "" : " date-empty"}" id="${prefix}-${id}" value="${dc ? dc.slice(2) : ""}" data-full-date="${dc}"
-        style="width:100%;text-align:center;background:#fff;cursor:pointer;color:#000;font-size:10px;padding:0 1px" onclick="_pickDate(this)" readonly></td>`;
-}
-
 // 행에 마우스를 올리면 보이는 마지막 수정 정보(updated_at은 UTC로 저장, 현장 시각으로 표시)
 function _lastUpdatedTitle(r) {
     if (!r.updated_at) return "";
@@ -3341,9 +3332,7 @@ async function saveTMRow(id) {
         holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
         date_completed:  dateVal || null,
         completed:       completed,
-        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null,
-        line_check_date:    _fullDateVal(`tm-linecheck-${id}`) || null,
-        punch_a_clear_date: _fullDateVal(`tm-puncha-${id}`)    || null
+        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null
     };
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, {
@@ -3684,8 +3673,6 @@ async function exportTMExcel() {
         "Test Pressure":    r.test_pressure    || "",
         "Method":           r.method           || "",
         "Media":            r.media            || "",
-        "Line Check":       (r.line_check_date    || "").substring(0,10),
-        "Punch A Clear":    (r.punch_a_clear_date || "").substring(0,10),
         "Holding Time":     r.holding_time     || "",
         "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
         "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
