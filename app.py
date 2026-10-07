@@ -2015,6 +2015,16 @@ def _validate_joint_update(sb, jid, body):
     return None
 
 
+def _required_pwht(mat):
+    """재질별 PWHT 고정값: CS·SS는 N, P91은 Y. P22 등 그 외는 입력 가능(None)."""
+    m = (mat or "").strip().upper()
+    if m in ("CS", "SS"):
+        return "N"
+    if "P91" in m:
+        return "Y"
+    return None
+
+
 @app.route("/api/joints/<int:jid>", methods=["PATCH"])
 @login_required
 def api_joints_patch(jid):
@@ -2024,6 +2034,11 @@ def api_joints_patch(jid):
         err = _validate_joint_update(sb, jid, body)
         if err:
             return jsonify({"error": err}), 400
+        if body.get("pwht"):
+            row = (sb.table("joint_master").select("mat").eq("id", jid).limit(1).execute().data or [{}])[0]
+            need = _required_pwht(row.get("mat"))
+            if need and body["pwht"] != need:
+                return jsonify({"error": f"PWHT must be {need} for material {row.get('mat')}"}), 400
         if body.get("vt_date") or body.get("vt_result"):
             existing = sb.table("joint_master").select("date_completed,inspection").eq("id", jid).limit(1).execute().data
             existing = existing[0] if existing else {}
@@ -2081,6 +2096,8 @@ def api_joints_bulk_date():
             except Exception as e:  # 앞 묶음은 이미 저장됐을 수 있어 몇 건이 반영됐는지 알린다(같은 값 재시도는 안전)
                 return jsonify({"error": f"{updated} of {len(ids)} joints were updated before the failure: {e}", "updated": updated}), 500
             updated += len(res.data or [])
+            if date_completed:   # 작업일이 들어가면 Inspection 미지정 조인트는 VT 기본값 (이미 지정된 값은 건드리지 않음)
+                sb.table("joint_master").update({"inspection": "VT"}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).is_("inspection", "null").execute()
         _clear_tp_status_cache()
         # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
         return jsonify({"ok": True, "updated": updated, "requested": len(ids)})

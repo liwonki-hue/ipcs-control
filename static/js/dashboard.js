@@ -1556,6 +1556,7 @@ async function applyIsoBulkDate(){
         targets.forEach(r=>{
             const el=document.getElementById(`date-${r.id}`);
             if(el){el.value=dateVal.slice(2);el.dataset.fullDate=dateVal;el.classList.remove("date-empty");}
+            if(!r.inspection){r.inspection="VT";const ie=document.getElementById(`inspection-${r.id}`);if(ie)ie.value="VT";}
         });
         toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
         _autoRefreshKpi();
@@ -1582,6 +1583,14 @@ async function clearIsoBulkDate(){
 }
 
 function jmGoto(page){jmCurrentPage=Math.max(0,page);loadJointMaster();}
+
+// 재질별 PWHT 고정값: CS·SS는 N, P91은 Y, P22 등은 직접 입력(null)
+function _pwhtFixed(mat){
+    const m=(mat||"").trim().toUpperCase();
+    if(m==="CS"||m==="SS")return "N";
+    if(m.includes("P91"))return "Y";
+    return null;
+}
 
 function renderJMTable(rows){
     const tbody=document.getElementById("jmBody");
@@ -1614,10 +1623,12 @@ function renderJMTable(rows){
                 </select>
             </td>
             <td>
-                <select class="cell-input" id="pwht-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
-                    <option value="">-</option>
+                <select class="cell-input" id="pwht-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px"${_pwhtFixed(r.mat)?' title="Fixed by material"':''}>
+                    ${_pwhtFixed(r.mat)
+                        ? `<option value="${_pwhtFixed(r.mat)}" selected>${_pwhtFixed(r.mat)}</option>`
+                        : `<option value="">-</option>
                     <option value="Y" ${r.pwht==='Y'?'selected':''}>Y</option>
-                    <option value="N" ${r.pwht==='N'?'selected':''}>N</option>
+                    <option value="N" ${r.pwht==='N'?'selected':''}>N</option>`}
                 </select>
             </td>
             <td style="white-space:nowrap">
@@ -1813,6 +1824,11 @@ async function saveJointDate(id){
     let pkg=document.getElementById(`pkg-${id}`)?.value?.trim()||'';
     let inspection=document.getElementById(`inspection-${id}`)?.value?.trim()||'';
     let pwht=document.getElementById(`pwht-${id}`)?.value?.trim()||'';
+    // 작업일을 처음 입력하면 Inspection은 VT가 기본값 (이후 직접 변경 가능)
+    if(val&&!inspection&&!jmData.find(j=>j.id===id)?.date_completed){
+        inspection='VT';
+        const inspEl=document.getElementById(`inspection-${id}`);if(inspEl)inspEl.value='VT';
+    }
     if(val){const _today=new Date().toISOString().slice(0,10);if(val>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
     try{
         const r=await fetch(`${API}/api/joints/${id}`,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({date_completed:val||null, welder:welder||null, phase:phase||null, package:pkg||null, inspection:inspection||null, pwht:pwht||null})});
@@ -2919,17 +2935,24 @@ function renderTPTable(rows) {
         const statusColor = r.status === "Completed" ? "var(--green)" : "var(--orange)";
         const statusIcon  = r.status === "Completed" ? "&#10003;" : "&#9679;";
         const insp = r.inspection || "";
-        const inspColor = insp === "RT" ? "var(--orange)" : insp === "VT" ? "var(--accent)" : "var(--text-dim)";
-        const inspLabel = insp === "RT" ? "VT/RT" : insp || "-";
-        const vtLocked = !r.date_completed || !r.inspection;
-        const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date and Inspection first"` : "";
+        const inspSel = insp === "VT/RT" ? "RT" : insp || (weldDate ? "VT" : "");   // 작업일이 있으면 VT가 기본값 (저장 전까지 DB는 그대로)
+        const vtLocked = !r.date_completed;
+        const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date first"` : "";
         return `<tr id="tprow-${r.id}" data-weld="${(weldDate||"").substring(0,10)}">
           <td style="text-align:center">${r.system||""}</td>
           <td style="color:var(--indigo)">${r.package||""}</td>
           <td style="font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
           <td style="text-align:center">${r.joint_no||""}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
-          <td style="text-align:center;font-size:11px;color:${inspColor}">${inspLabel}</td>
+          <td style="padding:2px;text-align:center">
+            <select class="cell-input" id="tp-insp-${r.id}" style="width:100%;box-sizing:border-box;padding:3px 2px;text-align:center;text-align-last:center;font-size:11px;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
+              ${vtLocked ? `<option value="" style="color:#000">-</option>` : ""}
+              <option value="VT" style="color:#000" ${inspSel==="VT"?"selected":""}>VT</option>
+              <option value="MT" style="color:#000" ${inspSel==="MT"?"selected":""}>MT</option>
+              <option value="PT" style="color:#000" ${inspSel==="PT"?"selected":""}>PT</option>
+              <option value="RT" style="color:#000" ${inspSel==="RT"?"selected":""}>VT/RT</option>
+            </select>
+          </td>
           <td style="padding:2px;text-align:center"><input type="text" class="cell-input${vtDate?'':' date-empty'}" id="tp-vt-date-${r.id}" value="${vtDate?vtDate.slice(2):''}" data-full-date="${vtDate}" style="padding:3px 2px;text-align:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLocked?'':'onclick="_pickDate(this)"'} readonly ${vtLockAttrs}></td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-vt-res-${r.id}" style="width:100%;box-sizing:border-box;padding:3px 4px;text-align:center;text-align-last:center;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
@@ -2957,15 +2980,16 @@ async function saveTPVT(id) {
     let vtDate = _fullDateVal(`tp-vt-date-${id}`);
     const vtRes  = document.getElementById(`tp-vt-res-${id}`)?.value || "";
     const row = tpData.find(r => r.id === id);
-    if ((vtDate || vtRes) && (!row?.date_completed || !row?.inspection)) {
-        toast("Weld Date and Inspection must be entered first in Joint Master.", "error");
+    const insp = document.getElementById(`tp-insp-${id}`)?.value || "";
+    if (!row?.date_completed || !insp) {
+        toast("Weld Date must be entered first in Joint Master.", "error");
         return;
     }
     try {
         const r = await fetch(`${API}/api/joints/${id}`, {
             method: "PATCH",
             headers: {"Content-Type":"application/json"},
-            body: JSON.stringify({vt_date: vtDate||null, vt_result: vtRes||null})
+            body: JSON.stringify({inspection: insp, vt_date: vtDate||null, vt_result: vtRes||null})
         });
         if(!r.ok) throw new Error(await _respError(r));
         toast(`✓ VT saved (ID ${id})`);
