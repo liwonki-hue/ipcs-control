@@ -762,11 +762,37 @@ async function renderOverview(kpi, wkData, units, systems) {
             options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true,grace:"20%"}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
 
+        renderPressureTestChart();
+
         document.getElementById("unitOverview").innerHTML = units.map(u => {
             const p=u.progress_pct, c=pctColor(p);
             return `<div style="margin-bottom:5px;padding-bottom:5px;border-bottom:1px solid var(--border)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px"><div><div style="font-size:11px;font-weight:400">Unit ${u.unit}</div><div style="font-size:10px;color:var(--text-dim)">Plan: ${fmtNum(u.total_di,0)} DI</div></div><div style="font-size:13px;font-weight:400;color:${c};font-family:'DM Mono',monospace">${p.toFixed(2)}%</div></div><div style="height:3px;background:var(--border);border-radius:2px"><div style="height:100%;width:${Math.min(p,100)}%;background:${c};border-radius:2px"></div></div><div style="font-size:10px;color:var(--text-dim);margin-top:2px;font-family:'DM Mono',monospace">${fmtNum(u.completed_di,0)} / ${fmtNum(u.total_di,0)} DI</div></div>`;
         }).join("");
     } catch(e) { console.error("Overview failed", e); }
+}
+
+// System별 전체 Test Package 대비 완료 Package 세로 막대 (Overview의 Pressure Test Progress)
+async function renderPressureTestChart() {
+    const el = document.getElementById("pressureTestBar");
+    if (!el) return;
+    try {
+        const rows = (await apiFetch("/api/testpkg-by-system")).data || [];
+        destroyChart("pressureTestBar");
+        const opts = chartOpts("Packages");
+        charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
+            type: "bar",
+            data: {labels: rows.map(r => r.system), datasets: [
+                {label: "Total", data: rows.map(r => r.total), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.7,
+                 datalabels: {display: false}},
+                {label: "Completed", data: rows.map(r => r.completed), backgroundColor: "rgba(34,211,161,0.55)", borderColor: "rgba(34,211,161,0.9)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.7,
+                 datalabels: {display: true, anchor: "end", align: "top", color: "#059669", font: {weight: "bold", size: 9}, offset: 2,
+                              formatter: (v, ctx) => { const t = rows[ctx.dataIndex].total; return t > 0 ? Math.round(v / t * 100) + "%" : ""; }}}
+            ]},
+            options: {...opts, layout: {padding: {top: 18}},
+                scales: {...opts.scales, x: {...opts.scales.x, ticks: {...opts.scales.x.ticks, autoSkip: false, maxRotation: 45, font: {family: "DM Mono, monospace", size: 9}}}},
+                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}}}}
+        });
+    } catch (e) { console.error("Pressure test chart failed", e); }
 }
 
 // ================================================================================

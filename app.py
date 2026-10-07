@@ -474,6 +474,7 @@ _jm_fv_cache: dict = {}                             # /api/joints/filter-values 
 _welder_cache: dict = {"data": None, "time": 0}     # /api/welder-summary 캐시 (15min, 필터 없을 때)
 _rt_cache: dict     = {"data": None, "time": 0}     # /api/rt-quality 캐시 (15min)
 _testpkg_all_cache: dict = {"data": None, "time": 0}  # /api/testpkg-master 전체목록 캐시 (10min)
+_tp_sys_cache: dict = {"data": None, "time": 0}       # /api/testpkg-by-system 시스템별 완료 집계 캐시 (5min)
 _sub_area_cache: dict = {"data": None, "time": 0}   # sub_area 드롭다운 24h 캐시 (50k rows 스캔 최소화)
 _daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 캐시
 _sup_test_cache: dict = {"data": None, "time": 0}   # support/testpkg 집계 2h 캐시
@@ -1527,6 +1528,7 @@ def _run_cache_clear(scopes):
         _pkg_stats_cache.clear()
         _testpkg_all_cache["data"] = None
         _testpkg_all_cache["time"] = 0
+        _tp_sys_cache["data"] = None
         if joint:
             _meta_cache["time"] = 0
             _meta_cache["data"] = None
@@ -3328,6 +3330,34 @@ def api_testpkg_get():
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 
+@app.route("/api/testpkg-by-system")
+def api_testpkg_by_system():
+    """Overview의 Pressure Test Progress 차트용 — System별 전체/완료 Test Package 수"""
+    try:
+        with _lock:
+            cached = _tp_sys_cache.get("data")
+            age = time.time() - _tp_sys_cache.get("time", 0)
+        if cached is not None and age < 300:
+            return jsonify(cached)
+        sb = get_sb()
+        agg, off = {}, 0
+        while True:
+            rows = sb.table("test_package_master").select("system,completed").order("id").range(off, off + 4999).execute().data or []
+            for r in rows:
+                a = agg.setdefault(r.get("system") or "-", [0, 0])
+                a[0] += 1
+                a[1] += 1 if r.get("completed") else 0
+            if len(rows) < 5000:
+                break
+            off += 5000
+        result = {"data": [{"system": k, "total": v[0], "completed": v[1]} for k, v in sorted(agg.items())]}
+        with _lock:
+            _tp_sys_cache["data"] = result
+            _tp_sys_cache["time"] = time.time()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": _err_text(e)}), 500
+
 @app.route("/api/testpkg-master/<int:rid>", methods=["PATCH"])
 @login_required
 def api_testpkg_patch(rid):
@@ -3337,6 +3367,7 @@ def api_testpkg_patch(rid):
             _cache.clear()
             _pkg_stats_cache.clear()
             _testpkg_all_cache["data"] = None
+            _tp_sys_cache["data"] = None
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
@@ -3351,6 +3382,7 @@ def api_testpkg_delete(rid):
             _pkg_stats_cache.clear()
             _testpkg_all_cache["data"] = None
             _testpkg_all_cache["time"] = 0
+            _tp_sys_cache["data"] = None
         return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
