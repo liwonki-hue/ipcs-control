@@ -786,9 +786,9 @@ async function renderPressureTestChart(allSystems) {
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
             data: {labels: names.map(n => n.split(" ")), datasets: [
-                {label: "Completed", data: done, backgroundColor: "rgba(34,211,161,0.75)", borderColor: "rgba(34,211,161,1)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
+                {label: "Completed", data: done, backgroundColor: "rgba(37,99,235,0.3)", borderColor: "rgba(37,99,235,0.6)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
                 {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
-                 datalabels: {display: ctx => total[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#059669", font: {weight: "bold", size: 8}, offset: 1, clamp: true,
+                 datalabels: {display: ctx => total[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#2563eb", font: {weight: "bold", size: 8}, offset: 1, clamp: true,
                               formatter: (v, ctx) => Math.round(done[ctx.dataIndex] / total[ctx.dataIndex] * 100) + "%"}}
             ]},
             options: {...opts, layout: {padding: {top: 14}},
