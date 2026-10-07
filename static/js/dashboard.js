@@ -762,7 +762,7 @@ async function renderOverview(kpi, wkData, units, systems) {
             options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true,grace:"20%"}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
 
-        renderPressureTestChart();
+        renderPressureTestChart(systems);
 
         document.getElementById("unitOverview").innerHTML = units.map(u => {
             const p=u.progress_pct, c=pctColor(p);
@@ -771,26 +771,32 @@ async function renderOverview(kpi, wkData, units, systems) {
     } catch(e) { console.error("Overview failed", e); }
 }
 
-// System별 전체 Test Package 대비 완료 Package 세로 막대 (Overview의 Pressure Test Progress)
-async function renderPressureTestChart() {
+// System별 Test Package 완료/미완료 누적 세로 막대 (Overview의 Pressure Test Progress). Package가 없는 System은 빈 칸
+async function renderPressureTestChart(allSystems) {
     const el = document.getElementById("pressureTestBar");
     if (!el) return;
     try {
-        const rows = (await apiFetch("/api/testpkg-by-system")).data || [];
+        const byName = Object.fromEntries(((await apiFetch("/api/testpkg-by-system")).data || []).map(r => [r.system, r]));
+        const names = [...new Set([...(allSystems || []).map(s => s.system), ...Object.keys(byName)])].filter(Boolean).sort();
+        const total = names.map(n => byName[n]?.total || 0);
+        const done = names.map(n => byName[n]?.completed || 0);
         destroyChart("pressureTestBar");
         const opts = chartOpts("Packages");
+        const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
-            data: {labels: rows.map(r => r.system), datasets: [
-                {label: "Total", data: rows.map(r => r.total), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.7,
-                 datalabels: {display: false}},
-                {label: "Completed", data: rows.map(r => r.completed), backgroundColor: "rgba(34,211,161,0.55)", borderColor: "rgba(34,211,161,0.9)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.7,
-                 datalabels: {display: true, anchor: "end", align: "top", color: "#059669", font: {weight: "bold", size: 9}, offset: 2,
-                              formatter: (v, ctx) => { const t = rows[ctx.dataIndex].total; return t > 0 ? Math.round(v / t * 100) + "%" : ""; }}}
+            data: {labels: names, datasets: [
+                {label: "Completed", data: done, backgroundColor: "rgba(34,211,161,0.75)", borderColor: "rgba(34,211,161,1)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
+                {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}}
             ]},
-            options: {...opts, layout: {padding: {top: 18}},
-                scales: {...opts.scales, x: {...opts.scales.x, ticks: {...opts.scales.x.ticks, autoSkip: false, maxRotation: 45, font: {family: "DM Mono, monospace", size: 9}}}},
-                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}}}}
+            options: {...opts, layout: {padding: {top: 4}},
+                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+                         y: {...opts.scales.y, stacked: true, ticks: {...tick, precision: 0}}},
+                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}},
+                    tooltip: {...opts.plugins.tooltip, callbacks: {
+                        title: items => items[0].label,
+                        label: () => null,
+                        afterBody: items => { const i = items[0].dataIndex; return total[i] ? [`Completed ${done[i]} / ${total[i]} (${Math.round(done[i] / total[i] * 100)}%)`] : ["No package registered"]; }}}}}
         });
     } catch (e) { console.error("Pressure test chart failed", e); }
 }
