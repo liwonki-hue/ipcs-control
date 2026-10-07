@@ -197,3 +197,8 @@
 - 로컬 .venv도 supabase 2.31.0으로 맞췄다(이전 2.30.0).
 - 불필요 코드 판단(09-22~29 운영 로그 26,205줄 기준 호출 수): 화면 기능 엔드포인트는 모두 호출됨. `/api/area-field-quantities`는 프런트 호출이 없고 로그의 1건도 curl 시험이라 삭제. 호출 0건인 Sync·bulk-date·Support/Test Pkg 수정·삭제는 드물게 쓰는 쓰기 기능이라 1주 기록만으로 지우지 않았다. `/api/welders` 404 56건은 v7.57 이전 JS가 열린 탭(코드엔 없음). app.py·dashboard.js에 참조 없는 함수는 없음.
 - 옛 JS(v7.40 등)가 열린 탭은 Export가 1만 행 기준으로 돌아 2,000행 상한에서 첫 페이지만 받고 멈춘다 → 배포 후 사용자에게 새로고침 안내.
+
+## 2026-10-07 Inspection 기본값 / PWHT 재질 제한
+- 작업일 최초 입력 시 Inspection=VT 기본(JM 단건 저장은 프런트, ISO 일괄 저장은 bulk-date 서버). TP Joint Check의 Inspection은 드롭다운으로 변경 가능, VT Save 시 함께 저장.
+- PWHT: CS·SS=N, P91=Y 고정, P22 등은 Y/N 선택. 서버 PATCH도 같은 규칙으로 거절(`_required_pwht`).
+- 작업일 있고 Inspection 빈 기존 10,945건 VT 일괄 입력(사용자 요청). 백업 Reports/Inspection_VT_fill_backup_20261007_183856.json
