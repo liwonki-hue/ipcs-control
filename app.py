@@ -2716,7 +2716,7 @@ def api_testpkg_joints():
         insp    = request.args.get("inspection", "").strip()
 
         def query(count=None):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
-            q = sb.table("joint_master").select(_TP_JOINT_COLS, count=count).or_("package.not.is.null,inspection.in.(VT,RT)")
+            q = sb.table("joint_master").select(_TP_JOINT_COLS, count=count).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
             if pkg:    q = q.ilike("package",     f"%{pkg}%")
             if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
             if insp:   q = q.eq("inspection", insp)
