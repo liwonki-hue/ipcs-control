@@ -3271,7 +3271,7 @@ function renderTMTable(data) {
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
-            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(2, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
+            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(1, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
             <td style="padding:0">${readinessCell}</td>
             ${_tmDateCell("tm-linecheck", r.id, r.line_check_date)}
             ${_tmDateCell("tm-puncha", r.id, r.punch_a_clear_date)}
