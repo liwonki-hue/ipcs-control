@@ -746,18 +746,18 @@ async function renderOverview(kpi, wkData, units, systems) {
 
         let latestPlanIdx = -1;
         for (let i=wkData.length-1; i>=0; i--) { if (wkData[i].completed_di>0) { latestPlanIdx=i; break; } }
-        let last4Wks = [];
-        if (latestPlanIdx===-1) { last4Wks=wkData.slice(0,4); }
-        else { let s=latestPlanIdx-3; if(s<0)s=0; last4Wks=wkData.slice(s,s+4); }
+        let last3Wks = [];
+        if (latestPlanIdx===-1) { last3Wks=wkData.slice(0,3); }
+        else { let s=latestPlanIdx-2; if(s<0)s=0; last3Wks=wkData.slice(s,s+3); }
 
         destroyChart("weeklyBar");
         const weeklyBarEl = document.getElementById("weeklyBar");
         if (!weeklyBarEl) { console.warn("[BOP] weeklyBar canvas not found"); return; }
         charts["weeklyBar"] = new Chart(weeklyBarEl.getContext("2d"), {
             type:"bar",
-            data:{labels:last4Wks.map(w=>w.week_label),datasets:[
-                {label:"Actual Work",type:"line",data:last4Wks.map(w=>w.completed_di||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,1):''}},
-                {label:"Weekly DI",data:last4Wks.map(w=>(w.completed_di>0)?w.completed_di:null),backgroundColor:"rgba(37,99,235,0.3)",borderColor:"rgba(37,99,235,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
+            data:{labels:last3Wks.map(w=>w.week_label),datasets:[
+                {label:"Actual Work",type:"line",data:last3Wks.map(w=>w.completed_di||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,1):''}},
+                {label:"Weekly DI",data:last3Wks.map(w=>(w.completed_di>0)?w.completed_di:null),backgroundColor:"rgba(37,99,235,0.3)",borderColor:"rgba(37,99,235,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
             ]},
             options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true,grace:"20%"}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
