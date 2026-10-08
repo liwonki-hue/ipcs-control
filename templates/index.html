@@ -339,15 +339,6 @@
           <select id="jm-status" class="filter-sel" style="min-width:100px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <select id="jm-pwht" class="filter-sel" style="min-width:80px;"><option value="">PWHT</option></select>
-          <select id="jm-quick" class="filter-sel" style="min-width:150px;" onchange="jmCurrentPage=0;loadJointMaster()" title="Welded joints still waiting for the next step">
-            <option value="">Quick filter</option>
-            <option value="insp_none">Inspection not set</option>
-            <option value="vt_wait">VT not done</option>
-            <option value="nde_wait">NDE not done</option>
-            <option value="pwht_wait">PWHT not done</option>
-            <option value="rt_repair">RT repair open</option>
-            <option value="no_pkg">No test package</option>
-          </select>
           <button class="btn-primary" onclick="jmCurrentPage=0;loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
           <div style="display:flex; gap:6px; align-items:center; margin-left:auto;">
             <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>

@@ -1856,7 +1856,6 @@ def api_joints_get():
         mat     = request.args.get("mat",      "")
         size    = request.args.get("size",     "")
         pwht    = request.args.get("pwht",     "")
-        quick   = request.args.get("quick",    "")   # Backlog 카드와 같은 조건의 빠른 필터(_apply_quick_filter)
         def build_query(count=None):
             q = sb.table("joint_master").select("*", count=count)
             if unit:    q = q.eq("unit",        unit)
@@ -1876,8 +1875,6 @@ def api_joints_get():
                 q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
             if status == "completed": q = q.not_.is_("date_completed", "null")
             if status == "pending":   q = q.is_("date_completed",      "null")
-            if quick:
-                q = _apply_quick_filter(q, quick) or q
             return q.order("iso_drawing").order("joint_no").order("id")
         def fetch_iso_rows(iso_drawing):
             q = build_query()
@@ -2018,9 +2015,9 @@ def _validate_joint_update(sb, jid, body):
 
 
 def _required_pwht(mat):
-    """재질별 PWHT 고정값: CS·SS는 N, P91은 Y. P22 등 그 외는 입력 가능(None)."""
+    """재질별 PWHT 고정값: CS·SS·P22는 N, P91은 Y. 그 외는 입력 가능(None)."""
     m = (mat or "").strip().upper()
-    if m in ("CS", "SS"):
+    if m in ("CS", "SS") or "P22" in m:
         return "N"
     if "P91" in m:
         return "Y"
@@ -2635,25 +2632,6 @@ def _sync_rev_from_drawing():
         _rev_sync_last.update(time=datetime.now(ALMT).strftime("%Y-%m-%d %H:%M"), error=msg)
     finally:
         _rev_sync_lock.release()
-
-
-def _apply_quick_filter(q, quick):
-    """Joint Master Quick 필터 — 용접은 끝났는데 다음 단계(검사·PWHT·Package)가 안 된 조인트. 알 수 없는 값이면 None.
-    postgrest 빌더는 복사본이 아니라 자기 자신을 수정하므로 '용접 완료' 조건은 해당 분기에서만 붙인다."""
-    done = lambda: q.not_.is_("date_completed", "null")
-    if quick == "insp_none":
-        return done().is_("inspection", "null")
-    if quick == "vt_wait":
-        return done().is_("vt_date", "null")
-    if quick == "nde_wait":
-        return done().or_("and(inspection.eq.RT,rt_date.is.null),and(inspection.eq.PT,pt_date.is.null),and(inspection.eq.MT,mt_date.is.null)")
-    if quick == "pwht_wait":
-        return done().eq("pwht", "Y").is_("pwht_date", "null")
-    if quick == "rt_repair":
-        return done().not_.is_("rt_result", "null").neq("rt_result", "PASS").neq("rt_result", "").is_("rt_2_date", "null")
-    if quick == "no_pkg":
-        return done().is_("package", "null")
-    return None
 
 
 def _rt_passed(r):

@@ -1251,8 +1251,7 @@ async function loadDailyTrend() {
                   borderColor: "#2563eb", borderWidth: 2.5, pointRadius: 6,
                   pointBackgroundColor: "#22d3a1", pointBorderColor: "#fff", pointBorderWidth: 2,
                   tension: 0.2,
-                  datalabels: { display: true, align: "top", offset: 5, color: "#60a5fa", backgroundColor: "rgba(15,23,42,0.75)", borderRadius: 3, padding: 2,
-                    font: { size: 10, weight: "700", family: "DM Mono, monospace" },
+                  datalabels: { display: true, align: "top", offset: 5, color: "#60a5fa", font: { size: 10, weight: "700", family: "DM Mono, monospace" },
                     formatter: v => v > 0 ? fmtNum(v, 0) : "" }
                 }
             ]},
@@ -1271,7 +1270,7 @@ async function loadWeekly() {
         charts["weeklyTrend"]=new Chart(document.getElementById("weeklyTrend").getContext("2d"),{
             type:"line",
             data:{labels:displayWks.map(w=>w.week_label),datasets:[
-                {label:"Actual DI",data:displayWks.map(w=>w.completed_di),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",backgroundColor:"rgba(15,23,42,0.75)",borderRadius:3,padding:2,font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
+                {label:"Actual DI",data:displayWks.map(w=>w.completed_di),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
             ]},
             options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
         });
@@ -1301,7 +1300,7 @@ async function loadWeekly() {
             charts["monthlyTrend"]=new Chart(moEl.getContext("2d"),{
                 type:"line",
                 data:{labels:monthlyData.map(([mo])=>mo.slice(5)),datasets:[
-                    {label:"Monthly DI",data:monthlyData.map(([,v])=>Math.round(v.completed)),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",backgroundColor:"rgba(15,23,42,0.75)",borderRadius:3,padding:2,font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
+                    {label:"Monthly DI",data:monthlyData.map(([,v])=>Math.round(v.completed)),borderColor:"#2563eb",borderWidth:2.5,pointRadius:6,pointBackgroundColor:"#22d3a1",pointBorderColor:"#fff",pointBorderWidth:2,tension:0.2,datalabels:{display:true,align:"top",offset:5,color:"#60a5fa",font:{size:10,weight:"700",family:"DM Mono, monospace"},formatter:v=>v>0?fmtNum(v,0):""}}
                 ]},
                 options:{...chartOpts("DI"),plugins:{...chartOpts("DI").plugins,legend:{display:false}}}
             });
@@ -1538,7 +1537,6 @@ async function loadJointMaster() {
           pwht=document.getElementById("jm-pwht")?.value||"",
           mat=document.getElementById("jm-mat")?.value||"",
           size=document.getElementById("jm-size")?.value||"",
-          quick=document.getElementById("jm-quick")?.value||"",
           offset=jmCurrentPage*JM_PAGE_SIZE;
     _tableLoading("jmBody", 15);
     try {
@@ -1550,7 +1548,6 @@ async function loadJointMaster() {
         if(pwht)params.set("pwht",pwht);
         if(mat)params.set("mat",mat);
         if(size)params.set("size",size);
-        if(quick)params.set("quick",quick);
         const res=await apiFetch(`/api/joints?${params}`,{signal});
         if(seq!==_jmSeq)return;   // 더 최근 조회가 시작됐으면 이 응답은 버린다
         jmData=res.data;
@@ -1622,10 +1619,10 @@ async function clearIsoBulkDate(){
 
 function jmGoto(page){jmCurrentPage=Math.max(0,page);loadJointMaster();}
 
-// 재질별 PWHT 고정값: CS·SS는 N, P91은 Y, P22 등은 직접 입력(null)
+// 재질별 PWHT 고정값: CS·SS·P22는 N, P91은 Y, 그 외는 직접 입력(null)
 function _pwhtFixed(mat){
     const m=(mat||"").trim().toUpperCase();
-    if(m==="CS"||m==="SS")return "N";
+    if(m==="CS"||m==="SS"||m.includes("P22"))return "N";
     if(m.includes("P91"))return "Y";
     return null;
 }
@@ -2068,7 +2065,7 @@ async function exportJMExcel(){
     toast("Loading data...", "info");
     const params = _readFilters([
         ["jm-unit","unit"],["jm-system","system"],["jm-status","status"],
-        ["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"],["jm-quick","quick"]
+        ["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]
     ]);
     const data = await _fetchAllFiltered("/api/joints", params);
     if(!data.length){toast("No data to export","error");return;}
@@ -2090,7 +2087,7 @@ async function printPage(pageId){
     const _PRINT_TABS = {
         "joint_master": {
             endpoint: "/api/joints",
-            params: () => _readFilters([["jm-unit","unit"],["jm-system","system"],["jm-status","status"],["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"],["jm-quick","quick"]]),
+            params: () => _readFilters([["jm-unit","unit"],["jm-system","system"],["jm-status","status"],["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]]),
             render: d => renderJMTable(d), restore: () => renderJMTable(jmData)
         },
         "support_master": {
