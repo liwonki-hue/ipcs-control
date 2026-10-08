@@ -744,14 +744,14 @@ async function renderOverview(kpi, wkData, units, systems) {
             }
         }
 
-        // 월별 DI: 실제 완료일(date_completed) 기준 집계(없으면 주차의 시작월로 합산), 최근 3개월
+        // 월별 DI: 실제 완료일(date_completed) 기준 집계(없으면 주차의 시작월로 합산), 최근 4개월
         let monthly = (_dashData?.monthly || []).map(m => [m.month, m.completed_di || 0]);
         if (!monthly.length) {
             const mm = {};
             wkData.forEach(w => { const mo = (w.week_start || "").slice(0, 7); if (mo) mm[mo] = (mm[mo] || 0) + (w.completed_di || 0); });
             monthly = Object.entries(mm);
         }
-        const last3Mos = monthly.filter(([, v]) => v > 0).sort(([a], [b]) => a.localeCompare(b)).slice(-3);
+        const last4Mos = monthly.filter(([, v]) => v > 0).sort(([a], [b]) => a.localeCompare(b)).slice(-4);
         const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
         destroyChart("weeklyBar");
@@ -759,9 +759,9 @@ async function renderOverview(kpi, wkData, units, systems) {
         if (!weeklyBarEl) { console.warn("[BOP] weeklyBar canvas not found"); return; }
         charts["weeklyBar"] = new Chart(weeklyBarEl.getContext("2d"), {
             type:"bar",
-            data:{labels:last3Mos.map(([mo])=>MON[+mo.slice(5,7)-1]),datasets:[
-                {label:"Actual Work",type:"line",data:last3Mos.map(([,v])=>v||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,0):''}},
-                {label:"Monthly DI",data:last3Mos.map(([,v])=>(v>0)?v:null),backgroundColor:"rgba(37,99,235,0.3)",borderColor:"rgba(37,99,235,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
+            data:{labels:last4Mos.map(([mo])=>MON[+mo.slice(5,7)-1]),datasets:[
+                {label:"Actual Work",type:"line",data:last4Mos.map(([,v])=>v||null),borderColor:"#2563eb",borderWidth:2,fill:false,tension:0.3,order:0,datalabels:{display:true,align:'top',color:'#2563eb',font:{weight:'bold',size:10},offset:4,formatter:(v)=>v>0?fmtNum(v,0):''}},
+                {label:"Monthly DI",data:last4Mos.map(([,v])=>(v>0)?v:null),backgroundColor:"rgba(37,99,235,0.3)",borderColor:"rgba(37,99,235,0.6)",borderWidth:1,barPercentage:0.5,categoryPercentage:0.5,order:1}
             ]},
             options:{...chartOpts("Weekly Progress"),scales:{...chartOpts("DI").scales,y:{...chartOpts("DI").scales.y,beginAtZero:true,grace:"20%"}},plugins:{...chartOpts("DI").plugins,legend:{display:true,position:"top",labels:{boxWidth:12,font:{size:10},color:"#475569"}}}}
         });
@@ -789,14 +789,14 @@ async function renderPressureTestChart(allSystems) {
         const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
-            data: {labels: names.map(n => n.split(" ")), datasets: [
+            data: {labels: names, datasets: [
                 {label: "Completed", data: done, backgroundColor: "rgba(37,99,235,0.3)", borderColor: "rgba(37,99,235,0.6)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
                 {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
                  datalabels: {display: ctx => total[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#2563eb", font: {weight: "bold", size: 8}, offset: 1, clamp: true,
                               formatter: (v, ctx) => Math.round(done[ctx.dataIndex] / total[ctx.dataIndex] * 100) + "%"}}
             ]},
             options: {...opts, layout: {padding: {top: 14}},
-                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, font: {...tick.font, size: 8}, autoSkip: false, minRotation: 0, maxRotation: 0}},
+                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, font: {...tick.font, size: 9}, autoSkip: false, minRotation: 90, maxRotation: 90}},
                          y: {...opts.scales.y, stacked: true, ticks: {...tick, precision: 0}}},
                 plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}},
                     tooltip: {...opts.plugins.tooltip, callbacks: {
