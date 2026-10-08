@@ -1745,24 +1745,36 @@ def _sort_joints_numeric(rows, fetch_iso_rows, has_before=True, has_after=True):
     페이지 양 끝의 ISO는 페이지 밖에도 행이 있을 수 있어, 그 ISO 전체를 fetch_iso_rows(iso)로 받아 자리를 맞춘다.
     has_before/has_after: 이 페이지 앞/뒤에 다른 행이 더 있는지. 페이지가 결과의 처음(끝)이면 첫(끝) ISO 앞(뒤)에는
     같은 ISO 행이 있을 수 없어 재조회(DB 왕복)를 생략한다 - ISO 하나를 검색하면 보통 재조회가 필요 없다."""
-    out, i = [], 0
+    # 같은 ISO가 이어진 구간(block)으로 나눈다
+    blocks, i = [], 0
     while i < len(rows):
         iso = rows[i].get("iso_drawing")
         j = i
         while j < len(rows) and rows[j].get("iso_drawing") == iso:
             j += 1
-        block = rows[i:j]
-        ids = []
-        if (i == 0 and has_before) or (j == len(rows) and has_after):
-            full = fetch_iso_rows(iso)
-            ids = [r["id"] for r in full]
+        blocks.append((iso, rows[i:j]))
+        i = j
+    # 페이지 양 끝 ISO의 전체 행은 서로 독립이라 DB 왕복을 동시에 보낸다(순서대로 받으면 왕복 시간이 그대로 더해진다)
+    need = []
+    if blocks and has_before:
+        need.append(blocks[0][0])
+    if blocks and has_after and blocks[-1][0] not in need:
+        need.append(blocks[-1][0])
+    if len(need) > 1:
+        with ThreadPoolExecutor(max_workers=len(need)) as ex:
+            fulls = dict(zip(need, ex.map(fetch_iso_rows, need)))
+    else:
+        fulls = {iso: fetch_iso_rows(iso) for iso in need}
+    out = []
+    for idx, (iso, block) in enumerate(blocks):
+        full = fulls.get(iso) if ((idx == 0 and has_before) or (idx == len(blocks) - 1 and has_after)) else None
+        ids = [r["id"] for r in full] if full is not None else []
         if block[0]["id"] in ids:
             start = ids.index(block[0]["id"])
             block = sorted(full, key=_joint_no_key)[start:start + len(block)]
         else:
             block = sorted(block, key=_joint_no_key)
         out += block
-        i = j
     return out
 
 @app.route("/api/joints", methods=["GET"])
