@@ -795,8 +795,8 @@ async function renderPressureTestChart(allSystems) {
             ]},
             options: {...opts, layout: {padding: {top: 14}},
                 scales: {x: {...opts.scales.x, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
-                         y: {...opts.scales.y, ticks: {...tick, precision: 0}}},
-                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}}}}
+                         y: {...opts.scales.y, suggestedMax: 5, grace: 0, ticks: {...tick, precision: 0, stepSize: 1}}},
+                plugins: {...opts.plugins, legend: {display: false}}}
         });
     } catch (e) { console.error("Pressure test chart failed", e); }
 }
