@@ -166,6 +166,9 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 /* ── Grid layouts ── */
 .grid-2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; }
 .grid-3 { display: grid; grid-template-columns: 260px minmax(0,1fr) 240px; gap: 10px; }
+/* 좌·우 열은 가운데 열 높이에 맞춰 패널이 늘어나 아래 공란이 생기지 않게 한다 */
+.grid-3 > .col:not(.col-wide) { display: flex; flex-direction: column; }
+.grid-3 > .col:not(.col-wide) > .panel { flex: 1; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
 .grid-5 { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 10px; }
 .grid-6 { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 10px; }
