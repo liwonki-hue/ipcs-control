@@ -720,10 +720,10 @@ async function renderOverview(kpi, wkData, units, systems) {
             options: { ...chartOpts("Weekly DI Progress"),
                 scales: {
                     x:{ ...chartOpts("").scales.x, ticks:{...chartOpts("").scales.x.ticks,maxRotation:0,autoSkip:false,callback:function(val,index){if(index===0||index%5===4)return this.getLabelForValue(val);return "";}} },
-                    yBar:{ type:"linear", position:"left",  beginAtZero:true, grid:{color:"rgba(255,255,255,0.05)"}, ticks:{color:"#4a6080",font:{size:9}}, title:{display:false} },
+                    yBar:{ type:"linear", position:"left",  beginAtZero:true, grace:"3%", grid:{color:"rgba(255,255,255,0.05)"}, ticks:{color:"#4a6080",font:{size:9}}, title:{display:false} },
                     yCum:{ type:"linear", position:"right", beginAtZero:true, grid:{display:false}, ticks:{color:"#22d3a1",font:{size:9}}, title:{display:false} }
                 },
-                plugins:{...chartOpts("").plugins,legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:12,font:{size:10}}}}, animation:{duration:600} }
+                plugins:{...chartOpts("").plugins,legend:{display:false}}, animation:{duration:600} }
         });
 
         // 마지막 작업주 기준 Plan/Actual/Diff 공정률 표시
