@@ -480,65 +480,7 @@ _daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 
 _sup_test_cache: dict = {"data": None, "time": 0}   # support/testpkg 집계 2h 캐시
 _kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결과 1h 캐시
 _welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
-_jm_iso_stats_cache: dict = {"data": None, "time": 0}  # ISO Drawing별 joint 완료 통계 5분 캐시
-_jm_iso_stats_building: bool = False  # 중복 빌드 방지 플래그
 _secondary_building: bool = False  # _build_secondary_caches() 중복 실행 방지 플래그 (겹치면 joint_master 풀스캔이 이중으로 돌아 OOM 위험)
-
-def _get_jm_iso_stats(force: bool = False) -> dict:
-    """joint_master의 iso_drawing별 완료 통계를 반환 (total, completed). 5분 캐시.
-    force=False일 때 캐시가 없으면 백그라운드 빌드를 트리거한 뒤 빈 dict 반환.
-    스캔 진행 여부는 force와 무관하게 _jm_iso_stats_building 플래그로 단일화하여
-    _build_secondary_caches()의 직접 force=True 호출과 백그라운드 스레드가 동시에
-    joint_master 전체 스캔을 중복 실행하지 않도록 한다 (Render OOM 원인)."""
-    global _jm_iso_stats_building
-    with _lock:
-        cached = _jm_iso_stats_cache.get("data")
-        age = time.time() - _jm_iso_stats_cache.get("time", 0)
-    if cached is not None and age < 300:
-        return cached
-    with _lock:
-        if _jm_iso_stats_building:
-            # 이미 다른 스레드가 스캔 중 — 중복 스캔 방지
-            return _jm_iso_stats_cache.get("data") or {}
-        _jm_iso_stats_building = True
-    if not force:
-        # 백그라운드 빌드 시작 후 만료된 값(없으면 빈 dict) 반환
-        threading.Thread(target=_scan_jm_iso_stats, daemon=True).start()
-        return cached or {}
-    return _scan_jm_iso_stats()
-
-def _scan_jm_iso_stats() -> dict:
-    """joint_master 전체 페이지네이션 스캔 (호출 전 _jm_iso_stats_building=True 가정)."""
-    global _jm_iso_stats_building
-    stats: dict = {}
-    try:
-        page_size = 10000
-        off = 0
-        while True:
-            res = _sb_exec(lambda sb, o=off: sb.table("joint_master")
-                           .select("iso_drawing,date_completed")
-                           .order("id").range(o, o + page_size - 1).execute())
-            rows = res.data or []
-            for row in rows:
-                iso = row.get("iso_drawing")
-                if not iso:
-                    continue
-                if iso not in stats:
-                    stats[iso] = {"total": 0, "completed": 0}
-                stats[iso]["total"] += 1
-                if row.get("date_completed"):
-                    stats[iso]["completed"] += 1
-            if len(rows) < page_size:
-                break
-            off += page_size
-        with _lock:
-            _jm_iso_stats_cache["data"] = stats
-            _jm_iso_stats_cache["time"] = time.time()
-        print(f"[jm_iso_stats] {len(stats)} ISO drawings indexed")
-    finally:
-        with _lock:
-            _jm_iso_stats_building = False
-    return stats
 
 def _fast_kpi_sync(target=None):
     """get_jm_kpi_v1 단일 RPC로 KPI 합계 + sys/unit/area/sub_area 완료 DI를 즉시 보정.
@@ -971,22 +913,12 @@ def _build_secondary_caches_impl():
                 print(f"[secondary_cache] sub_area scan attempt {_attempt+1} error: {_e}")
         print("[secondary_cache] sub_area scan failed after 3 attempts")
 
-    # ISO 통계는 결과가 아예 없을 때(서버 시작 직후)만 여기서 채운다. 만료된 값은 쓰는 요청이 백그라운드로 갱신한다.
-    def _load_jm_iso_stats():
-        if _jm_iso_stats_cache.get("data") is not None:
-            return
-        try:
-            _get_jm_iso_stats(force=True)
-        except Exception as e:
-            print(f"[secondary_cache] jm_iso_stats failed: {e}")
-
     ex = ThreadPoolExecutor(max_workers=2)
     f1 = ex.submit(_load_pkg_stats)
     f2 = ex.submit(_load_pkg_list)
     f3 = ex.submit(_load_jm_filter_values)
     f6 = ex.submit(_load_daily_report)
-    f7 = ex.submit(_load_jm_iso_stats)
-    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f6,"daily_report"),(f7,"jm_iso_stats")]:
+    for f, name in [(f1,"pkg_stats"),(f2,"pkg_list"),(f3,"jm_filter"),(f6,"daily_report")]:
         try: f.result(timeout=120)
         except Exception as _e: print(f"[secondary_cache] {name} timeout/error: {_e}")
     try:
@@ -1517,7 +1449,7 @@ def _run_cache_clear(scopes):
     scopes(집합)가 무엇을 지울지 정한다. 'joint'=Joint 저장(조인트 유래 캐시), 'support'=Support 저장(지원 집계 캐시),
     'all'=전체. Joint 저장은 지원 집계(_sup_test_cache)와 sub_area 목록을, Support 저장은 조인트 유래 캐시를 바꾸지 않으므로
     보존해 재빌드마다 joint_master 스캔이 다시 도는 것을 피한다."""
-    global _building, _rebuild_pending, _jm_iso_stats_building
+    global _building, _rebuild_pending
     everything = "all" in scopes
     joint = everything or "joint" in scopes
     support = everything or "support" in scopes
@@ -1549,10 +1481,6 @@ def _run_cache_clear(scopes):
             _kpi_override_cache["time"] = 0
             _welder_daily_cache["data"] = None
             _welder_daily_cache["time"] = 0
-            # ISO 통계는 결과를 버리지 않고 만료만 시킨다 — 다음에 그 값을 쓰는 요청이 옛 값을 받으면서
-            # 백그라운드로 새로 계산한다. 버리면 저장(30초 창)마다 재빌드가 전체 스캔을 다시 돌려 메모리가 쌓였다(2026-09-28 OOM 8회).
-            _jm_iso_stats_cache["time"] = 0
-            _jm_iso_stats_building = False
         if support:
             _sup_test_cache["data"] = None
             _sup_test_cache["time"] = 0
@@ -2919,8 +2847,7 @@ def api_support_get():
         smtype  = request.args.get("type",     "").strip()
         phase   = request.args.get("phase",    "").strip()
         pkg     = request.args.get("package", "").strip()
-        search        = request.args.get("search",        "").strip()
-        piping_status = request.args.get("piping_status", "").strip()
+        search  = request.args.get("search",   "").strip()
         q = sb.table("support_master").select("*", count="exact")
         if unit:    q = q.eq("unit",        unit)
         if system:  q = q.eq("system",      system)
@@ -2937,51 +2864,9 @@ def api_support_get():
                 q = q.ilike("type", f"({smtype}-%").not_.ilike("type", f"({smtype}S-%")
         if search:  q = q.or_(f"support_drawing.ilike.%{search}%,iso_drawing.ilike.%{search}%,line_no.ilike.%{search}%")
 
-        iso_stats = _get_jm_iso_stats(force=False)
-
-        # piping_status 필터: joint_master 완료 통계 기반으로 ISO Drawing 목록 제한 (캐시 없으면 건너뜀)
-        qualifying_set = None
-        if piping_status in ("completed", "ongoing") and iso_stats:
-            qualifying_set = {
-                iso for iso, st in iso_stats.items()
-                if st["total"] > 0 and (
-                    (piping_status == "completed" and st["completed"] == st["total"]) or
-                    (piping_status == "ongoing"   and 0 < st["completed"] < st["total"])
-                )
-            }
-            if not qualifying_set:
-                return jsonify({"data": [], "count": 0})
-
-        if qualifying_set is not None:
-            # ISO 목록이 커지면 .in_() 쿼리 문자열이 PostgREST 한도를 넘어 400 오류가 나므로
-            # (수천 건이면 수십 KB) DB에는 다른 필터만 적용해 전량 스캔한 뒤 Python에서
-            # iso_drawing 멤버십 필터 + 정렬 + 페이지네이션을 적용한다.
-            all_rows = []
-            _off = 0
-            q_ordered = q.order("system").order("pipe_size", desc=True).order("id")
-            while True:
-                _page = q_ordered.range(_off, _off + 9999).execute().data or []
-                all_rows.extend(r for r in _page if r.get("iso_drawing") in qualifying_set)
-                if len(_page) < 10000:
-                    break
-                _off += 10000
-            total_count = len(all_rows)
-            sm_rows = all_rows[offset: offset + limit]
-        else:
-            res = _exec_page(q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1))
-            sm_rows = res.data or []
-            total_count = res.count
-
-        # 각 row에 piping_status 필드 추가 (캐시가 없으면 건너뜀)
-        for r in sm_rows:
-            iso = r.get("iso_drawing")
-            st = iso_stats.get(iso) if (iso and iso_stats) else None
-            if not st or st["total"] == 0 or st["completed"] == 0:
-                r["piping_status"] = None
-            elif st["completed"] == st["total"]:
-                r["piping_status"] = "completed"
-            else:
-                r["piping_status"] = "ongoing"
+        res = _exec_page(q.order("system").order("pipe_size", desc=True).order("id").range(offset, offset + limit - 1))
+        sm_rows = res.data or []
+        total_count = res.count
 
         return jsonify({"data": sm_rows, "count": total_count})
     except Exception as e:

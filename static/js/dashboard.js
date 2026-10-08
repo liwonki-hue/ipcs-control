@@ -2697,7 +2697,6 @@ async function loadSupportMaster() {
     const phase   = document.getElementById("sm-phase")?.value   || "";
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
     const search        = document.getElementById("sm-search")?.value?.trim() || "";
-    const pipingStatus  = document.getElementById("sm-piping-status")?.value || "";
     const offset  = smCurrentPage * SM_PAGE_SIZE;
     _tableLoading("smBody", 12);
     try {
@@ -2709,7 +2708,6 @@ async function loadSupportMaster() {
         if (phase)        params.set("phase",          phase);
         if (pkg)          params.set("package",        pkg);
         if (search)       params.set("search",         search);
-        if (pipingStatus) params.set("piping_status",  pipingStatus);
 
         const res = await apiFetch(`/api/support-master?${params}`);
         smData = res.data;
