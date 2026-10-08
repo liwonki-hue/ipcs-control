@@ -775,34 +775,28 @@ async function renderOverview(kpi, wkData, units, systems) {
     } catch(e) { console.error("Overview failed", e); }
 }
 
-// System별 Test Package 완료/미완료 누적 세로 막대 (Overview의 Pressure Test Progress). Package가 없는 System은 빈 칸
+// System별 완료된 Test Package 수 세로 막대 (Overview의 Pressure Test Progress). Package가 없는 System은 빈 칸
+// 전체 Package 목록이 완성되면 전체 대비 완료 %(total은 /api/testpkg-by-system이 이미 내려준다)로 바꿀 예정
 async function renderPressureTestChart(allSystems) {
     const el = document.getElementById("pressureTestBar");
     if (!el) return;
     try {
         const byName = Object.fromEntries(((await apiFetch("/api/testpkg-by-system")).data || []).map(r => [r.system, r]));
         const names = [...new Set([...(allSystems || []).map(s => s.system), ...Object.keys(byName)])].filter(Boolean).sort();
-        const total = names.map(n => byName[n]?.total || 0);
         const done = names.map(n => byName[n]?.completed || 0);
         destroyChart("pressureTestBar");
-        const opts = chartOpts("Packages");
+        const opts = chartOpts("Completed Packages");
         const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
             data: {labels: names, datasets: [
-                {label: "Completed", data: done, backgroundColor: "rgba(37,99,235,0.3)", borderColor: "rgba(37,99,235,0.6)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9, datalabels: {display: false}},
-                {label: "Remaining", data: total.map((t, i) => t - done[i]), backgroundColor: "rgba(148,163,184,0.35)", borderColor: "rgba(148,163,184,0.7)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
-                 datalabels: {display: ctx => total[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#2563eb", font: {weight: "bold", size: 8}, offset: 1, clamp: true,
-                              formatter: (v, ctx) => Math.round(done[ctx.dataIndex] / total[ctx.dataIndex] * 100) + "%"}}
+                {label: "Completed Packages", data: done, backgroundColor: "rgba(37,99,235,0.3)", borderColor: "rgba(37,99,235,0.6)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
+                 datalabels: {display: ctx => done[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#2563eb", font: {weight: "bold", size: 10}, offset: 1, clamp: true}}
             ]},
             options: {...opts, layout: {padding: {top: 14}},
-                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, font: {...tick.font, size: 9}, autoSkip: false, minRotation: 90, maxRotation: 90}},
-                         y: {...opts.scales.y, stacked: true, ticks: {...tick, precision: 0}}},
-                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}},
-                    tooltip: {...opts.plugins.tooltip, callbacks: {
-                        title: items => items[0].label,
-                        label: () => null,
-                        afterBody: items => { const i = items[0].dataIndex; return total[i] ? [`Completed ${done[i]} / ${total[i]} (${Math.round(done[i] / total[i] * 100)}%)`] : ["No package registered"]; }}}}}
+                scales: {x: {...opts.scales.x, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+                         y: {...opts.scales.y, ticks: {...tick, precision: 0}}},
+                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {boxWidth: 12, font: {size: 10}, color: "#475569"}}}}
         });
     } catch (e) { console.error("Pressure test chart failed", e); }
 }

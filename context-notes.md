@@ -207,3 +207,7 @@
 - Weekly DI → Monthly DI Productivity(최근 3개월, `_dashData.monthly` = date_completed 기준, 진행 중인 달은 부분값). 패널 폭 Monthly 1 : Pressure Test 2.
 - Pressure Test Progress: `/api/testpkg-by-system`(test_package_master의 system별 total/completed, 5분 캐시, Test Package PATCH/DELETE·cache clear 시 무효화). 대시보드 System 전체 목록과 합쳐 Package 없는 System은 빈 칸으로 표시. 완료=파란색(Weekly DI 색과 동일), 완료율은 막대 위.
 - 템플릿(index.html)은 Flask가 캐시하므로 로컬 확인 시 서버 재시작 필요.
+
+## 2026-10-08 Pressure Test Progress 임시 형식
+- 전체 Package 목록이 아직 없어 System별 "완료된 Package 개수"만 막대로 표시(막대 위 숫자). 전체 대비 완료 %로 바꿀 예정 — `/api/testpkg-by-system`이 total도 이미 내려주므로 `renderPressureTestChart`만 바꾸면 된다(이전 %/누적 막대 버전은 git 기록 c529e38~45465f0).
+- Package 3곳(JM·Support·Test Package Master)은 같은 날 비움. 신규 등록 시 세 곳 형식 일치(백업은 Reports/).
