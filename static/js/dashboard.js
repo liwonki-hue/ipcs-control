@@ -785,7 +785,7 @@ async function renderPressureTestChart(allSystems) {
         const names = [...new Set([...(allSystems || []).map(s => s.system), ...Object.keys(byName)])].filter(Boolean).sort();
         const done = names.map(n => byName[n]?.completed || 0);
         destroyChart("pressureTestBar");
-        const opts = chartOpts("Completed Packages");
+        const opts = chartOpts();
         const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
