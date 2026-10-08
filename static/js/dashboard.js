@@ -520,17 +520,19 @@ function renderKPI(d, wkData) {
 
     const completedEl    = document.getElementById("kpi-completed");
     const completedSubEl = document.getElementById("kpi-completed-sub");
-    if (completedEl)    completedEl.textContent    = fmtNum(d.completed_di, 0);
+    // 값 옆에 진행률(Completed)·잔여율(Remaining)을 작게 붙여 표시
+    const pctSpan = p => ` <span style="font-size:0.55em;font-weight:600">/ ${p.toFixed(2)}%</span>`;
+    if (completedEl)    completedEl.innerHTML      = fmtNum(d.completed_di, 0) + pctSpan(pipingPct);
     // Fab/Erect 옆 % = 각 공정 전체 DI 대비 비율 (Completed는 진행률, Remaining은 잔여율)
     const fabTot = d.fab_total_di || 0, erectTot = d.erect_total_di || 0;
     const feSeg = (name, v, tot) =>
         `<span class="kpi-sub-seg">${name} ${fmtNum(v,0)}${tot > 0 ? ` (${(v / tot * 100).toFixed(1)}%)` : ""}</span>`;
     if (completedSubEl) completedSubEl.innerHTML = `<div class="kpi-sub-row">${feSeg("Fab", d.fab_di||0, fabTot)}${feSeg("Erect", d.erect_di||0, erectTot)}</div>`;
-    document.getElementById("kpi-remain").textContent = fmtNum(d.remaining_di, 0);
+    document.getElementById("kpi-remain").innerHTML = fmtNum(d.remaining_di, 0) + pctSpan(100 - pipingPct);
     const remainFeRow = (fabTot > 0 || erectTot > 0)
         ? `<div class="kpi-sub-row">${feSeg("Fab", Math.max(0, fabTot - (d.fab_di||0)), fabTot)}${feSeg("Erect", Math.max(0, erectTot - (d.erect_di||0)), erectTot)}</div>`
         : "";
-    document.getElementById("kpi-remain-sub").innerHTML = `<div>${(100 - pipingPct).toFixed(1)}% remaining</div>${remainFeRow}`;
+    document.getElementById("kpi-remain-sub").innerHTML = remainFeRow;
 
     const actWks = (wkData || []).filter(w => w.completed_di > 0);
     const kpiWeekVal = document.getElementById("kpi-week");
