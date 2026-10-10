@@ -216,3 +216,9 @@
 - 원인: `/api/testpkg-joints?status=` 가 joint_master 전체(21칸)를 1만 행씩 읽어 거르고, 조인트 저장마다 캐시가 비워져 동시 6요청이 각자 스캔 → 호출당 +25~35MB 누적(10-09/10 OOM 9회). 상세는 메모리 project_oom_recurring_investigation.
 - 수정: 스캔은 판정 컬럼+id만 읽고 캐시에는 id 목록만 보관, 화면 30행은 id로 재조회. 스캔 락으로 동시 스캔 1회, 스캔 후 `_malloc_trim`, 페이지 5,000행(2,000행은 왕복이 늘어 7s로 느려 제외).
 - 검증(실DB): pending 11,361·completed 6,441 건수·순서·행 내용이 기존 방식과 동일, 동시 6요청 스캔 1회·+5MB, 스캔 +38→+13MB. 리눅스 누적 해소 여부는 배포 후 `[memory] GET /api/testpkg-joints` 로그로 확인할 것.
+
+## 2026-10-10 Small Bore Master 검토 반영(Add/Delete) + VOID 도면 정리
+- 입력: `Raw File/Small_Bore_Master_20260924.xlsx`(사용자가 REMARK에 `Add JM` 984/`Delete JM` 535 기재). 사용자 직접 수정은 S/F 16·DI 13·SIZE 6칸뿐.
+- Add 등록 904건(id 241230~242133, 기록 Reports/JM_Add_SB_inserted_20261010_115821.json): 이미 있는 69건 제외, Size/Mat 빈 11건(5 ISO)은 보류(도면 확인 필요). system은 같은 ISO 기존 값 우선(파일의 FW/DW는 Drawing DB 기준이라 JM의 FGH/CDS 재분류와 달랐음, 78건 보정), sf 빈 칸은 형제값 F, GM1 라인 3건 SS, pwht는 P91=Y 그 외 N, phase는 형제값(Phase 2/EP), package 비어 있음.
+- Delete: 앱 키로 DELETE 불가(RLS) → SQL 생성(`Reports/JM_Delete_A_작업없음_*.sql` 601행, `JM_Delete_B_작업있음_*.sql` 33행: 작업일/용접사/검사일 있는 조인트 = 파일 14 + VOID 19). 백업 `Reports/JM_Delete_backup_*.json`. 대상 = 파일 Delete 532(3건은 JM에 없음) + 현재 VOID 도면 15 ISO 102행. SQL 실행 후 `/api/refresh-db-cache`로 캐시 갱신 필요.
+- 스크립트: `scratch/apply_sb_master_edit.py`(점검/`--insert`), `scratch/analyze_sb_master_edit.py`(읽기 전용 분석).
