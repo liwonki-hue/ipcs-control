@@ -223,3 +223,4 @@
 - Delete: 앱 키로 DELETE 불가(RLS) → SQL 생성(`Reports/JM_Delete_A_작업없음_*.sql` 601행, `JM_Delete_B_작업있음_*.sql` 33행: 작업일/용접사/검사일 있는 조인트 = 파일 14 + VOID 19). 백업 `Reports/JM_Delete_backup_*.json`. 대상 = 파일 Delete 532(3건은 JM에 없음) + 현재 VOID 도면 15 ISO 102행. SQL 실행 후 `/api/refresh-db-cache`로 캐시 갱신 필요.
 - 스크립트: `scratch/apply_sb_master_edit.py`(점검/`--insert`), `scratch/analyze_sb_master_edit.py`(읽기 전용 분석).
 - 보류 11건 중 `CCP-W-B128-PI-140-ST-431-1` #24~27은 사용자가 도면(BOM A106-B/A105=CS, 1" 배관, 2x1 스웨이지 뒤)을 보여줘 CS/1"로 등록(id 242134~242137, `scratch/add_held_from_drawing.py`). 남은 7건(LC-035-2 #27, CWS-033-1 #29, AS-024-1 #20·21, CWS-056-1 #28~30)은 `Reports/JM_보류7건_Size_Mat_입력용_20261010.xlsx`로 도면 확인 대기.
+- 보류 나머지 처리(사용자 확인): CWS-056-1 #28~30=CS/2", LC-035-2 #27=26번과 동일(CS/1"), CWS-033-1 #29=28번과 동일(CS/2"), AS-024-1 #20·21은 도면에 없어 등록 안 함("28·29는 없음"으로 적힌 것을 20·21 오타로 해석, JM엔 1~19번만 있음). 보류 11건 전부 종결.
