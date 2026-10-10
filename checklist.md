@@ -152,3 +152,9 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] 주간 운영 로그로 엔드포인트 사용 빈도 확인 → 안 쓰는 기능·코드 삭제 (`/api/area-field-quantities`만 해당, ed23fa7)
 - [x] 테스트·빌드 확인(scratch 시험 9개 통과) → 커밋 (push는 finish 때)
 - [ ] 배포 후 확인: Render events API로 OOM 0건, `[memory] GET /api/joints` 급등 사라졌는지
+
+## 2026-10-10 testpkg-joints OOM 수정
+- [x] status 스캔을 판정 컬럼+id만 읽고 id만 캐시
+- [x] 같은 조건 동시 스캔 락, 스캔 후 malloc_trim
+- [x] 기존 방식과 결과 동일 검증(실DB)
+- [ ] push(finish) 후 Render events OOM 0건·`mem cur` 하강 확인

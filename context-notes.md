@@ -211,3 +211,8 @@
 ## 2026-10-08 Pressure Test Progress 임시 형식
 - 전체 Package 목록이 아직 없어 System별 "완료된 Package 개수"만 막대로 표시(막대 위 숫자). 전체 대비 완료 %로 바꿀 예정 — `/api/testpkg-by-system`이 total도 이미 내려주므로 `renderPressureTestChart`만 바꾸면 된다(이전 %/누적 막대 버전은 git 기록 c529e38~45465f0).
 - Package 3곳(JM·Support·Test Package Master)은 같은 날 비움. 신규 등록 시 세 곳 형식 일치(백업은 Reports/).
+
+## 2026-10-10 OOM 재발(testpkg-joints status 스캔) 수정
+- 원인: `/api/testpkg-joints?status=` 가 joint_master 전체(21칸)를 1만 행씩 읽어 거르고, 조인트 저장마다 캐시가 비워져 동시 6요청이 각자 스캔 → 호출당 +25~35MB 누적(10-09/10 OOM 9회). 상세는 메모리 project_oom_recurring_investigation.
+- 수정: 스캔은 판정 컬럼+id만 읽고 캐시에는 id 목록만 보관, 화면 30행은 id로 재조회. 스캔 락으로 동시 스캔 1회, 스캔 후 `_malloc_trim`, 페이지 5,000행(2,000행은 왕복이 늘어 7s로 느려 제외).
+- 검증(실DB): pending 11,361·completed 6,441 건수·순서·행 내용이 기존 방식과 동일, 동시 6요청 스캔 1회·+5MB, 스캔 +38→+13MB. 리눅스 누적 해소 여부는 배포 후 `[memory] GET /api/testpkg-joints` 로그로 확인할 것.

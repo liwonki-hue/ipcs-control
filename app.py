@@ -2621,6 +2621,11 @@ def _clear_tp_status_cache():
 _TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,vt_date,vt_result,"
                   "inspection,mt_date,mt_result,pt_date,pt_result,"
                   "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result")
+# 완료 판정(_joint_accepted)에 쓰는 칸만. 전체 스캔은 이 칸 + id만 읽어 메모리를 줄인다.
+_TP_ACCEPT_COLS = ("id,date_completed,inspection,vt_date,vt_result,mt_date,mt_result,pt_date,pt_result,"
+                   "rt_date,rt_result,rt_2_date,rt_2_result,pwht,pwht_result")
+_TP_SCAN_PAGE = 5000        # 한 번에 읽는 행 수(1만=3.5s·+17MB, 5천=4.2s·+13MB, 2천=7s로 왕복이 늘어 느림)
+_tp_scan_lock = threading.Lock()   # 상태 필터 전체 스캔은 한 번에 하나만(같은 요청 동시 6개가 각자 스캔하던 문제)
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
     try:
@@ -2633,8 +2638,8 @@ def api_testpkg_joints():
         iso     = request.args.get("iso",      "").strip()
         insp    = request.args.get("inspection", "").strip()
 
-        def query(count=None):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
-            q = sb.table("joint_master").select(_TP_JOINT_COLS, count=count).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
+        def query(count=None, cols=_TP_JOINT_COLS):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
+            q = sb.table("joint_master").select(cols, count=count).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
             if pkg:    q = q.ilike("package",     f"%{pkg}%")
             if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
             if insp:   q = q.eq("inspection", insp)
@@ -2645,24 +2650,39 @@ def api_testpkg_joints():
             # 완료 기준(_joint_accepted: VT + 지정 NDE(RT 재촬영 포함) + PWHT)은 DB 조건식으로 옮기면 표의 STATUS와
             # 어긋나기 쉬워, 같은 조건의 행을 모두 읽어 같은 함수로 거른 뒤 페이지를 나눈다(예전 필터는 VT만 봐서 159건 불일치).
             want, key = status == "completed", (status, pkg, system, iso, insp)
-            with _lock:
-                hit = _tp_status_cache.get(key)
-            if hit and time.time() - hit[0] < _TP_STATUS_TTL:
-                matched = hit[1]
-            else:
-                matched, off = [], 0
-                while True:
-                    page = query().range(off, off + 9999).execute().data or []
-                    matched += [r for r in page if _joint_accepted(r) == want]
-                    if len(page) < 10000:
-                        break
-                    off += 10000
+
+            def cached_ids():
                 with _lock:
-                    if len(_tp_status_cache) >= 4:        # 조건 조합이 쌓여 메모리를 차지하지 않도록 최근 몇 개만
-                        _tp_status_cache.clear()
-                    _tp_status_cache[key] = (time.time(), matched)
-            rows = [{**r, "status": "Completed" if want else "PENDING"} for r in matched[offset:offset + limit]]
-            return jsonify({"data": rows, "count": len(matched)})
+                    hit = _tp_status_cache.get(key)
+                return hit[1] if hit and time.time() - hit[0] < _TP_STATUS_TTL else None
+
+            ids = cached_ids()
+            if ids is None:
+                with _tp_scan_lock:
+                    ids = cached_ids()      # 락을 기다리는 사이 다른 요청이 이미 스캔했을 수 있다
+                    if ids is None:
+                        ids, off = [], 0
+                        while True:
+                            page = query(cols=_TP_ACCEPT_COLS).range(off, off + _TP_SCAN_PAGE - 1).execute().data or []
+                            ids += [r["id"] for r in page if _joint_accepted(r) == want]
+                            if len(page) < _TP_SCAN_PAGE:
+                                break
+                            off += _TP_SCAN_PAGE
+                        del page
+                        _malloc_trim()
+                        with _lock:
+                            if len(_tp_status_cache) >= 4:        # 조건 조합이 쌓여 메모리를 차지하지 않도록 최근 몇 개만
+                                _tp_status_cache.clear()
+                            _tp_status_cache[key] = (time.time(), ids)
+            # 캐시에는 id만 두고, 화면에 보일 페이지 행만 id로 다시 읽는다(정렬은 id 순서를 따른다)
+            page_ids = ids[offset:offset + limit]
+            by_id = {}
+            if page_ids:
+                got = sb.table("joint_master").select(_TP_JOINT_COLS).in_("id", page_ids).execute().data or []
+                by_id = {r["id"]: r for r in got}
+            label = "Completed" if want else "PENDING"
+            rows = [{**by_id[i], "status": label} for i in page_ids if i in by_id]
+            return jsonify({"data": rows, "count": len(ids)})
 
         res = _exec_page(query("exact").range(offset, offset + limit - 1))
         rows = []
