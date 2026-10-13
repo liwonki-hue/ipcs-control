@@ -1986,7 +1986,7 @@ def api_joints_patch(jid):
             if not weld or not insp:
                 return jsonify({"error": "Weld Date and Inspection must be set before VT Date/Result"}), 400
         sb.table("joint_master").update({**body, **_audit()}).eq("id", jid).execute()
-        _clear_tp_status_cache()
+        _update_tp_status_cache([jid])
         # 여기서 _cache를 비우지 않는다: 프런트가 저장 뒤 /api/cache/clear?scope=joint(디바운스)를 부르는데,
         # 저장마다 캐시를 비우면 다음 대시보드 요청이 디바운스를 우회해 즉시 재빌드를 시작한다.
         return jsonify({"ok": True})
@@ -2037,7 +2037,7 @@ def api_joints_bulk_date():
             updated += len(res.data or [])
             if date_completed:   # 작업일이 들어가면 Inspection 미지정 조인트는 VT 기본값 (이미 지정된 값은 건드리지 않음)
                 sb.table("joint_master").update({"inspection": "VT"}).in_("id", ids[i:i + _BULK_DATE_CHUNK]).is_("inspection", "null").execute()
-        _clear_tp_status_cache()
+        _update_tp_status_cache(ids)
         # PATCH와 마찬가지로 여기서 _cache를 비우지 않는다(프런트가 저장 뒤 /api/cache/clear?scope=joint 호출).
         return jsonify({"ok": True, "updated": updated, "requested": len(ids)})
     except Exception as e:
@@ -2608,14 +2608,70 @@ def _joint_accepted(r):
 
 
 # ── Test Package Joints (joint-level inspection view) ──────────────────
-# Status 필터 결과(전체를 읽어 거르는 데 ~3초) 1분 캐시. 페이지 이동마다 다시 읽지 않도록. 조인트 저장 시 비운다.
+# Status 필터 결과(전체를 읽어 거르는 데 ~4초) 1분 캐시. 항목 = (시각, id 목록, 정렬 키 목록).
+# 조인트 저장 때는 전체를 비우지 않고 저장된 조인트만 제자리에서 다시 판정한다(저장마다 재스캔하면 연속 저장 중 메모리가 호출당 25MB씩 올랐다).
 _tp_status_cache: dict = {}
 _TP_STATUS_TTL = 60
+_tp_gen = 0   # 캐시가 바뀔 때마다 올린다. 스캔 도중 저장이 있었으면 낡은 스캔 결과를 캐시에 넣지 않기 위함
 
 
 def _clear_tp_status_cache():
+    global _tp_gen
     with _lock:
         _tp_status_cache.clear()
+        _tp_gen += 1
+
+
+def _tp_sort_key(r):
+    """화면 정렬(package, iso_drawing, joint_no, id; package NULL은 마지막)과 같은 순서의 키."""
+    return (r.get("package") is None, r.get("package") or "", r.get("iso_drawing") or "", str(r.get("joint_no") or ""), r["id"])
+
+
+def _tp_row_matches(r, key):
+    """조인트 r이 캐시 항목 key(status, package, system, iso, inspection)의 조회 조건에 들어가는지(DB 쿼리 조건과 같은 기준)."""
+    status, pkg, system, iso, insp = key
+    if r.get("package") is None and (r.get("inspection") or "") not in ("VT", "RT", "MT", "PT"):
+        return False
+    if pkg and pkg.lower() not in (r.get("package") or "").lower():
+        return False
+    if iso and iso.lower() not in (r.get("iso_drawing") or "").lower():
+        return False
+    if insp and r.get("inspection") != insp:
+        return False
+    if system and r.get("system") != system:
+        return False
+    return _joint_accepted(r) == (status == "completed")
+
+
+def _update_tp_status_cache(ids):
+    """저장된 조인트(ids)만 캐시에서 다시 판정해 고친다. 많거나 읽기에 실패하면 전체를 비운다(다음 조회가 재스캔)."""
+    global _tp_gen
+    with _lock:
+        if not _tp_status_cache:
+            _tp_gen += 1
+            return
+    try:
+        if not ids or len(ids) > 200:
+            raise ValueError("too many")
+        rows = get_sb().table("joint_master").select(_TP_JOINT_COLS).in_("id", list(ids)).execute().data or []
+        fresh = {r["id"]: r for r in rows}
+        with _lock:
+            for key, (_ts, kid, kkeys) in _tp_status_cache.items():
+                for i in ids:
+                    try:
+                        pos = kid.index(i)
+                        del kid[pos], kkeys[pos]
+                    except ValueError:
+                        pass
+                    r = fresh.get(i)
+                    if r is not None and _tp_row_matches(r, key):
+                        sk = _tp_sort_key(r)
+                        pos = bisect.bisect_left(kkeys, sk)
+                        kid.insert(pos, i)
+                        kkeys.insert(pos, sk)
+            _tp_gen += 1
+    except Exception:
+        _clear_tp_status_cache()
 
 
 _TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,vt_date,vt_result,"
@@ -2624,6 +2680,7 @@ _TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,
 # 완료 판정(_joint_accepted)에 쓰는 칸만. 전체 스캔은 이 칸 + id만 읽어 메모리를 줄인다.
 _TP_ACCEPT_COLS = ("id,date_completed,inspection,vt_date,vt_result,mt_date,mt_result,pt_date,pt_result,"
                    "rt_date,rt_result,rt_2_date,rt_2_result,pwht,pwht_result")
+_TP_SCAN_COLS = _TP_ACCEPT_COLS + ",package,iso_drawing,joint_no"   # 정렬 키 계산용
 _TP_SCAN_PAGE = 5000        # 한 번에 읽는 행 수(1만=3.5s·+17MB, 5천=4.2s·+13MB, 2천=7s로 왕복이 늘어 느림)
 _tp_scan_lock = threading.Lock()   # 상태 필터 전체 스캔은 한 번에 하나만(같은 요청 동시 6개가 각자 스캔하던 문제)
 @app.route("/api/testpkg-joints", methods=["GET"])
@@ -2651,38 +2708,47 @@ def api_testpkg_joints():
             # 어긋나기 쉬워, 같은 조건의 행을 모두 읽어 같은 함수로 거른 뒤 페이지를 나눈다(예전 필터는 VT만 봐서 159건 불일치).
             want, key = status == "completed", (status, pkg, system, iso, insp)
 
-            def cached_ids():
+            def lookup():   # 캐시 적중이면 (전체 건수, 이번 페이지 id)
                 with _lock:
                     hit = _tp_status_cache.get(key)
-                return hit[1] if hit and time.time() - hit[0] < _TP_STATUS_TTL else None
+                    if hit and time.time() - hit[0] < _TP_STATUS_TTL:
+                        return len(hit[1]), hit[1][offset:offset + limit]
+                return None
 
-            ids = cached_ids()
-            if ids is None:
+            found = lookup()
+            if found is None:
                 with _tp_scan_lock:
-                    ids = cached_ids()      # 락을 기다리는 사이 다른 요청이 이미 스캔했을 수 있다
-                    if ids is None:
-                        ids, off = [], 0
+                    found = lookup()      # 락을 기다리는 사이 다른 요청이 이미 스캔했을 수 있다
+                    if found is None:
+                        with _lock:
+                            gen0 = _tp_gen
+                        ids, keys, off = [], [], 0
                         while True:
-                            page = query(cols=_TP_ACCEPT_COLS).range(off, off + _TP_SCAN_PAGE - 1).execute().data or []
-                            ids += [r["id"] for r in page if _joint_accepted(r) == want]
+                            page = query(cols=_TP_SCAN_COLS).range(off, off + _TP_SCAN_PAGE - 1).execute().data or []
+                            for r in page:
+                                if _joint_accepted(r) == want:
+                                    ids.append(r["id"])
+                                    keys.append(_tp_sort_key(r))
                             if len(page) < _TP_SCAN_PAGE:
                                 break
                             off += _TP_SCAN_PAGE
                         del page
                         _malloc_trim()
+                        found = (len(ids), ids[offset:offset + limit])
                         with _lock:
-                            if len(_tp_status_cache) >= 4:        # 조건 조합이 쌓여 메모리를 차지하지 않도록 최근 몇 개만
-                                _tp_status_cache.clear()
-                            _tp_status_cache[key] = (time.time(), ids)
+                            if _tp_gen == gen0:        # 스캔 도중 저장이 있었으면 낡은 결과라 캐시하지 않는다
+                                if len(_tp_status_cache) >= 4:        # 조건 조합이 쌓여 메모리를 차지하지 않도록 최근 몇 개만
+                                    _tp_status_cache.clear()
+                                _tp_status_cache[key] = (time.time(), ids, keys)
+            total, page_ids = found
             # 캐시에는 id만 두고, 화면에 보일 페이지 행만 id로 다시 읽는다(정렬은 id 순서를 따른다)
-            page_ids = ids[offset:offset + limit]
             by_id = {}
             if page_ids:
                 got = sb.table("joint_master").select(_TP_JOINT_COLS).in_("id", page_ids).execute().data or []
                 by_id = {r["id"]: r for r in got}
             label = "Completed" if want else "PENDING"
             rows = [{**by_id[i], "status": label} for i in page_ids if i in by_id]
-            return jsonify({"data": rows, "count": len(ids)})
+            return jsonify({"data": rows, "count": total})
 
         res = _exec_page(query("exact").range(offset, offset + limit - 1))
         rows = []
