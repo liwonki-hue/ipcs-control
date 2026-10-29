@@ -2215,9 +2215,10 @@ function buildEpReportHtml(data, sup) {
 
     // ── 표 ─────────────────────────────────────────────────────────────
     const byKey = (rows, key) => Object.fromEntries((rows || []).map(r => [r[key], r]));
-    const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td><td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p2(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td><td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p2(pctOf(sc, st)) : "–"}</td>`;
+    const rem = (t, c) => { const r = Math.max(0, t - c); return `<td style="color:${r > 0 ? "#c2410c" : "#15803d"};font-weight:700">${n0(r)}</td>`; };
+    const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td>${rem(pt, pc)}<td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p2(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td>${rem(st, sc)}<td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p2(pctOf(sc, st)) : "–"}</td>`;
     const totalRow = (span) => `<tr class="tot"><td colspan="${span}">TOTAL</td>${cells(totDI, doneDI, supTot, supDone)}</tr>`;
-    const head = (firstCols) => `<thead><tr>${firstCols}<th colspan="3">PIPING (D/I)</th><th colspan="3">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>%</th><th>Total</th><th>Done</th><th>%</th></tr></thead>`;
+    const head = (firstCols) => `<thead><tr>${firstCols}<th colspan="4">PIPING (D/I)</th><th colspan="4">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>Remaining</th><th>%</th><th>Total</th><th>Done</th><th>Remaining</th><th>%</th></tr></thead>`;
     const pctDesc = (a, b) => pctOf(b.p.completed_di || 0, b.p.total_di || 0) - pctOf(a.p.completed_di || 0, a.p.total_di || 0);
 
     const supSysMap = byKey(supSys, "system"), pipeSysMap = byKey(systems, "system");
