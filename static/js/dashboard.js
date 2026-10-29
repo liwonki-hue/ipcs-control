@@ -2233,13 +2233,17 @@ function buildEpReportHtml(data, sup) {
     const aRows = [...new Set([...areas.map(r => r.sub_area), ...supArea.map(r => r.sub_area)])]
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
-    // 보고서 표시 순서: FFC #1은 CCWPH #1 다음, PWPS는 FFC #1 다음, FGSS는 RWPS 다음, GT #11은 HRSG #11 PR 다음(맨 끝). 나머지는 위 정렬 유지
-    [["FFC #1", "CCWPH #1"], ["PWPS", "FFC #1"], ["FGSS", "RWPS"], ["GT #11", "HRSG #11 PR"]].forEach(([name, after]) => {
-        const from = aRows.findIndex(r => r.s === name);
-        if (from < 0 || !aRows.some(r => r.s === after)) return;
-        const [row] = aRows.splice(from, 1);
-        aRows.splice(aRows.findIndex(r => r.s === after) + 1, 0, row);
-    });
+    // 보고서 Area 표시 순서: CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외 → PR #3~#7(번호순) → MB STR → HRSG #11 PR → GT #11(맨 끝)
+    const used = new Set();
+    const pick = rows => rows.filter(r => !used.has(r.s) && used.add(r.s));
+    const byName = names => pick(names.map(n => aRows.find(r => r.s === n)).filter(Boolean));
+    const firstRows = byName(["CCWPH #1", "FFC #1", "FGSS"]);
+    const psRows = pick(aRows.filter(r => /PS$/.test(r.s)));
+    const tkRows = pick(aRows.filter(r => /TK$/.test(r.s)));
+    const prRows = pick(aRows.filter(r => /^PR #\d+$/.test(r.s)).sort((x, y) => parseInt(x.s.slice(4)) - parseInt(y.s.slice(4))));
+    const tail = byName(["MB STR", "HRSG #11 PR", "GT #11"]);
+    const others = pick(aRows);
+    aRows.splice(0, aRows.length, ...firstRows, ...psRows, ...tkRows, ...others, ...prRows, ...tail);
     const half = Math.ceil(aRows.length / 2);
     const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2">AREA</th>')}<tbody>`
         + rows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
