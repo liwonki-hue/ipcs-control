@@ -1015,9 +1015,9 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         }
 
         if(weekly && weekly.length > 0) {
-            // EP Target = week 40 (2026-12-30). Show all weeks 1-40 on x-axis.
-            const EP_TARGET_WK = 40;
-            const wkView = weekly.slice(0, EP_TARGET_WK); // weeks 1..40
+            // EP Target = week 39 (2026-12-22). Show all weeks 1-39 on x-axis.
+            const EP_TARGET_WK = 39;
+            const wkView = weekly.slice(0, EP_TARGET_WK); // weeks 1..39
 
             const epDateBar = document.getElementById("epScurveDateBar");
             if (epDateBar && wkView.length > 0) {
@@ -1050,7 +1050,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
             const lastEpActIdx = wkView.reduce((last, w, i) => w.completed_di > 0 ? i : last, -1);
             // Cumulative actual: show up to last active week, null after
             const cumulData = wkView.map((w, i) => i <= lastEpActIdx ? w.cumul_actual : null);
-            // EP Target S-Curve: cubic smoothstep over 40 weeks (same logic as Overview)
+            // EP Target S-Curve: cubic smoothstep over 39 weeks (same logic as Overview)
             const epPlanSCurve = wkView.map((_, i) => {
                 if (d_total_di <= 0) return null;
                 const t = i / (wkView.length - 1);
