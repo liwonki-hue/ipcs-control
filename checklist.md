@@ -158,3 +158,11 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] 같은 조건 동시 스캔 락, 스캔 후 malloc_trim
 - [x] 기존 방식과 결과 동일 검증(실DB)
 - [ ] push(finish) 후 Render events OOM 0건·`mem cur` 하강 확인
+
+# Checklist — Early Power 임원 보고용 1페이지 Report (2026-10-29)
+- [x] EP 헤더에 Report 버튼 추가 (Export Excel / Print 옆)
+- [x] `buildEpReportHtml(data, sup)` — A4 가로 1페이지: 헤더·KPI 줄·S-Curve(SVG)·System 표·Sub Area 표
+- [x] `epReport()` — 새 창에 열어 자동 인쇄(PDF 저장 가능), 팝업 차단 시 안내
+- [x] EP 목표 주/날짜 상수화(`EP_TARGET_WK`=39, `EP_TARGET_DATE`) — 화면 S-Curve와 보고서가 같은 값 사용
+- [x] 로컬 검증: 보고서 HTML이 A4 가로 1페이지에 들어가는지(PDF 쪽수), 수치가 EP 탭과 일치
+- [x] dashboard.js 캐시 버전(v=) 올림, 커밋 (push는 finish 후)

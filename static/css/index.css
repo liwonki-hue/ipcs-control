@@ -151,6 +151,8 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 .btn-de-export:hover { background: rgba(34,211,161,0.18); }
 .btn-de-print  { background: rgba(74,96,128,0.15); border-color: var(--muted); color: var(--text-dim); }
 .btn-de-print:hover  { background: rgba(74,96,128,0.28); color: var(--text); }
+.btn-de-report { background: rgba(37,99,235,0.12); border-color: var(--accent); color: var(--accent); }
+.btn-de-report:hover { background: rgba(37,99,235,0.25); }
 .kpi-bar-wrap { height: 3px; background: var(--border); border-radius: 2px; margin: 6px 0 3px; overflow: hidden; }
 .kpi-bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #3b82f6); border-radius: 2px; transition: width 0.8s ease; }
 

@@ -232,3 +232,9 @@
 - 수정: 캐시 항목을 (시각, id 목록, 정렬 키 목록)으로 바꾸고, PATCH /api/joints/<id>·bulk-date(200건 이하)는 저장된 조인트만 다시 판정해 제자리에서 빼고 넣는다(`_update_tp_status_cache`). 정렬 키는 (package NULL 마지막, package, iso, joint_no 문자열, id). 200건 초과·읽기 실패 시 기존처럼 전체 비움. 스캔 도중 저장이 있었으면 낡은 스캔은 캐시하지 않음(`_tp_gen`). TTL 60초마다 전체 재스캔으로 자가 보정.
 - 검증: 가짜 DB 무작위 3,000회 변경 후 전체 재판정과 불일치 0, 실DB에서 150건 제거·재삽입 후 순서 동일(파이썬 정렬 == DB 정렬), 저장 20회+조회 20회에 재스캔 0(테스트 `scratch/test_tp_cache_update.py`).
 - 주의: 이 캐시를 쓰는 조회 조건(package/iso ilike)은 `%`·`_` 와일드카드를 DB처럼 해석하지 않고 부분 문자열로만 판정한다(다음 스캔에서 보정).
+
+## 2026-10-29 EP 임원 보고용 Report 버튼
+- 형식: 새 창에 자체 HTML을 써서 `window.print()` — 서버 PDF 생성/새 라이브러리 없이 브라우저 인쇄·PDF 저장으로 해결. 팝업은 클릭 직후 먼저 열고(차단 방지) 데이터 로드 후 채움.
+- S-Curve는 Chart.js 캔버스 대신 인라인 SVG로 직접 그림(흰 배경 인쇄에서 선명하고 EP 탭 차트의 다크 색상에 의존하지 않음). 계획선은 화면과 같은 smoothstep 39주.
+- 데이터는 EP 탭과 같은 출처(`getDashData()`의 ep_sys/ep_area/ep_weekly/ep_kpi + `/api/ep-support-summary`)라 화면 수치와 일치. Readiness = Piping 70% + Support 20% + Test Pkg 10%(화면과 동일).
+- 임원용 추가 지표는 2개만: 목표까지 남은 일수, 필요 주간 DI vs 최근 4주 평균.
