@@ -238,3 +238,4 @@
 - S-Curve는 Chart.js 캔버스 대신 인라인 SVG로 직접 그림(흰 배경 인쇄에서 선명하고 EP 탭 차트의 다크 색상에 의존하지 않음). 계획선은 화면과 같은 smoothstep 39주.
 - 데이터는 EP 탭과 같은 출처(`getDashData()`의 ep_sys/ep_area/ep_weekly/ep_kpi + `/api/ep-support-summary`)라 화면 수치와 일치. Readiness = Piping 70% + Support 20% + Test Pkg 10%(화면과 동일).
 - 임원용 추가 지표는 2개만: 목표까지 남은 일수, 필요 주간 DI vs 최근 4주 평균.
+- 2026-10-29 수정: 제목을 `GT #11 Only`로, Target Date는 빨간 굵은 글씨(경보 용도, EP 탭 헤더·보고서 공통). 보고서 표 값 가운데 정렬, Sub Area 표는 `Progress by Area (1)/(2)`로 바꾸고 Area 열 삭제(정렬은 내부적으로 실제 Area 순서 유지), 하단에 KEY WORKS / ISSUES 입력 표(5행, 클릭해 직접 입력 후 인쇄 — 저장은 안 함). 인쇄 높이 670px(한계 733px).

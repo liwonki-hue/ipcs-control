@@ -2176,7 +2176,7 @@ function buildEpReportHtml(data, sup) {
     const actPct = lastIdx >= 0 ? pctOf(wk[lastIdx].cumul_actual || 0, totDI) : 0;
     const diff = actPct - planPct;
 
-    const W = 620, H = 235, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
+    const W = 620, H = 195, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
     const step = totDI > 20000 ? 5000 : totDI > 8000 ? 2000 : 1000;
     const maxL = Math.max(step, Math.ceil(totDI / step) * step);
     const maxWk = Math.max(1, ...wk.map(w => w.completed_di || 0));
@@ -2233,9 +2233,9 @@ function buildEpReportHtml(data, sup) {
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
     const half = Math.ceil(aRows.length / 2);
-    const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2" style="text-align:left">AREA</th><th rowspan="2" style="text-align:left">SUB AREA</th>')}<tbody>`
-        + rows.map(r => `<tr><td style="text-align:left;color:#64748b">${esc(r.area)}</td><td style="text-align:left">${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
-        + (withTotal ? totalRow(2) : "") + `</tbody></table>`;
+    const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2" style="text-align:left">AREA</th>')}<tbody>`
+        + rows.map(r => `<tr><td style="text-align:left">${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
+        + (withTotal ? totalRow(1) : "") + `</tbody></table>`;
 
     const asOf = lastIdx >= 0 ? `W${wk[lastIdx].week_no}` : "–";
     const kp = (label, val, sub, col) => `<div class="kpi"><div class="kl">${label}</div><div class="kv" style="color:${col}">${val}</div><div class="ks">${sub}</div></div>`;
@@ -2247,6 +2247,7 @@ function buildEpReportHtml(data, sup) {
 *{box-sizing:border-box}
 body{margin:0;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
+.alert{color:#dc2626;font-weight:700;font-size:12px}
 .top h1{margin:0;font-size:18px;color:#1e3a8a}.top .meta{font-size:10px;color:#475569;text-align:right;line-height:1.5}
 .kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:7px 0}
 .kpi{border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px}.kl{font-size:8px;color:#64748b;letter-spacing:.4px}
@@ -2255,15 +2256,16 @@ body{margin:0;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit
 h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
 .pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:3px;padding-top:3px}
 table{width:100%;border-collapse:collapse;font-size:9px}
-th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:right;color:#334155}
-td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:right}
+th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:center;color:#334155}
+td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
 .sub{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
+.notes{margin-top:8px}.notes td{height:24px;text-align:left;font-size:9px;padding:2px 6px}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
 .foot{margin-top:6px;font-size:7.5px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:3px;display:flex;justify-content:space-between}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
-<div class="top"><h1>Early Power (GT #11) &mdash; Progress Report</h1><div class="meta">Target Date: <b>${EP_TARGET_DATE}</b> &nbsp;|&nbsp; D-${Math.max(daysLeft, 0)}<br>Report Date: ${stamp} &nbsp;|&nbsp; Progress as of ${asOf}</div><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
+<div class="top"><h1>GT #11 Only &mdash; Progress Report</h1><div class="meta"><span class="alert">Target Date: ${EP_TARGET_DATE} &nbsp;|&nbsp; D-${Math.max(daysLeft, 0)}</span><br>Report Date: ${stamp} &nbsp;|&nbsp; Progress as of ${asOf}</div><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
 <div class="kpis">
 ${kp("EP READINESS", p2(readiness), "Piping 70% · Support 20% · Test Pkg 10%", pcol(readiness))}
 ${kp("PIPING D/I", p2(pipePct), `${n0(doneDI)} / ${n0(totDI)} DI`, pcol(pipePct))}
@@ -2277,7 +2279,8 @@ ${kp("REMAINING D/I", n0(remDI), `${p2(100 - pipePct)} of EP piping scope`, "#c2
 <div class="pace"><span>Required pace: <b>${reqPace != null ? n0(reqPace) + " DI/wk" : "–"}</b></span><span>Recent 4-wk avg: <b style="color:${paceOk ? "#15803d" : "#b91c1c"}">${n0(avgPace)} DI/wk</b></span><span>Weeks to target: <b>${daysLeft > 0 ? weeksLeft : 0}</b></span></div></div>
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
-<div class="sub"><div><h2>Progress by EP Sub Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by EP Sub Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
+<div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
+<div class="notes"><table><thead><tr><th style="width:50%">KEY WORKS</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(5)}</tbody></table></div>
 <div class="foot"><span>IPCS Control &mdash; Early Power scope = phase EP. Piping in D/I, Support in EA.</span><span>Confidential</span></div>
 </body></html>`;
 }
