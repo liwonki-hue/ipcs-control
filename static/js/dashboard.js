@@ -2176,7 +2176,7 @@ function buildEpReportHtml(data, sup) {
     const actPct = lastIdx >= 0 ? pctOf(wk[lastIdx].cumul_actual || 0, totDI) : 0;
     const diff = actPct - planPct;
 
-    const W = 620, H = 225, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
+    const W = 620, H = 215, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
     const step = totDI > 20000 ? 5000 : totDI > 8000 ? 2000 : 1000;
     const maxL = Math.max(step, Math.ceil(totDI / step) * step);
     const maxWk = Math.max(1, ...wk.map(w => w.completed_di || 0));
@@ -2216,15 +2216,15 @@ function buildEpReportHtml(data, sup) {
     // ── 표 ─────────────────────────────────────────────────────────────
     const byKey = (rows, key) => Object.fromEntries((rows || []).map(r => [r[key], r]));
     const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td><td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p2(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td><td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p2(pctOf(sc, st)) : "–"}</td>`;
-    const totalRow = (span) => `<tr class="tot"><td colspan="${span}" style="text-align:left">TOTAL</td>${cells(totDI, doneDI, supTot, supDone)}</tr>`;
+    const totalRow = (span) => `<tr class="tot"><td colspan="${span}">TOTAL</td>${cells(totDI, doneDI, supTot, supDone)}</tr>`;
     const head = (firstCols) => `<thead><tr>${firstCols}<th colspan="3">PIPING (D/I)</th><th colspan="3">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>%</th><th>Total</th><th>Done</th><th>%</th></tr></thead>`;
     const pctDesc = (a, b) => pctOf(b.p.completed_di || 0, b.p.total_di || 0) - pctOf(a.p.completed_di || 0, a.p.total_di || 0);
 
     const supSysMap = byKey(supSys, "system"), pipeSysMap = byKey(systems, "system");
     const sRows = [...new Set([...systems.map(r => r.system), ...supSys.map(r => r.system)])]
         .map(s => ({ s, p: pipeSysMap[s] || {}, q: supSysMap[s] || {} })).sort(pctDesc);
-    const sysHtml = `<table>${head('<th rowspan="2" style="text-align:left">SYSTEM</th>')}<tbody>`
-        + sRows.map(r => `<tr><td style="text-align:left">${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
+    const sysHtml = `<table>${head('<th rowspan="2">SYSTEM</th>')}<tbody>`
+        + sRows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
         + totalRow(1) + `</tbody></table>`;
 
     const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"], rank = a => { const i = AREA_ORDER.indexOf(a); return i < 0 ? 99 : i; };
@@ -2233,8 +2233,8 @@ function buildEpReportHtml(data, sup) {
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
     const half = Math.ceil(aRows.length / 2);
-    const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2" style="text-align:left">AREA</th>')}<tbody>`
-        + rows.map(r => `<tr><td style="text-align:left">${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
+    const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2">AREA</th>')}<tbody>`
+        + rows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
         + (withTotal ? totalRow(1) : "") + `</tbody></table>`;
 
     const asOf = lastIdx >= 0 ? `W${wk[lastIdx].week_no}` : "–";
@@ -2245,25 +2245,25 @@ function buildEpReportHtml(data, sup) {
     return `<!doctype html><html><head><meta charset="utf-8"><title>Early Power Progress Report</title><style>
 @page{size:A4 landscape;margin:8mm}
 *{box-sizing:border-box}
-body{margin:0;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{margin:0;display:flex;flex-direction:column;height:192mm;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .top{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
 .alert{color:#dc2626;font-weight:700;font-size:12px}
 .top h1{margin:0;font-size:18px;color:#1e3a8a}.top .meta{font-size:10px;color:#475569;text-align:right;line-height:1.5}
-.kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:7px 0}
+.kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:9px 0 14px}
 .kpi{border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px}.kl{font-size:8px;color:#64748b;letter-spacing:.4px}
 .kv{font-size:19px;font-weight:700;line-height:1.25}.ks{font-size:8px;color:#475569}
-.mid{display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
+.mid{flex:1.3;display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
 .mid>div{display:flex;flex-direction:column}.mid>div>table{flex:1}
 @media screen{body{max-width:1047px;margin:0 auto;padding:8px}}
 h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
-.pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:3px;padding-top:3px}
+.pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:auto;padding-top:3px}
 table{width:100%;border-collapse:collapse;font-size:9px}
 th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:center;color:#334155}
 td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
-.sub{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px}
-.notes{margin-top:8px}.notes td{height:24px;text-align:left;font-size:9px;padding:2px 6px}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
-.foot{margin-top:6px;font-size:7.5px;color:#64748b;border-top:1px solid #e2e8f0;padding-top:3px;display:flex;justify-content:space-between}
+.sub{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
+.sub>div{display:flex;flex-direction:column}.sub>div>table{flex:1}
+.notes{flex:.8;display:flex;flex-direction:column;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}.notes>table{flex:1}.notes td{height:24px;text-align:left;font-size:9px;padding:2px 6px}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
@@ -2282,8 +2282,7 @@ ${kp("REMAINING D/I", n0(remDI), `${p2(100 - pipePct)} of EP piping scope`, "#c2
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
 <div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
-<div class="notes"><table><thead><tr><th style="width:50%">KEY WORKS</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(5)}</tbody></table></div>
-<div class="foot"><span>IPCS Control &mdash; Early Power scope = phase EP. Piping in D/I, Support in EA.</span><span>Confidential</span></div>
+<div class="notes"><h2>Key Works &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY WORKS</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(4)}</tbody></table></div>
 </body></html>`;
 }
 
