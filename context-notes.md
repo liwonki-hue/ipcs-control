@@ -239,3 +239,4 @@
 - 데이터는 EP 탭과 같은 출처(`getDashData()`의 ep_sys/ep_area/ep_weekly/ep_kpi + `/api/ep-support-summary`)라 화면 수치와 일치. Readiness = Piping 70% + Support 20% + Test Pkg 10%(화면과 동일).
 - 임원용 추가 지표는 2개만: 목표까지 남은 일수, 필요 주간 DI vs 최근 4주 평균.
 - 2026-10-29 수정: 제목을 `GT #11 Only`로, Target Date는 빨간 굵은 글씨(경보 용도, EP 탭 헤더·보고서 공통). 보고서 표 값 가운데 정렬, Sub Area 표는 `Progress by Area (1)/(2)`로 바꾸고 Area 열 삭제(정렬은 내부적으로 실제 Area 순서 유지), 하단에 KEY WORKS / ISSUES 입력 표(5행, 클릭해 직접 입력 후 인쇄 — 저장은 안 함). 인쇄 높이 670px(한계 733px).
+- 2026-10-29 Test Package Register에 Phase 열 추가(`test_package_master.phase`, DDL은 앱 키로 불가해 사용자가 SQL Editor에서 실행: `Reports/test_package_phase_20261029.sql`). 9건 모두 EP. EP 탭·보고서의 Test Package는 phase=EP인 것만 집계(`/api/ep-support-summary`의 testpkg_total/comp, 전체 KPI와 분리). Register에서 Phase는 `-`/`EP`/`Phase 2` 선택 후 Save, Sync는 JM의 phase를 가져옴. 검증: id 67을 완료로 바꾸니 EP 탭 1/9(11.11%)·Readiness 64.14%·보고서 반영, 이후 원복.

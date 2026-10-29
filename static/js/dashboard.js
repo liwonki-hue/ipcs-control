@@ -840,9 +840,10 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
-        const testpkg_pct  = kpi ? parseFloat((kpi.testpkg_pct  || 0).toFixed(2)) : 0;
-        const test_comp    = kpi ? (kpi.testpkg_comp  || 0) : 0;
-        const test_tot     = kpi ? (kpi.testpkg_total || 0) : 0;
+        // Test Package는 Test Package Register에서 Phase=EP로 등록된 것만 집계
+        const test_comp    = sup ? (sup.testpkg_comp  || 0) : 0;
+        const test_tot     = sup ? (sup.testpkg_total || 0) : 0;
+        const testpkg_pct  = test_tot > 0 ? parseFloat((test_comp / test_tot * 100).toFixed(2)) : 0;
         const readiness_pct = parseFloat((pct * 0.7 + support_pct * 0.2 + testpkg_pct * 0.1).toFixed(2));
 
         const _setKpi = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
@@ -2164,8 +2165,7 @@ function buildEpReportHtml(data, sup) {
     const supSys = sup.sys || [], supArea = sup.area || [], subareaMap = sup.subarea_map || {};
     const totDI = sum(systems, "total_di"), doneDI = sum(systems, "completed_di"), pipePct = pctOf(doneDI, totDI);
     const supTot = sum(supSys, "total_di"), supDone = sum(supSys, "completed_di"), supPct = pctOf(supDone, supTot);
-    const kpi = data.kpi || {};
-    const testPct = kpi.testpkg_pct || 0, testComp = kpi.testpkg_comp || 0, testTot = kpi.testpkg_total || 0;
+    const testComp = sup.testpkg_comp || 0, testTot = sup.testpkg_total || 0, testPct = pctOf(testComp, testTot);
     const readiness = pipePct * 0.7 + supPct * 0.2 + testPct * 0.1;
 
     // ── S-Curve (화면의 EP S-Curve와 같은 39주 smoothstep 계획선) ─────────
@@ -3396,7 +3396,7 @@ function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="16" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
         return;
     }
     const iopt = v => v ? ` selected` : "";
@@ -3432,6 +3432,13 @@ function renderTMTable(data) {
         </div>`;
         return `<tr${_lastUpdatedTitle(r)}>
             <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
+            <td style="text-align:center">
+                <select class="cell-input" id="tm-phase-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff;${fnt}">
+                    <option value=""${iopt(!r.phase)} style="color:#000">-</option>
+                    <option value="EP"${iopt(r.phase==="EP")} style="color:#000">EP</option>
+                    <option value="Phase 2"${iopt(r.phase==="Phase 2")} style="color:#000">Phase 2</option>
+                </select>
+            </td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
             <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(1, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
@@ -3488,6 +3495,7 @@ async function saveTMRow(id) {
     const dateVal   = _fullDateVal(`tm-date-${id}`);
     const completed = resultVal === "PASS";
     const payload = {
+        phase:           document.getElementById(`tm-phase-${id}`)?.value          || null,
         design_pressure: document.getElementById(`tm-dp-${id}`)?.value?.trim()     || null,
         test_pressure:   document.getElementById(`tm-tp-${id}`)?.value?.trim()     || null,
         method:          document.getElementById(`tm-method-${id}`)?.value          || null,
@@ -3504,6 +3512,7 @@ async function saveTMRow(id) {
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Save failed");
         toast("Saved");
+        _epSupportData = null;   // EP 탭의 Test Package 집계를 다시 읽게 한다
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }
@@ -3515,6 +3524,7 @@ async function deleteTMRow(id) {
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Delete failed");
         toast("Deleted");
+        _epSupportData = null;
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }
@@ -3526,6 +3536,7 @@ async function syncTestMaster() {
         const data = await res.json();
         if (!res.ok || !data.ok) throw new Error(data.error || "Sync failed");
         toast(`Sync complete: ${data.inserted} newly registered (${data.total} total)`);
+        _epSupportData = null;
         loadTestMaster();
     } catch(e) { toast(e.message, "error"); }
 }

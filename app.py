@@ -2923,7 +2923,16 @@ def api_ep_support_summary():
             area_map.setdefault(sa, {"sub_area": sa, "area": ar, "total_di": 0, "completed_di": 0})
             area_map[sa]["total_di"] += 1; area_map[sa]["completed_di"] += comp
             if sa and ar: subarea_map[sa] = ar
-        result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map}
+        # EP로 등록된 Test Package(test_package_master.phase = 'EP') 집계 — phase 열이 아직 없으면 0으로 처리
+        tp_total = tp_comp = 0
+        try:
+            tp = sb.table("test_package_master").select("completed").eq("phase", "EP").execute().data or []
+            tp_total = len(tp)
+            tp_comp = sum(1 for r in tp if r.get("completed"))
+        except Exception as e:
+            print(f"[ep-support-summary] test package phase unavailable: {e}")
+        result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
+                  "testpkg_total": tp_total, "testpkg_comp": tp_comp}
         with _lock:
             _ep_sup_cache["data"] = result
             _ep_sup_cache["time"] = time.time()
@@ -3327,6 +3336,7 @@ def api_testpkg_patch(rid):
         with _lock:
             _cache.clear()
             _pkg_stats_cache.clear()
+            _ep_sup_cache.clear()
             _testpkg_all_cache["data"] = None
             _tp_sys_cache["data"] = None
         return jsonify({"ok": True})
@@ -3341,6 +3351,7 @@ def api_testpkg_delete(rid):
         with _lock:
             _cache.clear()
             _pkg_stats_cache.clear()
+            _ep_sup_cache.clear()
             _testpkg_all_cache["data"] = None
             _testpkg_all_cache["time"] = 0
             _tp_sys_cache["data"] = None
@@ -3364,7 +3375,7 @@ def api_testpkg_sync():
 
         pkgs, off = [], 0
         while True:
-            r = sb.table("joint_master").select("system,sub_area,package") \
+            r = sb.table("joint_master").select("system,sub_area,package,phase") \
                     .not_.is_("package", "null").order("id").range(off, off + 9999).execute()
             pkgs.extend(r.data or [])
             if len(r.data or []) < 10000: break
@@ -3375,12 +3386,12 @@ def api_testpkg_sync():
         for row in pkgs:
             key = (row.get("system") or "", row.get("package") or "")
             if key[1] and key not in seen:
-                seen[key] = row.get("sub_area") or ""
+                seen[key] = (row.get("sub_area") or "", row.get("phase") or None)
         del pkgs
 
         to_insert = [
-            {"system": sys, "sub_area": sub, "test_pkg_no": pkg, "completed": False}
-            for (sys, pkg), sub in seen.items()
+            {"system": sys, "sub_area": sub, "phase": ph, "test_pkg_no": pkg, "completed": False}
+            for (sys, pkg), (sub, ph) in seen.items()
             if (sys, pkg) not in existing_set
         ]
 
@@ -3390,7 +3401,9 @@ def api_testpkg_sync():
             inserted += len(res.data or [])
         del to_insert
 
-        with _lock: _cache.clear()
+        with _lock:
+            _cache.clear()
+            _ep_sup_cache.clear()
         return jsonify({"ok": True, "inserted": inserted, "total": len(seen)})
     except Exception as e:
         print(f"[testpkg-sync] Error: {e}")
