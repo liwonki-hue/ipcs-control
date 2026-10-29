@@ -2158,7 +2158,7 @@ function buildEpReportHtml(data, sup) {
     const sum = (rows, k) => (rows || []).reduce((s, r) => s + (r[k] || 0), 0);
     const pctOf = (c, t) => t > 0 ? c / t * 100 : 0;
     const pcol = v => v >= 80 ? "#15803d" : v >= 50 ? "#b45309" : "#c2410c";
-    const n0 = v => fmtNum(v, 0), p2 = v => `${v.toFixed(2)}%`;
+    const n0 = v => fmtNum(v, 0), p1 = v => `${v.toFixed(1)}%`;
 
     const systems = data.ep_sys || [], areas = data.ep_area || [], weekly = data.ep_weekly || [];
     const supSys = sup.sys || [], supArea = sup.area || [], subareaMap = sup.subarea_map || {};
@@ -2216,9 +2216,9 @@ function buildEpReportHtml(data, sup) {
     // ── 표 ─────────────────────────────────────────────────────────────
     const byKey = (rows, key) => Object.fromEntries((rows || []).map(r => [r[key], r]));
     const rem = (t, c) => { const r = Math.max(0, t - c); return `<td style="color:${r > 0 ? "#c2410c" : "#15803d"};font-weight:700">${n0(r)}</td>`; };
-    const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td>${rem(pt, pc)}<td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p2(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td>${rem(st, sc)}<td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p2(pctOf(sc, st)) : "–"}</td>`;
+    const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td>${rem(pt, pc)}<td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p1(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td>${rem(st, sc)}<td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p1(pctOf(sc, st)) : "–"}</td>`;
     const totalRow = (span) => `<tr class="tot"><td colspan="${span}">TOTAL</td>${cells(totDI, doneDI, supTot, supDone)}</tr>`;
-    const head = (firstCols) => `<thead><tr>${firstCols}<th colspan="4">PIPING (D/I)</th><th colspan="4">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>Remaining</th><th>%</th><th>Total</th><th>Done</th><th>Remaining</th><th>%</th></tr></thead>`;
+    const head = (firstCols) => `<colgroup><col style="width:19%">${"<col>".repeat(8)}</colgroup><thead><tr>${firstCols}<th colspan="4">PIPING (D/I)</th><th colspan="4">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>Balance</th><th>%</th><th>Total</th><th>Done</th><th>Balance</th><th>%</th></tr></thead>`;
     const pctDesc = (a, b) => pctOf(b.p.completed_di || 0, b.p.total_di || 0) - pctOf(a.p.completed_di || 0, a.p.total_di || 0);
 
     const supSysMap = byKey(supSys, "system"), pipeSysMap = byKey(systems, "system");
@@ -2258,7 +2258,7 @@ body{margin:0;display:flex;flex-direction:column;height:192mm;font-family:Arial,
 @media screen{body{max-width:1047px;margin:0 auto;padding:8px}}
 h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
 .pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:auto;padding-top:3px}
-table{width:100%;border-collapse:collapse;font-size:9px}
+table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9px}
 th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:center;color:#334155}
 td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
@@ -2268,14 +2268,14 @@ tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
-<div class="top"><h1>GT #11 Only &mdash; Progress Report</h1><div class="meta"><span class="alert">Target Date: ${EP_TARGET_DATE} &nbsp;|&nbsp; D-${Math.max(daysLeft, 0)}</span><br>Report Date: ${stamp} &nbsp;|&nbsp; Progress as of ${asOf}</div><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
+<div class="top"><h1>Early Power (GT #11 Only) &mdash; Progress Report</h1><div class="meta"><span class="alert">Target Date: ${EP_TARGET_DATE} &nbsp;|&nbsp; D-${Math.max(daysLeft, 0)}</span><br>Report Date: ${stamp} &nbsp;|&nbsp; Progress as of ${asOf}</div><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
 <div class="kpis">
-${kp("EP READINESS", p2(readiness), "Piping 70% · Support 20% · Test Pkg 10%", pcol(readiness))}
-${kp("PIPING D/I", p2(pipePct), `${n0(doneDI)} / ${n0(totDI)} DI`, pcol(pipePct))}
-${kp("SUPPORT", p2(supPct), `${n0(supDone)} / ${n0(supTot)} EA`, pcol(supPct))}
-${kp("TEST PACKAGE", p2(testPct), testTot > 0 ? `${n0(testComp)} / ${n0(testTot)}` : "–", pcol(testPct))}
-${kp("PLAN vs ACTUAL", `${diff >= 0 ? "+" : ""}${diff.toFixed(2)}%`, `Plan ${p2(planPct)} · Actual ${p2(actPct)}`, diff >= 0 ? "#1d4ed8" : "#b91c1c")}
-${kp("REMAINING D/I", n0(remDI), `${p2(100 - pipePct)} of EP piping scope`, "#c2410c")}
+${kp("EP READINESS", p1(readiness), "Piping 70% · Support 20% · Test Pkg 10%", pcol(readiness))}
+${kp("PIPING D/I", p1(pipePct), `${n0(doneDI)} / ${n0(totDI)} DI`, pcol(pipePct))}
+${kp("SUPPORT", p1(supPct), `${n0(supDone)} / ${n0(supTot)} EA`, pcol(supPct))}
+${kp("TEST PACKAGE", p1(testPct), testTot > 0 ? `${n0(testComp)} / ${n0(testTot)}` : "–", pcol(testPct))}
+${kp("PLAN vs ACTUAL", `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`, `Plan ${p1(planPct)} · Actual ${p1(actPct)}`, diff >= 0 ? "#1d4ed8" : "#b91c1c")}
+${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2410c")}
 </div>
 <div class="mid">
 <div><h2>EP S-Curve &mdash; Target vs Actual (until ${EP_TARGET_DATE})</h2>${svg}
