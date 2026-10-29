@@ -806,6 +806,21 @@ async function renderPressureTestChart(allSystems) {
 // ================================================================================
 //  EARLY POWER OVERVIEW
 // ================================================================================
+// EP Area(Sub Area) 표시 순서 — EP 탭과 보고서가 같은 규칙을 쓴다.
+// CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외(입력 순서 유지) → PR #n(번호순) → MB STR → HRSG #11 PR → GT #11(맨 끝)
+function orderEpAreaRows(rows, nameOf) {
+    const used = new Set();
+    const pick = list => list.filter(r => !used.has(nameOf(r)) && used.add(nameOf(r)));
+    const byName = names => pick(names.map(n => rows.find(r => nameOf(r) === n)).filter(Boolean));
+    const firstRows = byName(["CCWPH #1", "FFC #1", "FGSS"]);
+    const psRows = pick(rows.filter(r => /PS$/.test(nameOf(r))));
+    const tkRows = pick(rows.filter(r => /TK$/.test(nameOf(r))));
+    const prRows = pick(rows.filter(r => /^PR #\d+$/.test(nameOf(r))).sort((x, y) => parseInt(nameOf(x).slice(4)) - parseInt(nameOf(y).slice(4))));
+    const tail = byName(["MB STR", "HRSG #11 PR", "GT #11"]);
+    const others = pick(rows);
+    return [...firstRows, ...psRows, ...tkRows, ...others, ...prRows, ...tail];
+}
+
 // EP 목표: 2026-12-22 (W39 = 12-21~12-27). 화면 S-Curve와 보고서가 같은 값을 쓴다.
 const EP_TARGET_WK = 39;
 const EP_TARGET_DATE = "2026-12-22";
@@ -985,6 +1000,11 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         const sysTb = document.getElementById("epSysTableBody");
         if(sysTb && systems) sysTb.innerHTML = _epTableRows(pipingSysSorted, "system", true);
 
+        // Sub Area 표시 순서는 Piping 기준(Report와 동일)이고 Support 표도 같은 순서를 따른다
+        const _epAreaOrder = (areas && areas.length)
+            ? orderEpAreaRows([...areas].sort(_byAreaThenProgress(subareaMap)), r => r.sub_area).map(r => r.sub_area) : [];
+        const _epAreaIdx = name => { const i = _epAreaOrder.indexOf(name); return i < 0 ? 999 : i; };
+
         // Support tables (sup already fetched above for KPI)
         if(sup) {
             const supSysTb = document.getElementById("epSupSysTableBody");
@@ -1000,7 +1020,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                 supSysTb.innerHTML = _epTableRows(supSysSorted, "system", true);
             }
             if(sup.area && sup.area.length) {
-                const supSorted = [...sup.area].sort(_byAreaThenProgress(subareaMap));
+                const supSorted = orderEpAreaRows([...sup.area].sort((a, b) => _epAreaIdx(a.sub_area) - _epAreaIdx(b.sub_area)), r => r.sub_area);
                 const supMid = Math.ceil(supSorted.length / 2);
                 const supAreaTb  = document.getElementById("epSupAreaTableBody");
                 const supAreaTb2 = document.getElementById("epSupAreaTableBody2");
@@ -1011,7 +1031,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
 
         // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
         if(areas && areas.length) {
-            const sorted = [...areas].sort(_byAreaThenProgress(subareaMap));
+            const sorted = orderEpAreaRows([...areas].sort(_byAreaThenProgress(subareaMap)), r => r.sub_area);
             const mid = Math.ceil(sorted.length / 2);
             const areaTb  = document.getElementById("epAreaTableBody");
             const areaTb2 = document.getElementById("epAreaTableBody2");
@@ -2233,17 +2253,7 @@ function buildEpReportHtml(data, sup) {
     const aRows = [...new Set([...areas.map(r => r.sub_area), ...supArea.map(r => r.sub_area)])]
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
-    // 보고서 Area 표시 순서: CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외 → PR #3~#7(번호순) → MB STR → HRSG #11 PR → GT #11(맨 끝)
-    const used = new Set();
-    const pick = rows => rows.filter(r => !used.has(r.s) && used.add(r.s));
-    const byName = names => pick(names.map(n => aRows.find(r => r.s === n)).filter(Boolean));
-    const firstRows = byName(["CCWPH #1", "FFC #1", "FGSS"]);
-    const psRows = pick(aRows.filter(r => /PS$/.test(r.s)));
-    const tkRows = pick(aRows.filter(r => /TK$/.test(r.s)));
-    const prRows = pick(aRows.filter(r => /^PR #\d+$/.test(r.s)).sort((x, y) => parseInt(x.s.slice(4)) - parseInt(y.s.slice(4))));
-    const tail = byName(["MB STR", "HRSG #11 PR", "GT #11"]);
-    const others = pick(aRows);
-    aRows.splice(0, aRows.length, ...firstRows, ...psRows, ...tkRows, ...others, ...prRows, ...tail);
+    aRows.splice(0, aRows.length, ...orderEpAreaRows(aRows, r => r.s));
     const half = Math.ceil(aRows.length / 2);
     const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2">AREA</th>')}<tbody>`
         + rows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
