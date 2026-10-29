@@ -2176,7 +2176,7 @@ function buildEpReportHtml(data, sup) {
     const actPct = lastIdx >= 0 ? pctOf(wk[lastIdx].cumul_actual || 0, totDI) : 0;
     const diff = actPct - planPct;
 
-    const W = 620, H = 195, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
+    const W = 620, H = 225, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
     const step = totDI > 20000 ? 5000 : totDI > 8000 ? 2000 : 1000;
     const maxL = Math.max(step, Math.ceil(totDI / step) * step);
     const maxWk = Math.max(1, ...wk.map(w => w.completed_di || 0));
@@ -2252,7 +2252,9 @@ body{margin:0;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit
 .kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:7px 0}
 .kpi{border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px}.kl{font-size:8px;color:#64748b;letter-spacing:.4px}
 .kv{font-size:19px;font-weight:700;line-height:1.25}.ks{font-size:8px;color:#475569}
-.mid{display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:start}
+.mid{display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
+.mid>div{display:flex;flex-direction:column}.mid>div>table{flex:1}
+@media screen{body{max-width:1047px;margin:0 auto;padding:8px}}
 h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
 .pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:3px;padding-top:3px}
 table{width:100%;border-collapse:collapse;font-size:9px}
