@@ -3406,7 +3406,7 @@ function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="14" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:20px;color:#64748b">No data. Use the "Sync from Pkg" button to load packages from Test Pkg Joint Check.</td></tr>`;
         return;
     }
     const iopt = v => v ? ` selected` : "";
@@ -3451,7 +3451,6 @@ function renderTMTable(data) {
             </td>
             <td style="text-align:center">${r.system||"—"}</td>
             <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
-            <td style="text-align:center"><textarea class="cell-input" id="tm-desc-${r.id}" rows="${Math.min(4, Math.max(1, Math.ceil((r.description||"").length / 45)))}" title="${r.description||""}" style="width:92%;text-align:center;color:#000;background:#fff;font-family:'DM Mono',monospace;font-size:10px;font-weight:400;resize:none;line-height:1.3;white-space:normal;overflow:hidden">${r.description||""}</textarea></td>
             <td style="padding:0">${readinessCell}</td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
@@ -3512,8 +3511,7 @@ async function saveTMRow(id) {
         media:           document.getElementById(`tm-media-${id}`)?.value          || null,
         holding_time:    document.getElementById(`tm-holding-${id}`)?.value?.trim()|| null,
         date_completed:  dateVal || null,
-        completed:       completed,
-        description:     document.getElementById(`tm-desc-${id}`)?.value?.trim() || null
+        completed:       completed
     };
     try {
         const res = await fetch(`/api/testpkg-master/${id}`, {
