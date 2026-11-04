@@ -2303,7 +2303,7 @@ td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
 .sub{flex:1.5;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
 .sub>div{display:flex;flex-direction:column}.sub>div>table{flex:1}
-.sub>.notes>table{flex:1;margin-bottom:8px}.sub>.notes>table:last-child{margin-bottom:0}.notes td{height:24px;vertical-align:middle;text-align:left;font-size:9px;padding:5px 6px;line-height:1.5}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
+.sub>.notes>table{flex:1;margin-bottom:8px}.sub>.notes>table:last-child{margin-bottom:0}.notes td{height:19px;vertical-align:middle;text-align:left;font-size:9px;padding:3px 6px;line-height:1.5}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
