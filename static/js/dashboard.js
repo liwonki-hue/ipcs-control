@@ -2177,11 +2177,10 @@ async function exportEPExcel(){
 // 보고서 하단 Key Activities / Issues 기본 문구 (행 단위 [activity, issue], HTML 허용). 주차마다 이 값을 갱신한다.
 const EP_REPORT_NOTES = [
     ["&bull; CCW piping, supports &amp; hydrotest preparation (Target: Nov. 13)",
-     "&bull; <b>CCW Flushing:</b> Delayed due to pending Temporary Demi. Water Plant commissioning, tank leak test, and raw water piping."],
+     "&bull; <b>CCW Flushing:</b> Schedule impact due to delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation."],
     ["&bull; Fuel Gas piping, supports &amp; hydrotest preparation (Target: Nov. 20)",
      "&bull; <b>Fuel Gas Pig Cleaning:</b> Start expected after Nov. 15 due to delays in pigging materials and contractor selection."],
-    ["&bull; Priority installation of utility piping &amp; supports for GT #11", ""],
-    ["", ""],
+    ["&bull; Installation of piping &amp; supports for all systems required for GT #11 Early Power in progress", ""],
 ];
 
 function buildEpReportHtml(data, sup) {
@@ -2295,7 +2294,7 @@ td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
 .sub{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
 .sub>div{display:flex;flex-direction:column}.sub>div>table{flex:1}
-.notes{flex:.8;display:flex;flex-direction:column;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}.notes>table{flex:1}.notes td{height:24px;text-align:left;font-size:9px;padding:2px 6px}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
+.notes{flex:.8;display:flex;flex-direction:column;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}.notes>table{flex:none}.notes td{height:20px;vertical-align:middle;text-align:left;font-size:9px;padding:3px 6px;line-height:1.35}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
@@ -2314,7 +2313,7 @@ ${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
 <div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
-<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY ACTIVITIES</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${EP_REPORT_NOTES.map(([a, i]) => `<tr><td contenteditable="true">${a}</td><td contenteditable="true">${i}</td></tr>`).join("")}</tbody></table></div>
+<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:40%">KEY ACTIVITIES</th><th style="width:60%">ISSUES</th></tr></thead><tbody>${EP_REPORT_NOTES.map(([a, i]) => `<tr><td contenteditable="true">${a}</td><td contenteditable="true">${i}</td></tr>`).join("")}</tbody></table></div>
 </body></html>`;
 }
 
