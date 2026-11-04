@@ -2174,14 +2174,19 @@ async function exportEPExcel(){
 // ================================================================================
 //  EARLY POWER EXECUTIVE REPORT (A4 가로 1페이지)
 // ================================================================================
-// 보고서 하단 Key Activities / Issues 기본 문구 (행 단위 [activity, issue], HTML 허용). 주차마다 이 값을 갱신한다.
-const EP_REPORT_NOTES = [
-    ["&bull; CCW piping, supports &amp; hydrotest preparation (Target: Nov. 13)",
-     "&bull; <b>CCW Flushing:</b> Schedule impact due to delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation."],
-    ["&bull; Fuel Gas piping, supports &amp; hydrotest preparation (Target: Nov. 20)",
-     "&bull; <b>Fuel Gas Pig Cleaning:</b> Start expected after Nov. 15 due to delays in pigging materials and contractor selection."],
-    ["&bull; Installation of piping &amp; supports for all systems required for GT #11 Early Power in progress", ""],
-];
+// 보고서 Key Activities / Issues 기본 문구 (HTML 허용). 주차마다 이 값을 갱신한다.
+const EP_NOTE_MIN_ROWS = 6;
+const EP_REPORT_NOTES = {
+    activities: [
+        "&bull; CCW piping, supports &amp; hydrotest preparation (Target: Nov. 13)",
+        "&bull; Fuel Gas piping, supports &amp; hydrotest preparation (Target: Nov. 20)",
+        "&bull; Installation of piping &amp; supports for all systems required for GT #11 Early Power in progress",
+    ],
+    issues: [
+        "&bull; <b>CCW Flushing:</b> Schedule impact due to delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation.",
+        "&bull; <b>Fuel Gas Pig Cleaning:</b> Start expected after Nov. 15 due to delays in pigging materials and contractor selection.",
+    ],
+};
 
 function buildEpReportHtml(data, sup) {
     const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -2263,7 +2268,11 @@ function buildEpReportHtml(data, sup) {
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
     aRows.splice(0, aRows.length, ...orderEpAreaRows(aRows, r => r.s));
-    const half = Math.ceil(aRows.length / 2);
+    // 항목이 적어도 표 높이가 Area 표와 맞도록 빈 행(편집 가능)으로 EP_NOTE_MIN_ROWS까지 채운다
+    const noteTable = (title, items) => {
+        const rows = [...items, ...Array(Math.max(0, EP_NOTE_MIN_ROWS - items.length)).fill("")];
+        return `<table><thead><tr><th>${title}</th></tr></thead><tbody>${rows.map(t => `<tr><td contenteditable="true">${t}</td></tr>`).join("")}</tbody></table>`;
+    };
     const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2">AREA</th>')}<tbody>`
         + rows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
         + (withTotal ? totalRow(1) : "") + `</tbody></table>`;
@@ -2283,7 +2292,7 @@ body{margin:0;display:flex;flex-direction:column;height:192mm;font-family:Arial,
 .kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:9px 0 14px}
 .kpi{border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px}.kl{font-size:8px;color:#64748b;letter-spacing:.4px}
 .kv{font-size:19px;font-weight:700;line-height:1.25}.ks{font-size:8px;color:#475569}
-.mid{flex:1.3;display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
+.mid{flex:1;display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
 .mid>div{display:flex;flex-direction:column}.mid>div>table{flex:1}
 @media screen{body{max-width:1047px;margin:0 auto;padding:8px}}
 h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
@@ -2292,9 +2301,9 @@ table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9px}
 th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:center;color:#334155}
 td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
 tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
-.sub{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
+.sub{flex:1.5;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
 .sub>div{display:flex;flex-direction:column}.sub>div>table{flex:1}
-.notes{flex:.8;display:flex;flex-direction:column;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}.notes>table{flex:none}.notes td{height:20px;vertical-align:middle;text-align:left;font-size:9px;padding:3px 6px;line-height:1.35}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
+.sub>.notes>table{flex:1;margin-bottom:8px}.sub>.notes>table:last-child{margin-bottom:0}.notes td{height:24px;vertical-align:middle;text-align:left;font-size:9px;padding:5px 6px;line-height:1.5}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
 .btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
 @media print{.btn{display:none}}
 </style></head><body>
@@ -2312,8 +2321,8 @@ ${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2
 <div class="pace"><span>Required pace: <b>${reqPace != null ? n0(reqPace) + " DI/wk" : "–"}</b></span><span>Recent 4-wk avg: <b style="color:${paceOk ? "#15803d" : "#b91c1c"}">${n0(avgPace)} DI/wk</b></span><span>Weeks to target: <b>${daysLeft > 0 ? weeksLeft : 0}</b></span></div></div>
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
-<div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
-<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:40%">KEY ACTIVITIES</th><th style="width:60%">ISSUES</th></tr></thead><tbody>${EP_REPORT_NOTES.map(([a, i]) => `<tr><td contenteditable="true">${a}</td><td contenteditable="true">${i}</td></tr>`).join("")}</tbody></table></div>
+<div class="sub"><div><h2>Progress by Area</h2>${subTable(aRows, true)}</div>
+<div class="notes"><h2>Key Activities</h2>${noteTable("KEY ACTIVITIES", EP_REPORT_NOTES.activities)}<h2>Issues</h2>${noteTable("ISSUES", EP_REPORT_NOTES.issues)}</div></div>
 </body></html>`;
 }
 
