@@ -2183,7 +2183,7 @@ const EP_REPORT_NOTES = {
         "&bull; <b>GT #11 Early Power:</b> Piping &amp; support installation in progress for all systems required for Early Power, with priority on utility systems",
     ],
     issues: [
-        "&bull; <b>CCW Flushing &mdash; Schedule at risk:</b> Delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation are impacting the Flushing schedule",
+        "&bull; <b>CCW Flushing &mdash; Schedule at risk:</b> Delayed Temporary Demi. Water Plant material preparation &amp; commissioning, Demi. Tank Leak Test, and Temporary Raw Water &amp; Demi. Water supply piping installation are impacting the Flushing schedule",
         "&bull; <b>Fuel Gas Pig Cleaning &mdash; Start after Nov. 15:</b> Delayed delivery of pigging materials and pending contractor selection",
     ],
 };
