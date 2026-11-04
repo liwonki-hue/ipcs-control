@@ -2175,16 +2175,16 @@ async function exportEPExcel(){
 //  EARLY POWER EXECUTIVE REPORT (A4 가로 1페이지)
 // ================================================================================
 // 보고서 Key Activities / Issues 기본 문구 (HTML 허용). 주차마다 이 값을 갱신한다.
-const EP_NOTE_MIN_ROWS = 6;
+const EP_NOTE_MIN_ROWS = 5;
 const EP_REPORT_NOTES = {
     activities: [
-        "&bull; CCW piping, supports &amp; hydrotest preparation (Target: Nov. 13)",
-        "&bull; Fuel Gas piping, supports &amp; hydrotest preparation (Target: Nov. 20)",
-        "&bull; Installation of piping &amp; supports for all systems required for GT #11 Early Power in progress",
+        "&bull; <b>CCW System:</b> Prioritizing remaining piping, support installation and hydrotest preparation in line with the Flushing schedule &mdash; <b>Hydrotest completion: Nov. 13</b>",
+        "&bull; <b>Fuel Gas System:</b> Accelerating remaining piping, support installation and hydrotest preparation ahead of Pig Cleaning &mdash; <b>Hydrotest completion: Nov. 20</b>",
+        "&bull; <b>GT #11 Early Power:</b> Piping &amp; support installation in progress for all systems required for Early Power, with priority on utility systems",
     ],
     issues: [
-        "&bull; <b>CCW Flushing:</b> Schedule impact due to delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation.",
-        "&bull; <b>Fuel Gas Pig Cleaning:</b> Start expected after Nov. 15 due to delays in pigging materials and contractor selection.",
+        "&bull; <b>CCW Flushing &mdash; Schedule at risk:</b> Delayed Demi. Tank Leak Test and Temporary Raw Water &amp; Demi. Water supply piping installation are impacting the Flushing schedule",
+        "&bull; <b>Fuel Gas Pig Cleaning &mdash; Start after Nov. 15:</b> Delayed delivery of pigging materials and pending contractor selection",
     ],
 };
 
