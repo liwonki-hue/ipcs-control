@@ -2172,28 +2172,41 @@ async function exportEPExcel(){
 }
 
 // ================================================================================
-//  EARLY POWER EXECUTIVE REPORT (A4 가로 1페이지)
+//  EARLY POWER EXECUTIVE REPORT (A3 가로 1장 PPT — 브라우저에서 pptxgenjs로 생성해 내려받는다)
 // ================================================================================
-// 보고서 Key Activities / Issues 기본 문구 (HTML 허용). 주차마다 이 값을 갱신한다.
-const EP_NOTE_MIN_ROWS = 5;
+// Key Activities / Issues 기본 문구. 항목은 [텍스트, 굵게 여부] 조각의 배열이며 주차마다 이 값을 갱신한다.
+const EP_NOTE_MIN_ROWS = 4;
 const EP_REPORT_NOTES = {
     activities: [
-        "&bull; <b>CCW System:</b> Prioritizing remaining piping, support installation and hydrotest preparation in line with the Flushing schedule &mdash; <b>Hydrotest completion: Nov. 13</b>",
-        "&bull; <b>Fuel Gas System:</b> Accelerating remaining piping, support installation and hydrotest preparation ahead of Pig Cleaning &mdash; <b>Hydrotest completion: Nov. 20</b>",
-        "&bull; <b>GT #11 Early Power:</b> Piping &amp; support installation in progress for all systems required for Early Power, with priority on utility systems",
+        [["CCW System: ", 1], ["Prioritizing remaining piping, support installation and hydrotest preparation in line with the Flushing schedule — ", 0], ["Hydrotest completion: Nov. 13", 1]],
+        [["Fuel Gas System: ", 1], ["Accelerating remaining piping, support installation and hydrotest preparation ahead of Pig Cleaning — ", 0], ["Hydrotest completion: Nov. 20", 1]],
+        [["GT #11 Early Power: ", 1], ["Piping & support installation in progress for all systems required for Early Power, with priority on utility systems", 0]],
     ],
     issues: [
-        "&bull; <b>CCW Flushing &mdash; Schedule at risk:</b> Delayed Temporary Demi. Water Plant material preparation &amp; commissioning, Demi. Tank Leak Test, and Temporary Raw Water &amp; Demi. Water supply piping installation are impacting the Flushing schedule",
-        "&bull; <b>Fuel Gas Pig Cleaning &mdash; Start after Nov. 15:</b> Delayed delivery of pigging materials and pending contractor selection",
+        [["CCW Flushing — Schedule at risk: ", 1], ["Delayed Temporary Demi. Water Plant material preparation & commissioning, Demi. Tank Leak Test, and Temporary Raw Water & Demi. Water supply piping installation are impacting the Flushing schedule", 0]],
+        [["Fuel Gas Pig Cleaning — Start after Nov. 15: ", 1], ["Delayed delivery of pigging materials and pending contractor selection", 0]],
     ],
 };
 
-function buildEpReportHtml(data, sup) {
-    const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let _pptxLoading = null;
+function loadPptxGen() {   // 보고서를 만들 때만 라이브러리를 불러온다 (서버 메모리·초기 로딩 영향 없음)
+    if (window.PptxGenJS) return Promise.resolve();
+    if (!_pptxLoading) _pptxLoading = new Promise((resolve, reject) => {
+        const sc = document.createElement("script");
+        sc.src = "https://cdn.jsdelivr.net/npm/pptxgenjs@4.0.1/dist/pptxgen.bundle.js";
+        sc.onload = resolve;
+        sc.onerror = () => { _pptxLoading = null; reject(new Error("Failed to load the PPT library")); };
+        document.head.appendChild(sc);
+    });
+    return _pptxLoading;
+}
+
+function buildEpReportPptx(data, sup) {
     const sum = (rows, k) => (rows || []).reduce((s, r) => s + (r[k] || 0), 0);
     const pctOf = (c, t) => t > 0 ? c / t * 100 : 0;
-    const pcol = v => v >= 80 ? "#15803d" : v >= 50 ? "#b45309" : "#c2410c";
+    const pcol = v => v >= 80 ? "15803D" : v >= 50 ? "B45309" : "C2410C";
     const n0 = v => fmtNum(v, 0), p1 = v => `${v.toFixed(1)}%`;
+    const NAVY = "1E3A8A", INK = "0F172A", MUTE = "64748B", LINE = "CBD5E1", HEAD = "F1F5F9", TOT = "EFF6FF", RED = "DC2626", F = "Arial";
 
     const systems = data.ep_sys || [], areas = data.ep_area || [], weekly = data.ep_weekly || [];
     const supSys = sup.sys || [], supArea = sup.area || [], subareaMap = sup.subarea_map || {};
@@ -2202,42 +2215,15 @@ function buildEpReportHtml(data, sup) {
     const testComp = sup.testpkg_comp || 0, testTot = sup.testpkg_total || 0, testPct = pctOf(testComp, testTot);
     const readiness = pipePct * 0.7 + supPct * 0.2 + testPct * 0.1;
 
-    // ── S-Curve (화면의 EP S-Curve와 같은 39주 smoothstep 계획선) ─────────
+    // S-Curve (화면의 EP S-Curve와 같은 39주 smoothstep 계획선)
     const wk = weekly.slice(0, EP_TARGET_WK), n = wk.length;
-    const plan = wk.map((_, i) => totDI > 0 && n > 1 ? Math.round(totDI * (3*(i/(n-1))**2 - 2*(i/(n-1))**3)) : null);
+    const plan = wk.map((_, i) => totDI > 0 && n > 1 ? Math.round(totDI * (3*(i/(n-1))**2 - 2*(i/(n-1))**3)) : 0);
     const lastIdx = wk.reduce((l, w, i) => w.completed_di > 0 ? i : l, -1);
-    const planPct = lastIdx >= 0 && plan[lastIdx] != null ? pctOf(plan[lastIdx], totDI) : 0;
+    const planPct = lastIdx >= 0 ? pctOf(plan[lastIdx], totDI) : 0;
     const actPct = lastIdx >= 0 ? pctOf(wk[lastIdx].cumul_actual || 0, totDI) : 0;
     const diff = actPct - planPct;
 
-    const W = 620, H = 215, L = 46, R = 42, T = 22, B = 26, pw = W - L - R, ph = H - T - B;
-    const step = totDI > 20000 ? 5000 : totDI > 8000 ? 2000 : 1000;
-    const maxL = Math.max(step, Math.ceil(totDI / step) * step);
-    const maxWk = Math.max(1, ...wk.map(w => w.completed_di || 0));
-    const stepW = maxWk > 1000 ? 500 : maxWk > 400 ? 200 : 100;
-    const maxR = Math.ceil(maxWk / stepW) * stepW;
-    const X = i => L + (n > 1 ? i * pw / (n - 1) : 0);
-    const yL = v => T + ph * (1 - v / maxL), yR = v => T + ph * (1 - v / maxR);
-    const bw = pw / Math.max(n, 1) * 0.55;
-    let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" xmlns="http://www.w3.org/2000/svg" font-family="Arial,sans-serif" font-size="8">`;
-    for (let v = 0; v <= maxL; v += step) {
-        svg += `<line x1="${L}" x2="${W - R}" y1="${yL(v)}" y2="${yL(v)}" stroke="#e2e8f0"/><text x="${L - 4}" y="${yL(v) + 3}" text-anchor="end" fill="#64748b">${n0(v)}</text>`;
-    }
-    for (let v = 0; v <= maxR; v += stepW) {
-        svg += `<text x="${W - R + 4}" y="${yR(v) + 3}" fill="#2563eb">${n0(v)}</text>`;
-    }
-    wk.forEach((w, i) => {
-        if (w.completed_di > 0) svg += `<rect x="${X(i) - bw / 2}" y="${yR(w.completed_di)}" width="${bw}" height="${yR(0) - yR(w.completed_di)}" fill="#93b4f0"/>`;
-        if (i === 0 || (i + 1) % 5 === 0 || i === n - 1) svg += `<text x="${X(i)}" y="${H - B + 12}" text-anchor="middle" fill="#64748b">W${w.week_no}</text>`;
-    });
-    svg += `<polyline fill="none" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3" points="${plan.map((v, i) => `${X(i)},${yL(v || 0)}`).join(" ")}"/>`;
-    if (lastIdx >= 0) svg += `<polyline fill="none" stroke="#059669" stroke-width="2.2" points="${wk.slice(0, lastIdx + 1).map((w, i) => `${X(i)},${yL(w.cumul_actual || 0)}`).join(" ")}"/><circle cx="${X(lastIdx)}" cy="${yL(wk[lastIdx].cumul_actual || 0)}" r="3" fill="#059669"/>`;
-    svg += `<text x="${L}" y="10" fill="#64748b">Cumulative D/I</text><text x="${W - R}" y="10" text-anchor="end" fill="#2563eb">Weekly D/I</text>`
-        + `<line x1="${L + 90}" x2="${L + 108}" y1="7" y2="7" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${L + 111}" y="10" fill="#334155">Target</text>`
-        + `<line x1="${L + 150}" x2="${L + 168}" y1="7" y2="7" stroke="#059669" stroke-width="2.2"/><text x="${L + 171}" y="10" fill="#334155">Actual</text>`
-        + `<rect x="${L + 210}" y="3" width="9" height="7" fill="#93b4f0"/><text x="${L + 222}" y="10" fill="#334155">Weekly</text></svg>`;
-
-    // ── 목표 대비 페이스 ──────────────────────────────────────────────
+    // 목표 대비 페이스
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const daysLeft = Math.ceil((new Date(EP_TARGET_DATE + "T00:00:00") - today) / 86400000);
     const weeksLeft = Math.max(1, Math.ceil(daysLeft / 7));
@@ -2245,104 +2231,134 @@ function buildEpReportHtml(data, sup) {
     const reqPace = daysLeft > 0 ? remDI / weeksLeft : null;
     const recent = lastIdx >= 0 ? wk.slice(Math.max(0, lastIdx - 3), lastIdx + 1) : [];
     const avgPace = recent.length ? sum(recent, "completed_di") / recent.length : 0;
-    const paceOk = reqPace != null && avgPace >= reqPace;
 
-    // ── 표 ─────────────────────────────────────────────────────────────
+    // 표 행
     const byKey = (rows, key) => Object.fromEntries((rows || []).map(r => [r[key], r]));
-    const rem = (t, c) => { const r = Math.max(0, t - c); return `<td style="color:${r > 0 ? "#c2410c" : "#15803d"};font-weight:700">${n0(r)}</td>`; };
-    const cells = (pt, pc, st, sc) => `<td>${n0(pt)}</td><td>${n0(pc)}</td>${rem(pt, pc)}<td style="color:${pcol(pctOf(pc, pt))}">${pt > 0 ? p1(pctOf(pc, pt)) : "–"}</td><td>${n0(st)}</td><td>${n0(sc)}</td>${rem(st, sc)}<td style="color:${pcol(pctOf(sc, st))}">${st > 0 ? p1(pctOf(sc, st)) : "–"}</td>`;
-    const totalRow = (span) => `<tr class="tot"><td colspan="${span}">TOTAL</td>${cells(totDI, doneDI, supTot, supDone)}</tr>`;
-    const head = (firstCols) => `<colgroup><col style="width:19%">${"<col>".repeat(8)}</colgroup><thead><tr>${firstCols}<th colspan="4">PIPING (D/I)</th><th colspan="4">SUPPORT (EA)</th></tr><tr><th>Total</th><th>Done</th><th>Balance</th><th>%</th><th>Total</th><th>Done</th><th>Balance</th><th>%</th></tr></thead>`;
     const pctDesc = (a, b) => pctOf(b.p.completed_di || 0, b.p.total_di || 0) - pctOf(a.p.completed_di || 0, a.p.total_di || 0);
-
     const supSysMap = byKey(supSys, "system"), pipeSysMap = byKey(systems, "system");
     const sRows = [...new Set([...systems.map(r => r.system), ...supSys.map(r => r.system)])]
         .map(s => ({ s, p: pipeSysMap[s] || {}, q: supSysMap[s] || {} })).sort(pctDesc);
-    const sysHtml = `<table>${head('<th rowspan="2">SYSTEM</th>')}<tbody>`
-        + sRows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
-        + totalRow(1) + `</tbody></table>`;
-
     const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"], rank = a => { const i = AREA_ORDER.indexOf(a); return i < 0 ? 99 : i; };
     const supAreaMap = byKey(supArea, "sub_area"), pipeAreaMap = byKey(areas, "sub_area");
     const aRows = [...new Set([...areas.map(r => r.sub_area), ...supArea.map(r => r.sub_area)])]
         .map(s => ({ s, area: subareaMap[s] || (pipeAreaMap[s] || {}).area || "", p: pipeAreaMap[s] || {}, q: supAreaMap[s] || {} }))
         .sort((a, b) => rank(a.area) - rank(b.area) || pctDesc(a, b));
     aRows.splice(0, aRows.length, ...orderEpAreaRows(aRows, r => r.s));
-    // 항목이 적어도 표 높이가 Area 표와 맞도록 빈 행(편집 가능)으로 EP_NOTE_MIN_ROWS까지 채운다
-    const noteTable = (title, items) => {
-        const rows = [...items, ...Array(Math.max(0, EP_NOTE_MIN_ROWS - items.length)).fill("")];
-        return `<table><thead><tr><th>${title}</th></tr></thead><tbody>${rows.map(t => `<tr><td contenteditable="true">${t.replace(/^&bull; /, '<span class="bl">&bull;</span>')}</td></tr>`).join("")}</tbody></table>`;
-    };
-    const subTable = (rows, withTotal) => `<table>${head('<th rowspan="2">AREA</th>')}<tbody>`
-        + rows.map(r => `<tr><td>${esc(r.s)}</td>${cells(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0)}</tr>`).join("")
-        + (withTotal ? totalRow(1) : "") + `</tbody></table>`;
 
-    const asOf = lastIdx >= 0 ? `W${wk[lastIdx].week_no}` : "–";
-    const kp = (label, val, sub, col) => `<div class="kpi"><div class="kl">${label}</div><div class="kv" style="color:${col}">${val}</div><div class="ks">${sub}</div></div>`;
+    const cellVals = (pt, pc, st, sc) => [pt, pc, Math.max(0, pt - pc), pt > 0 ? pctOf(pc, pt) : null, st, sc, Math.max(0, st - sc), st > 0 ? pctOf(sc, st) : null];
+    const dataRow = (label, vals, isTot) => [label, ...vals].map((c, i) => {
+        const o = { fontFace: F, align: "center", valign: "middle", bold: !!isTot };
+        if (isTot) o.fill = { color: TOT };
+        let text = i === 0 ? c : (i === 4 || i === 8) ? (c == null ? "–" : p1(c)) : n0(c);
+        if (i === 3 || i === 7) { o.color = c > 0 ? "C2410C" : "15803D"; o.bold = true; }
+        if (i === 4 || i === 8) o.color = c == null ? MUTE : pcol(c);
+        return { text, options: o };
+    });
+    const toRows = (rows, totalLabel) => [
+        ...rows.map(r => dataRow(r.s, cellVals(r.p.total_di || 0, r.p.completed_di || 0, r.q.total_di || 0, r.q.completed_di || 0), false)),
+        dataRow(totalLabel, cellVals(totDI, doneDI, supTot, supDone), true),
+    ];
+    const hdr = (t, o = {}) => ({ text: t, options: { bold: true, fill: { color: HEAD }, color: "334155", align: "center", valign: "middle", fontFace: F, ...o } });
+    const head2 = first => [
+        [hdr(first, { rowspan: 2 }), hdr("PIPING (D/I)", { colspan: 4 }), hdr("SUPPORT (EA)", { colspan: 4 })],
+        ["Total", "Done", "Balance", "%", "Total", "Done", "Balance", "%"].map(t => hdr(t)),
+    ];
+
     const now = new Date(), z = v => String(v).padStart(2, "0");
     const stamp = `${now.getFullYear()}-${z(now.getMonth() + 1)}-${z(now.getDate())} ${z(now.getHours())}:${z(now.getMinutes())}`;
+    const asOf = lastIdx >= 0 ? `W${wk[lastIdx].week_no}` : "–";
 
-    return `<!doctype html><html><head><meta charset="utf-8"><title>Early Power Progress Report</title><style>
-@page{size:A4 landscape;margin:8mm}
-*{box-sizing:border-box}
-body{margin:0;display:flex;flex-direction:column;height:192mm;font-family:Arial,"Malgun Gothic",sans-serif;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.top{display:flex;align-items:flex-end;justify-content:space-between;border-bottom:2px solid #1e3a8a;padding-bottom:4px}
-.alert{color:#dc2626;font-weight:700;font-size:12px}
-.top h1{margin:0;font-size:18px;color:#1e3a8a}.top .meta{font-size:10px;color:#475569;text-align:right;line-height:1.5}
-.kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:6px;margin:9px 0 14px}
-.kpi{border:1px solid #cbd5e1;border-radius:4px;padding:5px 8px}.kl{font-size:8px;color:#64748b;letter-spacing:.4px}
-.kv{font-size:19px;font-weight:700;line-height:1.25}.ks{font-size:8px;color:#475569}
-.mid{flex:1;display:grid;grid-template-columns:1.12fr 1fr;gap:10px;align-items:stretch}
-.mid>div{display:flex;flex-direction:column}.mid>div>table{flex:1}
-@media screen{body{max-width:1047px;margin:0 auto;padding:8px}}
-h2{font-size:10px;margin:0 0 3px;color:#1e3a8a;border-left:3px solid #1e3a8a;padding-left:5px}
-.pace{display:flex;gap:14px;font-size:9px;color:#334155;border-top:1px solid #e2e8f0;margin-top:auto;padding-top:3px}
-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9px}
-th{background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 3px;font-weight:700;text-align:center;color:#334155}
-td{border:1px solid #e2e8f0;padding:1.5px 4px;text-align:center}
-tr.tot td{background:#eff6ff;font-weight:700;border-top:1.5px solid #94a3b8}
-.sub{flex:1.5;display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-top:14px;padding-top:10px;border-top:2px solid #cbd5e1}
-.sub>div{display:flex;flex-direction:column}.sub>div>table{flex:1}
-.sub>.notes>table{flex:1;margin-bottom:8px}.sub>.notes>table:last-child{margin-bottom:0}.notes td{height:19px;vertical-align:middle;text-align:left;font-size:9px;padding:3px 6px 3px 17px;line-height:1.5}.notes .bl{display:inline-block;width:9px;margin-left:-11px;margin-right:2px}.notes td:focus{outline:2px solid #93b4f0;background:#f8fafc}
-.btn{margin-left:14px;align-self:center;padding:6px 14px;background:#1e3a8a;color:#fff;border:0;border-radius:4px;cursor:pointer;font-size:12px}
-@media print{.btn{display:none}}
-</style></head><body>
-<div class="top"><h1>Early Power (GT #11 Only) &mdash; Progress Report</h1><div class="meta"><span class="alert">Target Date: ${EP_TARGET_DATE} &nbsp;|&nbsp; D-${Math.max(daysLeft, 0)}</span><br>Report Date: ${stamp} &nbsp;|&nbsp; Progress as of ${asOf}</div><button class="btn" onclick="window.print()">Print / Save as PDF</button></div>
-<div class="kpis">
-${kp("EP READINESS", p1(readiness), "Piping 70% · Support 20% · Test Pkg 10%", pcol(readiness))}
-${kp("PIPING D/I", p1(pipePct), `${n0(doneDI)} / ${n0(totDI)} DI`, pcol(pipePct))}
-${kp("SUPPORT", p1(supPct), `${n0(supDone)} / ${n0(supTot)} EA`, pcol(supPct))}
-${kp("TEST PACKAGE", p1(testPct), testTot > 0 ? `${n0(testComp)} / ${n0(testTot)}` : "–", pcol(testPct))}
-${kp("PLAN vs ACTUAL", `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`, `Plan ${p1(planPct)} · Actual ${p1(actPct)}`, diff >= 0 ? "#1d4ed8" : "#b91c1c")}
-${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2410c")}
-</div>
-<div class="mid">
-<div><h2>EP S-Curve &mdash; Target vs Actual (until ${EP_TARGET_DATE})</h2>${svg}
-<div class="pace"><span>Required pace: <b>${reqPace != null ? n0(reqPace) + " DI/wk" : "–"}</b></span><span>Recent 4-wk avg: <b style="color:${paceOk ? "#15803d" : "#b91c1c"}">${n0(avgPace)} DI/wk</b></span><span>Weeks to target: <b>${daysLeft > 0 ? weeksLeft : 0}</b></span></div></div>
-<div><h2>Progress by EP System</h2>${sysHtml}</div>
-</div>
-<div class="sub"><div><h2>Progress by Area</h2>${subTable(aRows, true)}</div>
-<div class="notes"><h2>Key Activities</h2>${noteTable("KEY ACTIVITIES", EP_REPORT_NOTES.activities)}<h2>Issues</h2>${noteTable("ISSUES", EP_REPORT_NOTES.issues)}</div></div>
-</body></html>`;
+    // ── 슬라이드 (A3 가로 420x297mm) ──
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name: "A3_LANDSCAPE", width: 16.535, height: 11.693 });
+    pres.layout = "A3_LANDSCAPE";
+    pres.title = "Early Power (GT #11 Only) - Progress Report";
+    const s = pres.addSlide();
+    s.background = { color: "FFFFFF" };
+    const M = 0.5, CW = 16.535 - 2 * M, LW = 8.2, RX = M + LW + 0.3, RW = CW - LW - 0.3;
+
+    s.addText("Early Power (GT #11 Only) — Progress Report", { x: M, y: 0.3, w: 10, h: 0.7, fontFace: F, fontSize: 30, bold: true, color: NAVY, margin: 0, isTextBox: true });
+    s.addText([{ text: `Target Date: ${EP_TARGET_DATE}  |  D-${Math.max(daysLeft, 0)}`, options: { bold: true, color: RED, breakLine: true } }, { text: `Report Date: ${stamp}  |  Progress as of ${asOf}`, options: { color: "475569" } }],
+        { x: 10.3, y: 0.28, w: 16.535 - M - 10.3, h: 0.72, fontFace: F, fontSize: 13, align: "right", margin: 0, isTextBox: true });
+
+    const kpis = [
+        ["EP READINESS", p1(readiness), "Piping 70% · Support 20% · Test Pkg 10%", pcol(readiness)],
+        ["PIPING D/I", p1(pipePct), `${n0(doneDI)} / ${n0(totDI)} DI`, pcol(pipePct)],
+        ["SUPPORT", p1(supPct), `${n0(supDone)} / ${n0(supTot)} EA`, pcol(supPct)],
+        ["TEST PACKAGE", p1(testPct), testTot > 0 ? `${n0(testComp)} / ${n0(testTot)}` : "–", pcol(testPct)],
+        ["PLAN vs ACTUAL", `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`, `Plan ${p1(planPct)} · Actual ${p1(actPct)}`, diff >= 0 ? "1D4ED8" : "B91C1C"],
+        ["REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "C2410C"],
+    ];
+    const kg = 0.14, kw = (CW - 5 * kg) / 6, ky = 1.2, kh = 1.15;
+    kpis.forEach((k, i) => {
+        const x = M + i * (kw + kg);
+        s.addShape(pres.shapes.RECTANGLE, { x, y: ky, w: kw, h: kh, fill: { color: "FFFFFF" }, line: { color: LINE, width: 1 } });
+        s.addText(k[0], { x: x + 0.15, y: ky + 0.07, w: kw - 0.3, h: 0.24, fontFace: F, fontSize: 10, color: MUTE, margin: 0, isTextBox: true });
+        s.addText(k[1], { x: x + 0.15, y: ky + 0.32, w: kw - 0.3, h: 0.5, fontFace: F, fontSize: 30, bold: true, color: k[3], margin: 0, valign: "middle", isTextBox: true });
+        s.addText(k[2], { x: x + 0.15, y: ky + 0.86, w: kw - 0.3, h: 0.22, fontFace: F, fontSize: 8, color: "475569", margin: 0, isTextBox: true });
+    });
+
+    const h2 = (t, x, y, w) => s.addText(t, { x, y, w, h: 0.3, fontFace: F, fontSize: 13, bold: true, color: NAVY, margin: 0, isTextBox: true });
+    const midY = 2.65, botY = 6.6;
+
+    // S-Curve: 막대=주간 D/I(보조축), 선=누적 계획/실적
+    const labels = wk.map(w => "W" + w.week_no);
+    const maxL = Math.max(3000, Math.ceil(totDI / 3000) * 3000);
+    const maxWk = Math.max(1, ...wk.map(w => w.completed_di || 0));
+    const stepW = maxWk > 1000 ? 500 : maxWk > 400 ? 250 : 100, maxR = Math.ceil(maxWk / stepW) * stepW;
+    h2(`EP S-Curve — Target vs Actual (until ${EP_TARGET_DATE})`, M, midY, LW);
+    s.addChart([
+        { type: pres.charts.BAR, data: [{ name: "Weekly D/I", labels, values: wk.map(w => w.completed_di || 0) }], options: { chartColors: ["93B4F0"], barGapWidthPct: 40, secondaryValAxis: true, secondaryCatAxis: true } },
+        { type: pres.charts.LINE, data: [{ name: "Target", labels, values: plan }, { name: "Actual", labels, values: wk.map((w, i) => i <= lastIdx ? (w.cumul_actual || 0) : null) }], options: { chartColors: [RED, "059669"], lineSize: 2.5, lineDataSymbol: "none" } },
+    ], {
+        x: M - 0.05, y: midY + 0.32, w: LW + 0.1, h: 3.15,
+        showLegend: true, legendPos: "t", legendFontSize: 10, legendFontFace: F, legendColor: "334155",
+        valAxes: [
+            { showValAxisTitle: false, valAxisMaxVal: maxL, valAxisMajorUnit: maxL / 6, valAxisLabelFontSize: 9, valAxisLabelFontFace: F, valAxisLabelColor: MUTE, valAxisLabelFormatCode: "#,##0", valGridLine: { color: "E2E8F0", size: 0.5 } },
+            { showValAxisTitle: false, valAxisMaxVal: maxR, valAxisMajorUnit: maxR / 6, valAxisLabelFontSize: 9, valAxisLabelFontFace: F, valAxisLabelColor: "2563EB", valAxisLabelFormatCode: "#,##0", valGridLine: { style: "none" } },
+        ],
+        catAxes: [
+            { catAxisLabelFontSize: 9, catAxisLabelFontFace: F, catAxisLabelColor: MUTE, catAxisLabelFrequency: 4, catGridLine: { style: "none" } },
+            { catAxisHidden: true },
+        ],
+    });
+    s.addText(`Required pace: ${reqPace != null ? n0(reqPace) + " DI/wk" : "–"}   |   Recent 4-wk avg: ${n0(avgPace)} DI/wk   |   Weeks to target: ${daysLeft > 0 ? weeksLeft : 0}`,
+        { x: M, y: midY + 3.5, w: LW, h: 0.25, fontFace: F, fontSize: 10, color: "334155", margin: 0, isTextBox: true });
+
+    const tblOpts = (x, y, w, first, fs, rowH) => ({ x, y, w, colW: [first, ...Array(8).fill((w - first) / 8)], rowH, fontSize: fs, fontFace: F, color: INK, border: { type: "solid", pt: 0.75, color: LINE }, margin: [0, 0.06, 0, 0.06] });
+    h2("Progress by EP System", RX, midY, RW);
+    s.addTable([...head2("SYSTEM"), ...toRows(sRows, "TOTAL")], tblOpts(RX, midY + 0.32, RW, 1.3, 11, 0.29));
+    h2("Progress by Area", M, botY, LW);
+    s.addTable([...head2("AREA"), ...toRows(aRows, "TOTAL")], tblOpts(M, botY + 0.32, LW, 1.4, 9.5, 0.235));
+
+    // Key Activities / Issues (항목이 적으면 빈 행으로 채운다)
+    const noteTable = (title, items, minRows, y, rowH) => {
+        const rows = [[hdr(title)]];
+        items.forEach(runs => rows.push([{ text: runs.map(([t, b]) => ({ text: t, options: { bold: !!b, fontFace: F, fontSize: 11, color: INK } })), options: { valign: "middle", bullet: { indent: 12 } } }]));
+        for (let i = items.length; i < minRows; i++) rows.push([{ text: "", options: {} }]);
+        s.addTable(rows, { x: RX, y, w: RW, colW: [RW], rowH: [0.28, ...Array(rows.length - 1).fill(rowH)], border: { type: "solid", pt: 0.75, color: LINE }, margin: [0.03, 0.1, 0.03, 0.1], fontFace: F, fontSize: 11 });
+    };
+    h2("Key Activities", RX, botY, RW);
+    noteTable("KEY ACTIVITIES", EP_REPORT_NOTES.activities, EP_NOTE_MIN_ROWS, botY + 0.32, 0.5);
+    h2("Issues", RX, botY + 2.75, RW);
+    noteTable("ISSUES", EP_REPORT_NOTES.issues, 2, botY + 3.07, 0.5);
+
+    return { pres, fileName: `Early_Power_Progress_Report_${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_A3.pptx` };
 }
 
 async function epReport() {
-    const w = window.open("", "_blank");   // 클릭 직후 열어야 팝업 차단을 피함
-    if (!w) { toast("Pop-up blocked. Allow pop-ups for this site and retry.", "error"); return; }
-    w.document.write("<p style='font-family:Arial;padding:20px'>Building report...</p>");
     try {
-        const data = await getDashData();
-        if (!data.ep_kpi || !(data.ep_sys || []).length) { w.close(); toast("No Early Power data", "error"); return; }
+        toast("Building PPT report...", "info");
+        const [data] = await Promise.all([getDashData(), loadPptxGen()]);
+        if (!data.ep_kpi || !(data.ep_sys || []).length) { toast("No Early Power data", "error"); return; }
         if (!_epSupportData || Date.now() - _epSupportDataTime > 1200_000) {
             _epSupportData = await apiFetch("/api/ep-support-summary");
             _epSupportDataTime = Date.now();
         }
-        const html = buildEpReportHtml(data, _epSupportData || {});
-        w.document.open(); w.document.write(html); w.document.close();
-        setTimeout(() => w.print(), 400);
+        const { pres, fileName } = buildEpReportPptx(data, _epSupportData || {});
+        await pres.writeFile({ fileName });
     } catch (e) {
         console.error("EP report failed", e);
-        w.close();
         toast("Report failed: " + (e.message || e), "error");
     }
 }
