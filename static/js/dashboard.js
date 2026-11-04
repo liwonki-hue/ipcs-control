@@ -2304,7 +2304,7 @@ ${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
 <div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
-<div class="notes"><h2>Key Works &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY WORKS</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(4)}</tbody></table></div>
+<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY ACTIVITIES</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(4)}</tbody></table></div>
 </body></html>`;
 }
 
