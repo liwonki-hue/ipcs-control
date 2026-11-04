@@ -2174,6 +2174,16 @@ async function exportEPExcel(){
 // ================================================================================
 //  EARLY POWER EXECUTIVE REPORT (A4 가로 1페이지)
 // ================================================================================
+// 보고서 하단 Key Activities / Issues 기본 문구 (행 단위 [activity, issue], HTML 허용). 주차마다 이 값을 갱신한다.
+const EP_REPORT_NOTES = [
+    ["&bull; CCW piping, supports &amp; hydrotest preparation (Target: Nov. 13)",
+     "&bull; <b>CCW Flushing:</b> Delayed due to pending Temporary Demi. Water Plant commissioning, tank leak test, and raw water piping."],
+    ["&bull; Fuel Gas piping, supports &amp; hydrotest preparation (Target: Nov. 20)",
+     "&bull; <b>Fuel Gas Pig Cleaning:</b> Start expected after Nov. 15 due to delays in pigging materials and contractor selection."],
+    ["&bull; Priority installation of utility piping &amp; supports for GT #11", ""],
+    ["", ""],
+];
+
 function buildEpReportHtml(data, sup) {
     const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
     const sum = (rows, k) => (rows || []).reduce((s, r) => s + (r[k] || 0), 0);
@@ -2304,7 +2314,7 @@ ${kp("REMAINING D/I", n0(remDI), `${p1(100 - pipePct)} of EP piping scope`, "#c2
 <div><h2>Progress by EP System</h2>${sysHtml}</div>
 </div>
 <div class="sub"><div><h2>Progress by Area (1)</h2>${subTable(aRows.slice(0, half), false)}</div><div><h2>Progress by Area (2)</h2>${subTable(aRows.slice(half), true)}</div></div>
-<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY ACTIVITIES</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${"<tr><td contenteditable=\"true\"></td><td contenteditable=\"true\"></td></tr>".repeat(4)}</tbody></table></div>
+<div class="notes"><h2>Key Activities &amp; Issues</h2><table><thead><tr><th style="width:50%">KEY ACTIVITIES</th><th style="width:50%">ISSUES</th></tr></thead><tbody>${EP_REPORT_NOTES.map(([a, i]) => `<tr><td contenteditable="true">${a}</td><td contenteditable="true">${i}</td></tr>`).join("")}</tbody></table></div>
 </body></html>`;
 }
 
