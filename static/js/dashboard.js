@@ -2174,20 +2174,6 @@ async function exportEPExcel(){
 // ================================================================================
 //  EARLY POWER EXECUTIVE REPORT (A3 가로 1장 PPT — 브라우저에서 pptxgenjs로 생성해 내려받는다)
 // ================================================================================
-// Key Activities / Issues 기본 문구. 항목은 [텍스트, 굵게 여부] 조각의 배열이며 주차마다 이 값을 갱신한다.
-const EP_NOTE_MIN_ROWS = 4;
-const EP_REPORT_NOTES = {
-    activities: [
-        [["CCW System: ", 1], ["Prioritizing remaining piping, support installation and hydrotest preparation in line with the Flushing schedule — ", 0], ["Hydrotest completion: Nov. 13", 1]],
-        [["Fuel Gas System: ", 1], ["Accelerating remaining piping, support installation and hydrotest preparation ahead of Pig Cleaning — ", 0], ["Hydrotest completion: Nov. 20", 1]],
-        [["GT #11 Early Power: ", 1], ["Piping & support installation in progress for all systems required for Early Power, with priority on utility systems", 0]],
-    ],
-    issues: [
-        [["CCW Flushing — Schedule at risk: ", 1], ["Delayed Temporary Demi. Water Plant material preparation & commissioning, Demi. Tank Leak Test, and Temporary Raw Water & Demi. Water supply piping installation are impacting the Flushing schedule", 0]],
-        [["Fuel Gas Pig Cleaning — Start after Nov. 15: ", 1], ["Delayed delivery of pigging materials and pending contractor selection", 0]],
-    ],
-};
-
 let _pptxLoading = null;
 function loadPptxGen() {   // 보고서를 만들 때만 라이브러리를 불러온다 (서버 메모리·초기 로딩 영향 없음)
     if (window.PptxGenJS) return Promise.resolve();
@@ -2330,18 +2316,6 @@ function buildEpReportPptx(data, sup) {
     s.addTable([...head2("SYSTEM"), ...toRows(sRows, "TOTAL")], tblOpts(RX, midY + 0.32, RW, 1.3, 11, 0.29));
     h2("Progress by Area", M, botY, LW);
     s.addTable([...head2("AREA"), ...toRows(aRows, "TOTAL")], tblOpts(M, botY + 0.32, LW, 1.4, 9.5, 0.235));
-
-    // Key Activities / Issues (항목이 적으면 빈 행으로 채운다)
-    const noteTable = (title, items, minRows, y, rowH) => {
-        const rows = [[hdr(title)]];
-        items.forEach(runs => rows.push([{ text: runs.map(([t, b]) => ({ text: t, options: { bold: !!b, fontFace: F, fontSize: 11, color: INK } })), options: { valign: "middle", bullet: { indent: 12 } } }]));
-        for (let i = items.length; i < minRows; i++) rows.push([{ text: "", options: {} }]);
-        s.addTable(rows, { x: RX, y, w: RW, colW: [RW], rowH: [0.28, ...Array(rows.length - 1).fill(rowH)], border: { type: "solid", pt: 0.75, color: LINE }, margin: [0.03, 0.1, 0.03, 0.1], fontFace: F, fontSize: 11 });
-    };
-    h2("Key Activities", RX, botY, RW);
-    noteTable("KEY ACTIVITIES", EP_REPORT_NOTES.activities, EP_NOTE_MIN_ROWS, botY + 0.32, 0.5);
-    h2("Issues", RX, botY + 2.75, RW);
-    noteTable("ISSUES", EP_REPORT_NOTES.issues, 2, botY + 3.07, 0.5);
 
     return { pres, fileName: `Early_Power_Progress_Report_${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_A3.pptx` };
 }
