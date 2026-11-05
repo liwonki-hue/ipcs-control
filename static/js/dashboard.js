@@ -807,7 +807,7 @@ async function renderPressureTestChart(allSystems) {
 //  EARLY POWER OVERVIEW
 // ================================================================================
 // EP Area(Sub Area) 표시 순서 — EP 탭과 보고서가 같은 규칙을 쓴다.
-// CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외(입력 순서 유지) → PR #n(번호순) → MB STR → HRSG #11 PR → GT #11(맨 끝)
+// CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외(입력 순서 유지) → PR #n(번호순) → MB STR → HRSG #11 PR → HRSG #11 → GT #11(맨 끝)
 function orderEpAreaRows(rows, nameOf) {
     const used = new Set();
     const pick = list => list.filter(r => !used.has(nameOf(r)) && used.add(nameOf(r)));
@@ -816,7 +816,7 @@ function orderEpAreaRows(rows, nameOf) {
     const psRows = pick(rows.filter(r => /PS$/.test(nameOf(r))));
     const tkRows = pick(rows.filter(r => /TK$/.test(nameOf(r))));
     const prRows = pick(rows.filter(r => /^PR #\d+$/.test(nameOf(r))).sort((x, y) => parseInt(nameOf(x).slice(4)) - parseInt(nameOf(y).slice(4))));
-    const tail = byName(["MB STR", "HRSG #11 PR", "GT #11"]);
+    const tail = byName(["MB STR", "HRSG #11 PR", "HRSG #11", "GT #11"]);
     const others = pick(rows);
     return [...firstRows, ...psRows, ...tkRows, ...others, ...prRows, ...tail];
 }
