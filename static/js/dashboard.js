@@ -2317,6 +2317,14 @@ function buildEpReportPptx(data, sup) {
     h2("Progress by Area", M, botY, LW);
     s.addTable([...head2("AREA"), ...toRows(aRows, "TOTAL")], tblOpts(M, botY + 0.32, LW, 1.4, 9.5, 0.235));
 
+    // Key Activities / Issues — 표 틀만 두고 내용은 PPT에서 직접 작성한다
+    const blankTable = (title, rows, y) => s.addTable([[hdr(title)], ...Array.from({ length: rows }, () => [{ text: "", options: {} }])],
+        { x: RX, y, w: RW, colW: [RW], rowH: [0.28, ...Array(rows).fill(0.5)], border: { type: "solid", pt: 0.75, color: LINE }, margin: [0.03, 0.1, 0.03, 0.1], fontFace: F, fontSize: 11 });
+    h2("Key Activities", RX, botY, RW);
+    blankTable("KEY ACTIVITIES", 4, botY + 0.32);
+    h2("Issues", RX, botY + 2.75, RW);
+    blankTable("ISSUES", 3, botY + 3.07);
+
     return { pres, fileName: `Early_Power_Progress_Report_${now.getFullYear()}${z(now.getMonth() + 1)}${z(now.getDate())}_A3.pptx` };
 }
 
