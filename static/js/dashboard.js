@@ -2330,7 +2330,13 @@ async function epReport() {
             _epSupportDataTime = Date.now();
         }
         const { pres, fileName } = buildEpReportPptx(data, _epSupportData || {});
-        await pres.writeFile({ fileName });
+        // 라이브러리 내장 저장 대신 직접 내려받는다 — 일부 브라우저에서 파일명이 GUID로 저장되는 문제 방지
+        const blob = await pres.write({ outputType: "blob" });
+        const url = URL.createObjectURL(new Blob([blob], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }));
+        const a = document.createElement("a");
+        a.href = url; a.download = fileName; a.style.display = "none";
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 10000);
     } catch (e) {
         console.error("EP report failed", e);
         toast("Report failed: " + (e.message || e), "error");
