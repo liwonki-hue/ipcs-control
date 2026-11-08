@@ -147,6 +147,7 @@ let metaData = { units: [], systems: [] };
 // ================================================================================
 let _dashData = null;
 let _epSupportData = null;
+let _epSupRetryTimer = null;
 let _epSupportDataTime = 0;
 let _drBreakdowns = {};
 let _drSelectedDate = "";
@@ -414,6 +415,16 @@ async function apiFetch(url, { noCache = false, signal } = {}) {
     const data = await res.json();
     if (useCache) _apiCache.set(url, { data, exp: Date.now() + _CACHE_TTL });
     return data;
+}
+
+// 일시적인 서버·네트워크 오류를 견디도록 몇 번 더 시도한다 (서버를 막 켰을 때 첫 호출이 실패하는 경우 등)
+async function apiFetchRetry(url, tries = 3, delayMs = 1500) {
+    let lastErr;
+    for (let i = 0; i < tries; i++) {
+        try { return await apiFetch(url); }
+        catch (e) { lastErr = e; if (i < tries - 1) await new Promise(r => setTimeout(r, delayMs)); }
+    }
+    throw lastErr;
 }
 
 function pctColor(v) {
@@ -881,14 +892,22 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         try {
             const now = Date.now();
             if (!_epSupportData || now - _epSupportDataTime > 1200_000 || !(_epSupportData.testpkg_total > 0)) {   // Test Package 조회가 실패해 0이면 재조회
-                _epSupportData = await apiFetch("/api/ep-support-summary");
+                _epSupportData = await apiFetchRetry("/api/ep-support-summary");
                 _epSupportDataTime = now;
             }
             sup = _epSupportData;
             subareaMap = sup.subarea_map || {};
             support_tot  = (sup.sys || []).reduce((s,r) => s + (r.total_di     || 0), 0);
             support_comp = (sup.sys || []).reduce((s,r) => s + (r.completed_di || 0), 0);
-        } catch(e) { console.error("EP support summary failed", e); }
+        } catch(e) {
+            console.error("EP support summary failed", e);
+            // 끝내 실패하면 10초 뒤 EP 탭이 열려 있을 때 한 번 더 불러온다 (0%로 굳어 있지 않도록)
+            if (!_epSupRetryTimer) _epSupRetryTimer = setTimeout(() => {
+                _epSupRetryTimer = null;
+                const pg = document.getElementById("page-early_power");
+                if (pg && !pg.classList.contains("hidden")) loadEarlyPower();
+            }, 10000);
+        }
         const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
         // EP Pressure Test Progress — EP Package만 (서버가 EP 조인트·서포트가 쓰는 Package 기준으로 집계)
         if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || [], ["GT MISC"]);
