@@ -238,6 +238,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems, data.subareas);
+        if (typeof loadPace === "function") loadPace();
     } catch(e) {
         _loadError = true;
         console.error("[BOP] Init error:", e);
@@ -330,7 +331,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report", "iso_status", "data_quality"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "flex";
@@ -342,11 +343,13 @@ function navigate(page) {
     }
 
     switch(page) {
-        case "overview":    loadOverview();     break;
+        case "overview":    loadOverview(); loadPace(); break;
         case "early_power": loadEarlyPower();   break;
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
+        case "iso_status":  loadIsoStatus();    break;
+        case "data_quality": loadDataQuality(); break;
         case "joint_master":
             if ((document.getElementById("jm-mat")?.options?.length||0) <= 1) {
                 _loadJMFilterSel("jm-mat",  "mat",       "Material");
@@ -381,7 +384,7 @@ async function _autoRefreshCurrentPage() {
     try {
         await getDashData(true);
         switch (visPage) {
-            case "overview":    loadOverview();     break;
+            case "overview":    loadOverview(); loadPace(); break;
             case "early_power": loadEarlyPower();   break;
             case "systems":     loadSystems(); loadSubArea(); break;
             case "weekly":      loadWeekly();       break;
