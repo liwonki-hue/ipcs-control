@@ -51,6 +51,7 @@ def test_totals_and_fab_erect_split():
     rows = [make(id=1, sf="S", di=4), make(id=2, sf="F", di=6, date_completed=None, vt_date=None, vt_result=None), make(id=3, sf="s", di=2)]
     iso = analyze(rows)["isos"][0]
     assert (iso["n"], iso["di"], iso["welded"], iso["welded_di"]) == (3, 12.0, 2, 6.0)
+    assert iso["remaining_di"] == 6.0                                           # 관리 기준은 D/I: 전체 12 - 완료 6
     assert (iso["fab_n"], iso["fab_w"], iso["erect_n"], iso["erect_w"]) == (2, 2, 1, 0)   # 소문자 s도 Shop
     assert iso["fab_done_erect_open"] is True
     assert iso["last_weld"] == "2026-10-01"

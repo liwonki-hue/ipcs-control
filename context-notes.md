@@ -312,3 +312,8 @@
 - 요청: Sub Area가 `(multi)`일 때 `PR #3 / MB STR`처럼 둘 다 표기. 서버가 `sub_area`를 정렬된 값의 `/` 연결 문자열로 보내고(177개 ISO; 처음엔 ` / `였으나 폭이 부족하면 공백을 없애라는 지시로 `PR #3/PWPS` 형태로 바꿈), 필터용 목록 `sub_areas`도 함께 보낸다. **필터·드롭다운은 문자열이 아니라 `sub_areas` 목록을 쓴다** — 그래서 두 Sub Area에 걸친 ISO는 각 Sub Area 필터에 모두 나오고, 드롭다운에는 `A / B` 같은 합친 값이 없다(41개 기본값). System·Rev·Package는 여전히 여러 개면 `(multi)`(요청 범위 밖).
 - 따라서 정렬 키 `sub_area`는 합친 문자열 기준. Data Quality의 `iso_multi_sub_area`(정보 수준)는 그대로.
 - 곁다리 수정: 전역 CSS(`.data-table td { white-space: normal }`)가 ISO 표 셀을 줄바꿈 허용으로 덮어써서, 열이 좁아지면 Last Weld 날짜가 두 줄로 꺾여 행 높이가 들쭉날쭉했다. `#isoTable td { white-space: nowrap }`로 표 전체를 한 줄 고정하고 열 너비를 다시 나눴다(ISO 16%, Sys 5%, Sub Area 12%, Package 11%, Welded 8%, Last Weld 7%, Status 11%, 표 최소폭 1280px). 1696×830에서 기본/Sub Area/System 필터 4가지 경우 모두 잘린 셀 0개, 행 높이 23~24px 일정.
+
+## 2026-11-08 ISO Status — 관리 기준을 Joint 수에서 D/I로 (FAB·ERECT 열 삭제)
+- 사용자 지시: "현재 관리 기준은 Joint가 아니라 D/I". Fab·Erect 열(조인트 수 `5/6` 형태)을 지우고 같은 자리에 D/I 기준 `Completed`(=`welded_di`, 용접 완료 조인트의 D/I 합)와 `Remaining`(=`remaining_di` = 전체 D/I − 완료 D/I)를 넣었다. 서버 응답에 `remaining_di` 추가, 두 열 모두 정렬 가능, 엑셀은 `Completed DI`·`Remaining DI`로 바뀌고 Fab/Erect 4열은 삭제.
+- 검증: 모든 ISO에서 D/I = Completed + Remaining(±0.01), 합계가 대시보드 KPI와 일치(전체 163,304.5 / 완료 101,160.5 / 잔여 62,144.0).
+- **조인트 수 기준으로 남은 것(이번 지시 범위 밖이라 그대로)**: `Jnts`, `Acc.`(합격 조인트 수), `Pend.`(검사 대기 조인트 수), 상태 판정(Not started/Welding/Inspection Pending/Accepted는 조인트 단위 판정), `Fab done · Erect open` 칩·점(Fab/Erect 조인트 수로 판정, 서버 응답의 `fab_n/fab_w/erect_n/erect_w`는 이 판정과 테스트에 쓰여 남겨 둠), Support `done/total`(Support는 EA 기준이 맞음). 이 중 D/I로 바꿀 것이 있으면 별도 지시를 받는다.

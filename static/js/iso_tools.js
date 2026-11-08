@@ -224,8 +224,8 @@ function _isoRowHtml(r) {
         <td style="text-align:center">${r.n}</td>
         <td style="text-align:right">${fmtNum(r.di, 1)}</td>
         <td><div style="display:flex;align-items:center;gap:6px"><div class="bar-track" style="flex:1;height:6px"><div style="width:${pct}%;height:100%;background:${color}"></div></div><span style="font-size:11px;width:34px;text-align:right">${pct}%</span></div></td>
-        <td style="text-align:center">${cell(r.fab_w, r.fab_n)}</td>
-        <td style="text-align:center">${cell(r.erect_w, r.erect_n)}</td>
+        <td style="text-align:right">${fmtNum(r.welded_di, 1)}</td>
+        <td style="text-align:right">${fmtNum(r.remaining_di, 1)}</td>
         <td style="text-align:center">${r.accepted}</td>
         <td style="text-align:center;${r.pending ? "color:#f59e0b;font-weight:700" : ""}">${r.pending}</td>
         <td style="text-align:center">${cell(r.sup_done, r.sup_n)}</td>
@@ -246,7 +246,7 @@ async function exportIsoStatus() {
     await ensureXlsx();
     const rows = _iso.filtered.map(r => ({
         "ISO No": r.iso, "Rev": r.rev, "System": r.system, "Sub Area": r.sub_area, "Package": r.package, "Joints": r.n, "DI": r.di,
-        "Welded Joints": r.welded, "Welded DI": r.welded_di, "Fab Welded": r.fab_w, "Fab Total": r.fab_n, "Erect Welded": r.erect_w, "Erect Total": r.erect_n,
+        "Completed DI": r.welded_di, "Remaining DI": r.remaining_di, "Welded Joints": r.welded,
         "Accepted": r.accepted, "Inspection Pending": r.pending, "Support Done": r.sup_done, "Support Total": r.sup_n,
         "Last Weld": r.last_weld, "Status": _ISO_STATUS_TABLE[r.status] || r.status, "Fab done, Erect open": r.fab_done_erect_open ? "Y" : "",
     }));
