@@ -474,3 +474,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* ISO Status: 표에 더 많은 높이를 준다(네비게이터 여백 축소) + 남는 높이를 행 여백으로 채운다(--iso-pad, iso_tools.js의 isoFit이 정함) */
 #page-iso_status .de-pagination, #page-data_quality .de-pagination { padding: 6px 0; margin-top: 6px; }
 #isoTable td { white-space: nowrap; padding-top: calc(4px + var(--iso-pad, 0px)); padding-bottom: calc(4px + var(--iso-pad, 0px)); }   /* 전역 규칙이 td를 줄바꿈 허용으로 덮어써서 행 높이가 들쭉날쭉해지는 것을 막는다 */
+
+/* ISO Status 표 여백: 전역 규칙은 화면 폭 1600px 이하에서 셀 좌우 여백을 4px로 줄이므로 고정한다. 오른쪽 정렬 숫자 열은 옆 열과 붙어 보이지 않게 오른쪽 여백을 더 준다 */
+#isoTable td, #isoTable th { padding-left: 8px; padding-right: 8px; }
+#isoTable .iso-num { text-align: right; padding-right: 16px; }

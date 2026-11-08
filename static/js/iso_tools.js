@@ -228,10 +228,10 @@ function _isoRowHtml(r) {
         <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.sub_area)}">${esc(r.sub_area)}</td>
         <td style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.package)}">${esc(r.package || "—")}</td>
         <td style="text-align:center">${r.n}</td>
-        <td style="text-align:right">${fmtNum(r.di, 1)}</td>
+        <td class="iso-num">${fmtNum(r.di, 1)}</td>
         <td><div style="display:flex;align-items:center;gap:6px"><div class="bar-track" style="flex:1;height:6px"><div style="width:${pct}%;height:100%;background:${color}"></div></div><span style="font-size:11px;width:34px;text-align:right">${pct}%</span></div></td>
-        <td style="text-align:right">${fmtNum(r.welded_di, 1)}</td>
-        <td style="text-align:right">${fmtNum(r.remaining_di, 1)}</td>
+        <td class="iso-num">${fmtNum(r.welded_di, 1)}</td>
+        <td class="iso-num">${fmtNum(r.remaining_di, 1)}</td>
         <td style="text-align:center">${r.accepted}</td>
         <td style="text-align:center;${r.pending ? "color:#f59e0b;font-weight:700" : ""}">${r.pending}</td>
         <td style="text-align:center">${cell(r.sup_done, r.sup_n)}</td>

@@ -328,3 +328,9 @@
 - 상세 목록은 표 안쪽 스크롤 대신 ISO Status와 같은 방식: 행을 한 줄로 고정(긴 값은 말줄임표+툴팁)하고 `_fitRows`로 네비게이터가 화면 안에 들어오는 최대 행 수를 정해 페이지로 나눈다(`Total N rows` + ‹ 1 2 3 … N ›). 검사를 바꾸면 1페이지로, 창 크기가 바뀌면 다시 맞춘다. `dqShow(key)`는 이제 인자 하나(카드 클릭)이고 상세는 `_dqRenderDetail`→`_dqDraw`→`dqFit`.
 - `isoFit`의 행 수 맞춤 반복을 공용 `_fitRows`로 뽑아 ISO Status·Data Quality가 함께 쓴다(ISO 쪽 동작은 그대로: `--iso-pad` 보정은 isoFit에 남김).
 - 로그인이 필요한 화면이라 실데이터와 같은 모양의 결과(500건 목록 포함)를 주입해 검증: 1280×720=12행, 1696×830=15행, 1920×1080=27행, 모두 네비게이터가 뷰포트 안·문서 스크롤 0px·표 안쪽 스크롤 없음. 3페이지 첫 행(row 31)과 마지막 페이지(5행) 확인.
+
+## 2026-11-08 ISO Status 열 간격 재조정 (Jnts·D/I·Acc.·Pend.가 좁아 보임)
+- 원인: 열 너비를 %로 나눠 표가 최소 폭 근처일 때 숫자 열이 50~58px로 가장 좁았고, 오른쪽 정렬 숫자(D/I·Completed·Remaining)가 옆 열에 바짝 붙었다. 또 전역 CSS가 화면 폭 1600px 이하에서 셀 좌우 여백을 4px로 줄여(`@media (max-width:1600px)`) 화면 크기에 따라 간격이 달랐다.
+- 수정: ① 열 너비를 **px**로 지정(`<col style="width:Npx">`, 합계 = 표 `min-width` 1440px): ISO 202, Rev 52, Sys 64, Sub Area 150, Package 144, Jnts 64, D/I 74, Welded 90, Completed 88, Remaining 88, Acc. 60, Pend. 60, Supp. 66, Last Weld 88, Status 150. ② `#isoTable td, th`의 좌우 여백을 8px로 고정. ③ 오른쪽 정렬 숫자 열(`.iso-num`)은 오른쪽 여백 16px.
+- 필요 폭은 추측이 아니라 실제 최대 폭을 같은 글꼴로 재서 정했다: ISO 185px(`CCP-W-B032-PI-140-CWR-058-10`), Sub Area 132px(`HRSG #12/HRSG #12 PR`), Package 126px, Status 138px(`Inspection Pending ●`) + 좌우 여백 16px. 처음 188px로 잡았다가 ISO가 잘려 202px로 올렸다. **새 열이나 더 긴 값이 생기면 이 폭을 다시 재야 한다.**
+- 검증(1696×830, 표 폭 1441px): 3,973개 행을 전부 펼쳐 잘린 셀·머리글 0개, 가로 스크롤 없음, 네비게이터 화면 안. 이전 대비 Jnts 52→64, D/I 58→74, Acc./Pend. 52→60, Supp. 58→66. 컨테이너가 1440px보다 좁으면 표 안쪽에서 가로 스크롤(사용자 화면 폭에서는 원래도 스크롤됨).
