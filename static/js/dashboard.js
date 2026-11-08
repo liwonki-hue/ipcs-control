@@ -789,11 +789,12 @@ async function renderPressureTestChart(allSystems) {
 }
 
 // 계통별 Test Package 단계 누적 막대 — Overview(전체 Package)와 EP 탭(EP Package만)이 같은 모양으로 쓴다
-function drawTestStageChart(canvasId, systemNames, rows) {
+function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
     const el = document.getElementById(canvasId);
     if (!el) return;
     const byName = Object.fromEntries((rows || []).map(r => [r.system, r]));
     const names = [...new Set([...(systemNames || []), ...Object.keys(byName)])].filter(Boolean).sort();
+    lastNames.forEach(n => { const i = names.indexOf(n); if (i >= 0) names.push(...names.splice(i, 1)); });   // 지정한 항목은 맨 오른쪽으로
     const STAGES = [
         {key: "completed",   label: "Completed",     color: "rgba(5,150,105,0.75)"},
         {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
@@ -890,7 +891,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         } catch(e) { console.error("EP support summary failed", e); }
         const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
         // EP Pressure Test Progress — EP Package만 (서버가 EP 조인트·서포트가 쓰는 Package 기준으로 집계)
-        if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || []);
+        if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || [], ["GT MISC"]);
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
         // Test Package는 Test Package Register에서 Phase=EP로 등록된 것만 집계
