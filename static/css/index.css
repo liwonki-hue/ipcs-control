@@ -123,8 +123,8 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
   box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .kpi-row .kpi-card:first-child { flex: 1.5 1 220px; }
-/* Overview: KPI 카드 5개를 모두 같은 폭으로 */
-#kpiRow .kpi-card { flex: 1 1 0; }
+/* Overview·Early Power: KPI 카드 5개를 모두 같은 폭으로 */
+#kpiRow .kpi-card, #epKpiRow .kpi-card { flex: 1 1 0; }
 .kpi-card.accent { border-top-color: var(--accent); }
 .kpi-card.cyan   { border-top-color: var(--accent); }
 .kpi-card.green  { border-top-color: var(--green); }

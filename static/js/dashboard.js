@@ -918,13 +918,6 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         _setCol("ep-kpi-testpkg", pctColor(testpkg_pct));
         _setKpi("ep-kpi-testpkg-sub", test_tot > 0 ? `${fmtNum(test_comp,0)} / ${fmtNum(test_tot,0)}` : "—");
 
-        // EP Week Actual = last week with EP completed DI (from ep_weekly)
-        const actEpWks = (weekly || []).filter(w => w.completed_di > 0);
-        const lastEpWk = actEpWks.length ? actEpWks[actEpWks.length - 1] : null;
-        if(lastEpWk) {
-            _setKpi("ep-kpi-week",     fmtNum(lastEpWk.completed_di, 0));
-            _setKpi("ep-kpi-week-sub", `W${lastEpWk.week_no} · EP Piping D/I`);
-        }
         // Avg Welder Performance is kept in sync by _updateWelderKpiBar (runs on startup + loadWelder)
         if(_welderData) _updateWelderKpiBar(_welderData);
 
