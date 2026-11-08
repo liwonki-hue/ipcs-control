@@ -3511,7 +3511,7 @@ def _compute_daily_report():
                 daily[dc]["welders"].add(w)
 
     supp_res = _sb_exec(lambda sb: sb.table("support_master")
-        .select("date_completed,type")
+        .select("date_completed,type,system,sub_area")
         .not_.is_("date_completed", "null")
         .gte("date_completed", range_start)
         .lte("date_completed", range_end)
@@ -3519,16 +3519,18 @@ def _compute_daily_report():
     supp_rows = supp_res.data or []
     del supp_res
     supp_daily: dict = {}
+    supp_bd: dict = {}      # 날짜 → {"sys"/"sub": {라벨: {"special": n, "typical": n}}} — 계통·Sub Area별 Support 실적
     for s in supp_rows:
         dc = str(s.get("date_completed") or "")[:10]
         if dc not in last_5:
             continue
+        kind = "special" if (s.get("type") or "").strip().upper() == "SPECIAL" else "typical"
         if dc not in supp_daily:
             supp_daily[dc] = {"special": 0, "typical": 0}
-        if (s.get("type") or "").strip().upper() == "SPECIAL":
-            supp_daily[dc]["special"] += 1
-        else:
-            supp_daily[dc]["typical"] += 1
+        supp_daily[dc][kind] += 1
+        bd_s = supp_bd.setdefault(dc, {"sys": {}, "sub": {}})
+        for label, mk in ((s.get("system") or "-", "sys"), (s.get("sub_area") or "-", "sub")):
+            bd_s[mk].setdefault(label, {"special": 0, "typical": 0})[kind] += 1
     del supp_rows
 
     daily_rows = [
@@ -3565,17 +3567,25 @@ def _compute_daily_report():
             if is_fab:    bd[mk][label]["fab_di"]   += di
             elif is_erect: bd[mk][label]["erect_di"] += di
 
+    for dc, bd_s in supp_bd.items():        # Joint 실적이 없는 날의 Support 항목도 표에 나오도록 라벨을 만든다
+        for mk in ("sys", "sub"):
+            for label in bd_s[mk]:
+                breakdowns[dc][mk].setdefault(label, {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0})
+
     for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
         for dc in last_5:
             if always_mat not in breakdowns[dc]["mat"]:
                 breakdowns[dc]["mat"][always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
 
-    def _to_list(mapping, key_field):
+    def _to_list(mapping, key_field, supp=None):
+        supp = supp or {}
         return sorted(
             [{key_field: k,
               "fab_di": round(v["fab_di"], 1),
               "erect_di": round(v["erect_di"], 1),
-              "completed_di": round(v["completed_di"], 1)}
+              "completed_di": round(v["completed_di"], 1),
+              "supp_special": supp.get(k, {}).get("special", 0),
+              "supp_typical": supp.get(k, {}).get("typical", 0)}
              for k, v in mapping.items()],
             key=lambda x: x[key_field]
         )
@@ -3584,8 +3594,8 @@ def _compute_daily_report():
     for dc in last_5:
         bd = breakdowns[dc]
         breakdowns_out[dc] = {
-            "systems":   _to_list(bd["sys"], "system"),
-            "subareas":  _to_list(bd["sub"], "sub_area"),
+            "systems":   _to_list(bd["sys"], "system", supp_bd.get(dc, {}).get("sys")),
+            "subareas":  _to_list(bd["sub"], "sub_area", supp_bd.get(dc, {}).get("sub")),
             "materials": _to_list(bd["mat"], "mat"),
         }
 

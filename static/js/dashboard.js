@@ -4013,39 +4013,59 @@ function renderDrBreakdown(date) {
     const drEl = id => document.getElementById(id);
     if (drEl("drMaterialTitle")) drEl("drMaterialTitle").textContent = `${label} Breakdown — By Material`;
     if (drEl("drSystemTitle"))   drEl("drSystemTitle").textContent   = `${label} Breakdown — By System`;
-    if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area (1)`;
-    if (drEl("drSubareaTitle2")) drEl("drSubareaTitle2").textContent = `${label} Breakdown — By Sub Area (2)`;
+    if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area`;
 
-    const mkDataRows = (arr, nameKey) => arr.map(r => `<tr>
-        <td style="color:var(--accent)">${r[nameKey] || ""}</td>
+    // 자재 표는 Piping만 (Support에는 자재 구분이 없다)
+    const mkMatRows = arr => arr.map(r => `<tr>
+        <td style="color:var(--accent)">${r.mat || ""}</td>
         <td>${fmtNum(r.fab_di || 0, 1)}</td>
         <td>${fmtNum(r.erect_di || 0, 1)}</td>
         <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
     </tr>`).join("");
-
-    const mkTotalRow = arr => {
-        const tF = arr.reduce((s, r) => s + (r.fab_di || 0), 0);
-        const tE = arr.reduce((s, r) => s + (r.erect_di || 0), 0);
-        const tC = arr.reduce((s, r) => s + (r.completed_di || 0), 0);
+    const mkMatTotal = arr => {
+        const t = k => arr.reduce((s, r) => s + (r[k] || 0), 0);
         return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
             <td style="font-weight:700;color:var(--accent)">Total</td>
-            <td style="font-weight:700">${fmtNum(tF, 1)}</td>
-            <td style="font-weight:700">${fmtNum(tE, 1)}</td>
-            <td style="font-weight:700;color:var(--accent)">${fmtNum(tC, 1)}</td>
+            <td style="font-weight:700">${fmtNum(t("fab_di"), 1)}</td>
+            <td style="font-weight:700">${fmtNum(t("erect_di"), 1)}</td>
+            <td style="font-weight:700;color:var(--accent)">${fmtNum(t("completed_di"), 1)}</td>
+        </tr>`;
+    };
+
+    // 계통·Sub Area 표 — PIPING (Fab/Erect/Done) + SUPPORT (Special/Typical/Done)를 한 표로
+    const mkRows = (arr, nameKey) => arr.map(r => {
+        const sp = r.supp_special || 0, ty = r.supp_typical || 0;
+        return `<tr>
+        <td style="color:var(--accent)">${r[nameKey] || ""}</td>
+        <td>${fmtNum(r.fab_di || 0, 1)}</td>
+        <td>${fmtNum(r.erect_di || 0, 1)}</td>
+        <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
+        <td style="color:#22d3a1">${sp}</td>
+        <td style="color:#22d3a1">${ty}</td>
+        <td style="color:#22d3a1">${sp + ty}</td>
+    </tr>`; }).join("");
+    const mkTotal = arr => {
+        const t = k => arr.reduce((s, r) => s + (r[k] || 0), 0);
+        const sp = t("supp_special"), ty = t("supp_typical");
+        return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
+            <td style="font-weight:700;color:var(--accent)">Total</td>
+            <td style="font-weight:700">${fmtNum(t("fab_di"), 1)}</td>
+            <td style="font-weight:700">${fmtNum(t("erect_di"), 1)}</td>
+            <td style="font-weight:700;color:var(--accent)">${fmtNum(t("completed_di"), 1)}</td>
+            <td style="font-weight:700;color:#22d3a1">${sp}</td>
+            <td style="font-weight:700;color:#22d3a1">${ty}</td>
+            <td style="font-weight:700;color:#22d3a1">${sp + ty}</td>
         </tr>`;
     };
 
     const sysBody = document.querySelector("#drSystemTable tbody");
-    if (sysBody) sysBody.innerHTML = mkDataRows(systems, "system") + mkTotalRow(systems);
+    if (sysBody) sysBody.innerHTML = mkRows(systems, "system") + mkTotal(systems);
 
     const matBody = document.querySelector("#drMaterialTable tbody");
-    if (matBody) matBody.innerHTML = mkDataRows(materials, "mat") + mkTotalRow(materials);
+    if (matBody) matBody.innerHTML = mkMatRows(materials) + mkMatTotal(materials);
 
-    const mid = Math.ceil(subareas.length / 2);
-    const subBody1 = document.querySelector("#drSubareaTable tbody");
-    const subBody2 = document.querySelector("#drSubareaTable2 tbody");
-    if (subBody1) subBody1.innerHTML = mkDataRows(subareas.slice(0, mid), "sub_area");
-    if (subBody2) subBody2.innerHTML = mkDataRows(subareas.slice(mid), "sub_area") + mkTotalRow(subareas);
+    const subBody = document.querySelector("#drSubareaTable tbody");
+    if (subBody) subBody.innerHTML = mkRows(subareas, "sub_area") + mkTotal(subareas);
 }
 
 function selectDailyDate(date) {
