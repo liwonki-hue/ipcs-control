@@ -1723,11 +1723,26 @@ def api_daily_actuals():
         return jsonify({"date_start": None, "date_end": None, "data": []}), 500
 
 
+# 로그인 없이 부르는 주소라, 누가 반복 호출해도 Materialized View 갱신(최대 120초)과 전체 재빌드가 겹치지 않게 최소 간격을 둔다.
+# keep-alive는 12분마다 부르므로 5분이면 정상 동작에 영향이 없다.
+_REFRESH_MIN_INTERVAL = 300
+_refresh_lock = threading.Lock()
+_refresh_last = 0.0
+
+
 @app.route("/api/refresh-db-cache")
 def api_refresh_db_cache():
     """Supabase dashboard_cache 갱신 후 Flask 캐시 재빌드 트리거.
     GitHub Actions keep-alive에서 호출 → pg_cron 대체."""
-    global _build_fail, _building
+    global _build_fail, _building, _refresh_last
+    now = time.time()
+    with _refresh_lock:
+        prev = _refresh_last
+        if now - prev < _REFRESH_MIN_INTERVAL:
+            # 200으로 응답한다: 재시도하는 keep-alive 워크플로가 이 응답을 실패로 보면 안 된다
+            return jsonify({"ok": True, "skipped": True, "message": f"Refreshed {int(now - prev)}s ago; next refresh allowed in {int(_REFRESH_MIN_INTERVAL - (now - prev))}s",
+                            "rev_sync_last": _rev_sync_last})
+        _refresh_last = now
     try:
         # 1. DB 내부에서 집계 (refresh_dashboard_cache RPC)
         get_sb().rpc("refresh_dashboard_cache", {}).execute()
@@ -1749,6 +1764,8 @@ def api_refresh_db_cache():
     except Exception as e:
         # 로그인 없이 부르는 주소라 오류 문구(접속 키가 섞일 수 있음) 대신 오류 종류만 돌려준다. 로그도 같다.
         print(f"[refresh-db-cache] Error: {type(e).__name__}")
+        with _refresh_lock:
+            _refresh_last = prev   # 실패한 호출은 간격에 넣지 않는다 — 곧바로 오는 재시도가 건너뛰어지면 실패가 성공처럼 보인다
         return jsonify({"ok": False, "error": type(e).__name__}), 500
 
 # ── Joint Master ───────────────────────────────────────────────────────
