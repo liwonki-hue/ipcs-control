@@ -340,3 +340,12 @@
 - 확인만 하고 고치지 않은 것: 낡은 분석 캐시는 `min_gap`(60초) 안에서는 다시 만들지 않는다 — 저장 직후 ISO Status가 최대 약 1분+스캔 시간 동안 이전 값을 보일 수 있다(의도). 로그인 없이 연 Data Quality는 콘솔에 401이 찍히지만 화면은 "Sign in" 안내로 처리됨. `compress_response`가 정적 JSON을 500으로 만드는 기존 결함은 앱에 정적 JSON이 없어 실사용 영향이 없다.
 - 이번 세션(2026-11-08~09) 변경 요약: 저장 API 컬럼 허용 목록, `esc()`, refresh 호출 간격, tests/(128건)+CI, ISO Status·Data Quality 탭, 낡은 값 먼저 보여 주는 TTLCache, 데이터 정정 1건(ISO CCP-W-B142-PI-140-CH-006-2 → DW), Joint Master Bulk Update 패널·API 삭제, Pace & Forecast 추가 후 삭제, 화면 문구 영어화.
 - 사용자 결정 대기(인증·접근 제어라 임의 변경 안 함): 조회 API 공개 범위, refresh-db-cache 토큰, Render의 DRAWING_SUPABASE_* 환경변수(없으면 Drawing DB 검사 생략), 개인 계정, 변경 이력 테이블. 범위 밖으로 남긴 것: 집계 SQL 이전, 기존 app.py·dashboard.js 분리와 캐시 15개 이관, Support Master의 Bulk Update 패널, ISO Status의 조인트 수 기준 열(Jnts·Acc.·Pend.·상태 판정).
+
+## 2026-11-09 Joint Master·Support Master — 네비게이터가 스크롤 없이 보이게
+- 문제: 두 탭은 한 페이지 행 수가 고정 30(`JM_PAGE_SIZE`/`SM_PAGE_SIZE`)이라 화면이 작으면 표가 길어져 네비게이터가 페이지 스크롤 아래에 있었다.
+- 수정: 서버가 `limit` 단위로 주는 표라 ISO Status처럼 자르기만 할 수 없어, `_fitServerPage`가 한 번 그린 표를 재서 네비게이터가 화면 안에 들어오는 행 수를 구하고 **지금과 다르면 그 행 수로 다시 조회**한다. 행 수는 `_jmFit.size`/`_smFit.size`에 남아 다음 조회부터 바로 쓰이므로 첫 표시 때만 한 번 더 받는다. 보던 첫 행이 새 페이지에도 들어 있게 페이지 번호를 다시 계산한다. 창 크기가 바뀌면(150ms 디바운스) 상한을 초기화하고 다시 맞춘다. 네비게이터 영역 여백은 ISO Status와 같이 줄였다(CSS).
+- 공용 계산 `_gapBelow`(구 `_isoBelow`)·`_fitRows`를 iso_tools.js에서 dashboard.js(페이지네이션 공용 코드 자리)로 옮겼다. ISO Status·Data Quality는 그대로 사용.
+- **결함 하나를 찾아 고쳤다**: 처음에는 늘렸다가 넘치면 늘리기 전 값으로 통째로 되돌렸는데, 1920×1080에서 12→22행으로 늘렸다가 한 행만 넘쳐 12행으로 돌아가 400px가 비었다(21행은 들어감). 넘친 만큼만 줄이고 그 값을 상한으로 기억하도록 바꿨다.
+- 측정(문서 스크롤 0px, 네비게이터 뷰포트 안): 1280×720=12행, 1696×830=15행, 1920×1080=21행(JM·SM 동일). Support Master에서 ISO를 검색해 Bulk Update 패널이 위에 떠도 네비게이터가 화면 안.
+- 아직 고정 30행인 탭(이번 요청 범위 밖): NDE & PWHT(`NDE_PAGE_SIZE`), Test Pkg Joint Check, Test Pkg Register. 같은 방식으로 적용 가능.
+- push는 하지 않음(finish 절차 전).

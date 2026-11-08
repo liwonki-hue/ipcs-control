@@ -142,6 +142,8 @@ function _fullDateVal(id) {
 let jmData = [];
 let jmCurrentPage = 0;
 const JM_PAGE_SIZE = 30;
+// 한 페이지 행 수의 시작값. 실제 행 수는 화면 높이에 맞춰 _fitServerPage가 바꾼다(네비게이터가 스크롤 없이 보이도록)
+const _jmFit = { size: JM_PAGE_SIZE, cap: Infinity, grewFrom: null, tries: 0 };
 let _jmAbort = null, _jmSeq = 0, _jmDebounceTimer = null;   // Joint Master 조회: 이전 요청 취소 + 응답 순서 확인 + 입력 디바운스
 
 let metaData = { units: [], systems: [] };
@@ -1566,10 +1568,10 @@ async function loadJointMaster() {
           pwht=document.getElementById("jm-pwht")?.value||"",
           mat=document.getElementById("jm-mat")?.value||"",
           size=document.getElementById("jm-size")?.value||"",
-          offset=jmCurrentPage*JM_PAGE_SIZE;
+          offset=jmCurrentPage*_jmFit.size;
     _tableLoading("jmBody", 15);
     try {
-        const params=new URLSearchParams({limit:JM_PAGE_SIZE,offset});
+        const params=new URLSearchParams({limit:_jmFit.size,offset});
         if(unit)params.set("unit",unit); if(system)params.set("system",system); if(status)params.set("status",status);
         if(isoVal)params.set("iso",isoVal); if(subarea)params.set("sub_area",subarea); if(phase)params.set("phase",phase);
         if(pkg)params.set("package",pkg);
@@ -1581,8 +1583,9 @@ async function loadJointMaster() {
         if(seq!==_jmSeq)return;   // 더 최근 조회가 시작됐으면 이 응답은 버린다
         jmData=res.data;
         document.getElementById("jm-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
-        _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, JM_PAGE_SIZE, "jmGoto");
+        _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, _jmFit.size, "jmGoto");
         renderJMTable(jmData);
+        _fitJM();
     } catch(e) { if(e.name==="AbortError")return; console.error("JM load failed",e); }
 }
 
@@ -1922,6 +1925,85 @@ function _renderPageNums(containerId, curPage, totalRows, pageSize, gotoFn) {
     html += `<button style="${btnStyle(false)}" ${cur1===totalPages?'disabled':''} onclick="${gotoFn}(${curPage+1})">&#8250;</button>`;
     el.innerHTML = html;
 }
+
+// 요소 아래쪽으로 바깥 박스들이 더하는 여백(자신의 margin-bottom + 조상들의 padding-bottom·border-bottom·margin-bottom)
+function _gapBelow(el) {
+    let gap = 0;
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        gap += parseFloat(cs.marginBottom) || 0;
+        if (n !== el) gap += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    }
+    return gap;
+}
+
+// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status·Data Quality(전부 받아 두고 자르는 표)가 쓴다.
+// 실제로 그려진 표를 재서 맞춘다: 넘치면 넘친 만큼 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌린다.
+function _fitRows(body, pager, limit, size, setSize, draw) {
+    for (let i = 0; i < 4; i++) {
+        const shown = body.rows.length;
+        if (!shown) break;
+        const rowH = body.getBoundingClientRect().height / shown;
+        const free = limit() - pager.getBoundingClientRect().bottom;
+        if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
+            setSize(Math.max(5, size() + Math.floor(free / rowH)));
+            draw();
+            continue;
+        }
+        const grow = Math.floor(free / rowH);
+        if (grow <= 0 || shown < size()) break;                      // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
+        const prev = size();
+        setSize(Math.min(200, prev + grow));
+        draw();
+        while (size() > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
+            setSize(size() - 1);
+            draw();
+        }
+        break;
+    }
+}
+
+// ── 서버가 페이지 단위로 내려주는 표(Joint Master·Support Master)의 한 페이지 행 수 맞춤 ────────────
+// 한 번 그린 표를 재서 네비게이터가 화면 안에 들어오는 행 수를 구하고, 지금과 다르면 그 행 수로 다시 조회한다(서버가 limit 단위로 주므로).
+// 늘렸더니 넘치면 넘친 만큼만 줄이고 그 값을 상한(cap)으로 기억해, 두 값 사이를 오가지 않게 한다. 행 수는 st.size에 남아 다음 조회부터 바로 쓴다.
+function _fitServerPage(st, { pageId, bodyId, getPage, setPage, reload }) {
+    const page = document.getElementById(pageId), body = document.getElementById(bodyId);
+    const pager = page && page.querySelector(".de-pagination");
+    if (!page || page.classList.contains("hidden") || !body || !pager || !body.rows.length) return;
+    const scroller = document.querySelector(".page-body");
+    if (scroller) scroller.scrollTop = 0;
+    window.scrollTo(0, 0);
+    const rows = body.rows.length, rowH = body.getBoundingClientRect().height / rows;
+    const free = window.innerHeight - _gapBelow(pager) - pager.getBoundingClientRect().bottom;
+    let target = st.size;
+    if (free < 0) {                                                       // 넘침: 넘친 만큼만 줄인다(늘리다 넘쳤으면 그 값이 상한)
+        target = Math.max(5, st.size - Math.ceil(-free / rowH));
+        if (st.grewFrom !== null) st.cap = target;
+        st.grewFrom = null;
+    } else {
+        const grow = Math.floor(free / rowH);
+        if (grow > 0 && rows >= st.size && st.size < st.cap) { target = Math.min(st.cap, 100, st.size + grow); st.grewFrom = st.size; }
+        else st.grewFrom = null;
+    }
+    if (target === st.size || st.tries >= 3) { st.tries = 0; return; }
+    st.tries++;
+    const firstRow = getPage() * st.size;                                 // 지금 보던 첫 행이 새 페이지에도 들어 있게
+    st.size = target;
+    setPage(Math.floor(firstRow / target));
+    reload();
+}
+const _fitJM = () => _fitServerPage(_jmFit, { pageId: "page-joint_master", bodyId: "jmBody", getPage: () => jmCurrentPage, setPage: p => { jmCurrentPage = p; }, reload: loadJointMaster });
+const _fitSM = () => _fitServerPage(_smFit, { pageId: "page-support_master", bodyId: "smBody", getPage: () => smCurrentPage, setPage: p => { smCurrentPage = p; }, reload: loadSupportMaster });
+
+let _fitResizeTimer = null;
+window.addEventListener("resize", () => {
+    clearTimeout(_fitResizeTimer);
+    _fitResizeTimer = setTimeout(() => {
+        for (const st of [_jmFit, _smFit]) { st.cap = Infinity; st.grewFrom = null; st.tries = 0; }   // 화면 크기가 바뀌었으니 상한을 다시 찾는다
+        _fitJM();
+        _fitSM();
+    }, 150);
+});
 
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
@@ -2830,6 +2912,7 @@ async function exportWelderExcel() {
 // ================================================================================
 let smData = [], smCurrentPage = 0;
 const SM_PAGE_SIZE = 30;
+const _smFit = { size: SM_PAGE_SIZE, cap: Infinity, grewFrom: null, tries: 0 };   // _jmFit과 같다
 
 async function loadSupportMaster() {
     const unit    = document.getElementById("sm-unit")?.value    || "";
@@ -2839,10 +2922,10 @@ async function loadSupportMaster() {
     const phase   = document.getElementById("sm-phase")?.value   || "";
     const pkg     = document.getElementById("sm-package")?.value?.trim() || "";
     const search        = document.getElementById("sm-search")?.value?.trim() || "";
-    const offset  = smCurrentPage * SM_PAGE_SIZE;
+    const offset  = smCurrentPage * _smFit.size;
     _tableLoading("smBody", 12);
     try {
-        const params = new URLSearchParams({limit: SM_PAGE_SIZE, offset});
+        const params = new URLSearchParams({limit: _smFit.size, offset});
         if (unit)         params.set("unit",          unit);
         if (system)       params.set("system",         system);
         if (subarea)      params.set("sub_area",       subarea);
@@ -2854,10 +2937,11 @@ async function loadSupportMaster() {
         const res = await apiFetch(`/api/support-master?${params}`);
         smData = res.data;
         document.getElementById("sm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
-        _renderPageNums("sm-page-nav", smCurrentPage, res.count||0, SM_PAGE_SIZE, "smGoto");
+        _renderPageNums("sm-page-nav", smCurrentPage, res.count||0, _smFit.size, "smGoto");
 
         renderSMTable(smData);
         updateSmIsoBulkPanel(search, smData);
+        _fitSM();
     } catch(e) { console.error("Support Master load failed", e); }
 }
 

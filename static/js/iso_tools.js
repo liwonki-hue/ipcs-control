@@ -145,43 +145,6 @@ function _isoDraw() {
     });
 }
 
-// 요소 아래쪽으로 바깥 박스들이 더하는 여백(자신의 margin-bottom + 조상들의 padding-bottom·border-bottom·margin-bottom)
-function _isoBelow(el) {
-    let gap = 0;
-    for (let n = el; n && n !== document.body; n = n.parentElement) {
-        const cs = getComputedStyle(n);
-        gap += parseFloat(cs.marginBottom) || 0;
-        if (n !== el) gap += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
-    }
-    return gap;
-}
-
-// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status와 Data Quality가 함께 쓴다.
-// 실제로 그려진 표를 재서 맞춘다: 넘치면 넘친 만큼 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌린다.
-function _fitRows(body, pager, limit, size, setSize, draw) {
-    for (let i = 0; i < 4; i++) {
-        const shown = body.rows.length;
-        if (!shown) break;
-        const rowH = body.getBoundingClientRect().height / shown;
-        const free = limit() - pager.getBoundingClientRect().bottom;
-        if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
-            setSize(Math.max(5, size() + Math.floor(free / rowH)));
-            draw();
-            continue;
-        }
-        const grow = Math.floor(free / rowH);
-        if (grow <= 0 || shown < size()) break;                      // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
-        const prev = size();
-        setSize(Math.min(200, prev + grow));
-        draw();
-        while (size() > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
-            setSize(size() - 1);
-            draw();
-        }
-        break;
-    }
-}
-
 // 네비게이터가 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다.
 // 실제로 그려진 표를 재서 맞춘다: 아래 여유(또는 넘친 만큼)를 행 높이로 나눠 행 수를 늘리거나 줄이고, 2~3번 안에 수렴한다.
 function isoFit() {
@@ -195,7 +158,7 @@ function isoFit() {
         const pager = page.querySelector(".de-pagination");
         const table = document.getElementById("isoTable");
         table.style.setProperty("--iso-pad", "0px");                     // 행 높이를 기본값으로 재기 위해 먼저 걷어 둔다
-        const limit = () => window.innerHeight - _isoBelow(pager);        // 네비게이터 아래에 실제로 깔리는 여백만 남긴다(문서 스크롤이 생기지 않게)
+        const limit = () => window.innerHeight - _gapBelow(pager);        // 네비게이터 아래에 실제로 깔리는 여백만 남긴다(문서 스크롤이 생기지 않게)
         _fitRows(document.getElementById("iso-body"), pager, limit, () => _iso.size, v => { _iso.size = v; }, _isoDraw);
         // 한 행 미만으로 남은 높이는 행의 위아래 여백으로 나눠 표가 아래까지 채워지게 한다(페이지가 꽉 찼을 때만)
         const rows = document.getElementById("iso-body").rows.length;
@@ -349,7 +312,7 @@ function dqFit() {
     const scroller = document.querySelector(".page-body");
     if (scroller) scroller.scrollTop = 0;
     window.scrollTo(0, 0);
-    _fitRows(body, pager, () => window.innerHeight - _isoBelow(pager), () => _dq.size, v => { _dq.size = v; }, _dqDraw);
+    _fitRows(body, pager, () => window.innerHeight - _gapBelow(pager), () => _dq.size, v => { _dq.size = v; }, _dqDraw);
 }
 
 async function exportDataQuality(key) {
