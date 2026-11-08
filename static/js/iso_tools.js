@@ -208,7 +208,7 @@ function isoFit() {
 let _isoResizeTimer = null;
 window.addEventListener("resize", () => {
     clearTimeout(_isoResizeTimer);
-    _isoResizeTimer = setTimeout(isoFit, 150);
+    _isoResizeTimer = setTimeout(() => { isoFit(); dqFit(); }, 150);
 });
 
 function _isoRowHtml(r) {
@@ -291,6 +291,9 @@ function renderDataQuality() {
                 <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${esc(label)} · ${esc(c.hint)}</div></button>`;
         }).join("") : `<div style="padding:12px;color:#059669;font-weight:700">✓ No problems found.</div>`) +
         (passing.length ? `<div style="grid-column:1/-1;font-size:11px;color:var(--text-dim);margin-top:4px">✓ Passed (${passing.length}): ${passing.map(c => esc(c.title)).join(" · ")}</div>` : "");
+    const detail = document.getElementById("dq-detail");
+    if (!failing.some(c => c.key === _dq.open)) _dq.open = failing.length ? failing[0].key : null;   // 문제가 있는 첫 항목(가장 심각한 것)을 기본으로 연다
+    detail.style.display = _dq.open ? "" : "none";
     if (_dq.open) dqShow(_dq.open, true);
 }
 
@@ -303,8 +306,22 @@ function dqShow(key, keepScroll) {
         <td style="font-size:11px;word-break:break-all">${esc(s.iso || "—")}</td><td style="text-align:center">${esc(s.joint_no ?? "")}</td><td style="font-size:12px">${esc(s.detail)}</td></tr>`).join("");
     document.getElementById("dq-detail").innerHTML = `<div class="panel-title">${esc(c.title)} <span style="font-size:11px;font-weight:400;opacity:.6">— ${c.count.toLocaleString()} found${c.samples.length < c.count ? `, showing the first ${c.samples.length}` : ""}</span>
         <button class="btn-de btn-de-export" onclick="exportDataQuality('${esc(c.key)}')" style="float:right;padding:3px 10px;font-size:11px">⬇ Export</button></div>
-        <div class="table-wrap" style="max-height:340px;overflow:auto"><table class="data-table" style="width:100%;table-layout:fixed"><colgroup><col style="width:42%"><col style="width:10%"><col style="width:48%"></colgroup>
+        <div class="table-wrap" style="overflow:auto"><table class="data-table" style="width:100%;table-layout:fixed"><colgroup><col style="width:42%"><col style="width:10%"><col style="width:48%"></colgroup>
         <thead><tr><th>ISO No</th><th>Joint</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    dqFit();
+}
+
+// 상세 표가 화면 아래까지 채우도록 높이를 정한다(넘치는 행은 표 안쪽 스크롤). 아래에 깔리는 바깥 여백은 ISO Status와 같은 방식으로 DOM에서 구한다
+function dqFit() {
+    const page = document.getElementById("page-data_quality");
+    const wrap = document.querySelector("#dq-detail .table-wrap");
+    if (!page || page.classList.contains("hidden") || !wrap) return;
+    const scroller = document.querySelector(".page-body");
+    if (scroller) scroller.scrollTop = 0;
+    window.scrollTo(0, 0);
+    wrap.style.maxHeight = "none";
+    const avail = window.innerHeight - wrap.getBoundingClientRect().top - _isoBelow(wrap);
+    wrap.style.maxHeight = Math.max(160, Math.floor(avail)) + "px";
 }
 
 async function exportDataQuality(key) {

@@ -317,3 +317,8 @@
 - 사용자 지시: "현재 관리 기준은 Joint가 아니라 D/I". Fab·Erect 열(조인트 수 `5/6` 형태)을 지우고 같은 자리에 D/I 기준 `Completed`(=`welded_di`, 용접 완료 조인트의 D/I 합)와 `Remaining`(=`remaining_di` = 전체 D/I − 완료 D/I)를 넣었다. 서버 응답에 `remaining_di` 추가, 두 열 모두 정렬 가능, 엑셀은 `Completed DI`·`Remaining DI`로 바뀌고 Fab/Erect 4열은 삭제.
 - 검증: 모든 ISO에서 D/I = Completed + Remaining(±0.01), 합계가 대시보드 KPI와 일치(전체 163,304.5 / 완료 101,160.5 / 잔여 62,144.0).
 - **조인트 수 기준으로 남은 것(이번 지시 범위 밖이라 그대로)**: `Jnts`, `Acc.`(합격 조인트 수), `Pend.`(검사 대기 조인트 수), 상태 판정(Not started/Welding/Inspection Pending/Accepted는 조인트 단위 판정), `Fab done · Erect open` 칩·점(Fab/Erect 조인트 수로 판정, 서버 응답의 `fab_n/fab_w/erect_n/erect_w`는 이 판정과 테스트에 쓰여 남겨 둠), Support `done/total`(Support는 EA 기준이 맞음). 이 중 D/I로 바꿀 것이 있으면 별도 지시를 받는다.
+
+## 2026-11-08 ISO Status 열 너비 균형 + Data Quality 화면 채우기
+- ISO Status 열 너비: 열별 필요 폭(가장 긴 값 + 여백, 11px 고정폭 글꼴 기준)에 비례해 나눴다 — ISO 13.6, Rev 3.6, Sys 4.6, Sub Area 10.7, Package 10.2, Jnts 3.6, D/I 4.0, Welded 7.9, Completed 6.6, Remaining 6.6, Acc. 3.6, Pend. 3.6, Supp. 4.0, Last Weld 6.6, Status 10.7(합계 100%), 표 최소 폭 1400px. 1696px 화면에서 열 폭 52~196px로 고르게 퍼지고 잘린 셀·가로 스크롤 없음. 1400px보다 좁으면 표 안쪽에서 가로 스크롤.
+- Data Quality: 상세 표가 `max-height:340px` 고정이라 화면 아래가 비는데도 표 안쪽을 스크롤해야 했다. `dqFit()`이 상세 표 높이를 `innerHeight - 표 위치 - 아래 바깥 여백(_isoBelow)`으로 정해 화면 끝까지 채우고(넘치는 행은 표 안쪽 스크롤, 최소 160px) 창 크기가 바뀌면 다시 계산한다. 머리글은 `sticky`. 처음 열면 문제가 있는 첫 항목(가장 심각한 것)을 자동으로 펼친다(빈 상자 방지), 문제가 하나도 없으면 상세 패널을 숨긴다.
+- 검증은 Data Quality가 로그인 필요라 실데이터와 같은 모양의 결과(항목 8개, 500건 목록 포함)를 주입해서 했다: 1280×720/1696×830/1920×1080에서 표 하단이 뷰포트 안, 문서 스크롤 0px, 500건은 표 안쪽 스크롤, 1건은 늘어나지 않음.
