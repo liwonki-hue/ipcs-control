@@ -777,28 +777,38 @@ async function renderOverview(kpi, wkData, units, systems) {
     } catch(e) { console.error("Overview failed", e); }
 }
 
-// System별 완료된 Test Package 수 세로 막대 (Overview의 Pressure Test Progress). Package가 없는 System은 빈 칸
-// 전체 Package 목록이 완성되면 전체 대비 완료 %(total은 /api/testpkg-by-system이 이미 내려준다)로 바꿀 예정
+// System별 Test Package 진행 단계 누적 막대 (Overview의 Pressure Test Progress). 막대는 100%, 숫자는 Package 수
+// 단계는 서버(/api/testpkg-by-system)가 분류한다 — 완료 → 시험 대기(Piping 100% + Support 설치 완료) → 진행 중 → 미착수
 async function renderPressureTestChart(allSystems) {
     const el = document.getElementById("pressureTestBar");
     if (!el) return;
     try {
         const byName = Object.fromEntries(((await apiFetch("/api/testpkg-by-system")).data || []).map(r => [r.system, r]));
         const names = [...new Set([...(allSystems || []).map(s => s.system), ...Object.keys(byName)])].filter(Boolean).sort();
-        const done = names.map(n => byName[n]?.completed || 0);
+        const STAGES = [
+            {key: "completed",   label: "Completed",     color: "rgba(5,150,105,0.75)"},
+            {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
+            {key: "in_progress", label: "In Progress",   color: "rgba(245,158,11,0.75)"},
+            {key: "not_started", label: "Not Started",   color: "rgba(148,163,184,0.55)"},
+        ];
+        const cnt = (n, k) => byName[n]?.[k] || 0;
+        const total = n => byName[n]?.total || 0;
         destroyChart("pressureTestBar");
         const opts = chartOpts();
         const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
         charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
             type: "bar",
-            data: {labels: names, datasets: [
-                {label: "Completed Packages", data: done, backgroundColor: "rgba(37,99,235,0.3)", borderColor: "rgba(37,99,235,0.6)", borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.9,
-                 datalabels: {display: ctx => done[ctx.dataIndex] > 0, anchor: "end", align: "end", color: "#2563eb", font: {weight: "bold", size: 10}, offset: 1, clamp: true}}
-            ]},
-            options: {...opts, layout: {padding: {top: 14}},
-                scales: {x: {...opts.scales.x, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
-                         y: {...opts.scales.y, suggestedMax: 5, grace: 0, ticks: {...tick, precision: 0, stepSize: 1}}},
-                plugins: {...opts.plugins, legend: {display: false}}}
+            data: {labels: names, datasets: STAGES.map(st => ({
+                label: st.label, backgroundColor: st.color, borderWidth: 0, barPercentage: 0.8, categoryPercentage: 0.9,
+                data: names.map(n => total(n) > 0 ? cnt(n, st.key) / total(n) * 100 : 0),
+                datalabels: {display: ctx => cnt(names[ctx.dataIndex], st.key) > 0, formatter: (v, ctx) => cnt(names[ctx.dataIndex], st.key),
+                             color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
+            }))},
+            options: {...opts, layout: {padding: {top: 4}},
+                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+                         y: {...opts.scales.y, stacked: true, max: 100, grace: 0, ticks: {...tick, stepSize: 50, callback: v => v + "%"}}},
+                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {...opts.plugins.legend.labels, boxWidth: 10, padding: 8, font: {family: "DM Mono, monospace", size: 9}}},
+                          tooltip: {...opts.plugins.tooltip, callbacks: {label: ctx => `${ctx.dataset.label}: ${cnt(names[ctx.dataIndex], STAGES[ctx.datasetIndex].key)} / ${total(names[ctx.dataIndex])} pkg`}}}}
         });
     } catch (e) { console.error("Pressure test chart failed", e); }
 }

@@ -3220,6 +3220,43 @@ def api_support_sync_drawing():
         return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
+def _load_pkg_stats(sb):
+    """Package별 Piping/Support 진행 수치 (RPC v2 → v1 폴백, CACHE_TTL 캐시)"""
+    with _lock:
+        pkg_stats = _pkg_stats_cache.get("data")
+        pkg_stats_age = time.time() - _pkg_stats_cache.get("time", 0)
+    if pkg_stats is None or pkg_stats_age > CACHE_TTL:
+        try:
+            rpc_res = sb.rpc("get_pkg_readiness_stats_v2", {}).execute()
+            pkg_stats = {
+                r["package"]: {
+                    "piping_total":      int(r.get("piping_total",     0) or 0),
+                    "piping_completed":  int(r.get("piping_completed", 0) or 0),
+                    "support_total":     int(r.get("support_total",    0) or 0),
+                    "support_installed": int(r.get("support_installed",0) or 0),
+                }
+                for r in (rpc_res.data or [])
+            }
+        except Exception:
+            try:
+                rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
+                pkg_stats = {
+                    r["package"]: {
+                        "piping_total":      int(r.get("total",     0) or 0),
+                        "piping_completed":  int(r.get("completed", 0) or 0),
+                        "support_total":     0,
+                        "support_installed": 0,
+                    }
+                    for r in (rpc_res.data or [])
+                }
+            except Exception:
+                pkg_stats = {}
+        with _lock:
+            _pkg_stats_cache["data"] = pkg_stats
+            _pkg_stats_cache["time"] = time.time()
+    return pkg_stats
+
+
 # ── Test Package Master CRUD ──────────────────────────────────────────
 @app.route("/api/testpkg-master", methods=["GET"])
 def api_testpkg_get():
@@ -3261,39 +3298,7 @@ def api_testpkg_get():
                 row["piping_total"] = 0; row["piping_completed"] = 0
                 row["support_total"] = 0; row["support_installed"] = 0
         else:
-            now2 = time.time()
-            with _lock:
-                pkg_stats = _pkg_stats_cache.get("data")
-                pkg_stats_age = now2 - _pkg_stats_cache.get("time", 0)
-            if pkg_stats is None or pkg_stats_age > CACHE_TTL:
-                try:
-                    rpc_res = sb.rpc("get_pkg_readiness_stats_v2", {}).execute()
-                    pkg_stats = {
-                        r["package"]: {
-                            "piping_total":      int(r.get("piping_total",     0) or 0),
-                            "piping_completed":  int(r.get("piping_completed", 0) or 0),
-                            "support_total":     int(r.get("support_total",    0) or 0),
-                            "support_installed": int(r.get("support_installed",0) or 0),
-                        }
-                        for r in (rpc_res.data or [])
-                    }
-                except Exception:
-                    try:
-                        rpc_res = sb.rpc("get_pkg_readiness_stats_v1", {}).execute()
-                        pkg_stats = {
-                            r["package"]: {
-                                "piping_total":      int(r.get("total",     0) or 0),
-                                "piping_completed":  int(r.get("completed", 0) or 0),
-                                "support_total":     0,
-                                "support_installed": 0,
-                            }
-                            for r in (rpc_res.data or [])
-                        }
-                    except Exception:
-                        pkg_stats = {}
-                with _lock:
-                    _pkg_stats_cache["data"] = pkg_stats
-                    _pkg_stats_cache["time"] = time.time()
+            pkg_stats = _load_pkg_stats(sb)
             for row in rows:
                 s = pkg_stats.get(row.get("test_pkg_no") or "", {})
                 row["piping_total"]      = s.get("piping_total", 0)
@@ -3312,7 +3317,7 @@ def api_testpkg_get():
 
 @app.route("/api/testpkg-by-system")
 def api_testpkg_by_system():
-    """Overview의 Pressure Test Progress 차트용 — System별 전체/완료 Test Package 수"""
+    """Overview의 Pressure Test Progress 차트용 — System별 Test Package 단계(완료/시험대기/진행중/미착수) 수"""
     try:
         with _lock:
             cached = _tp_sys_cache.get("data")
@@ -3320,17 +3325,28 @@ def api_testpkg_by_system():
         if cached is not None and age < 300:
             return jsonify(cached)
         sb = get_sb()
+        pkg_stats = _load_pkg_stats(sb)
         agg, off = {}, 0
         while True:
-            rows = sb.table("test_package_master").select("system,completed").order("id").range(off, off + 4999).execute().data or []
+            rows = sb.table("test_package_master").select("system,test_pkg_no,completed").order("id").range(off, off + 4999).execute().data or []
             for r in rows:
-                a = agg.setdefault(r.get("system") or "-", [0, 0])
-                a[0] += 1
-                a[1] += 1 if r.get("completed") else 0
+                a = agg.setdefault(r.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
+                a["total"] += 1
+                st = pkg_stats.get(r.get("test_pkg_no") or "", {})
+                pt, pc = st.get("piping_total", 0), st.get("piping_completed", 0)
+                stt, sti = st.get("support_total", 0), st.get("support_installed", 0)
+                if r.get("completed"):                                   # 시험 완료
+                    a["completed"] += 1
+                elif pt > 0 and pc >= pt and sti >= stt:                  # Piping 100% + Support 설치 완료
+                    a["ready"] += 1
+                elif pc > 0 or sti > 0:
+                    a["in_progress"] += 1
+                else:
+                    a["not_started"] += 1
             if len(rows) < 5000:
                 break
             off += 5000
-        result = {"data": [{"system": k, "total": v[0], "completed": v[1]} for k, v in sorted(agg.items())]}
+        result = {"data": [{"system": k, **v} for k, v in sorted(agg.items())]}
         with _lock:
             _tp_sys_cache["data"] = result
             _tp_sys_cache["time"] = time.time()
