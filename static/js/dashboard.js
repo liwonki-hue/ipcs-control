@@ -999,8 +999,10 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                 ["p","q"].forEach(k => { sums[k].total_di += r[k].total_di || 0; sums[k].completed_di += r[k].completed_di || 0; });
                 return `<tr><td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${r.name||""}</td>${cells(side(r.p), false)}${cells(side(r.q), true)}</tr>`;
             }).join("");
-            return body + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
+            // TOTAL은 표 맨 위에 둔다 — 항목이 많은 표에서도 화면 아래로 밀리지 않도록
+            const totalRow = `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700">
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>${cells(side(sums.p), false)}${cells(side(sums.q), true)}</tr>`;
+            return totalRow + body;
         }
 
         const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
