@@ -1,4 +1,4 @@
-// ISO Status · Data Quality · Pace & Forecast 화면 (ISO Drawing 단위 현황, 데이터 점검, System별 완료 예측)
+// ISO Status · Data Quality 화면 (ISO Drawing 단위 현황, 데이터 점검)
 // dashboard.js 다음에 로드된다. apiFetch · esc · fmtNum · toast · navigate · printPage · downloadWithPicker · ensureXlsx를 쓴다.
 
 const ISO_PAGE_SIZE = 100;
@@ -218,54 +218,4 @@ async function exportDataQuality(key) {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(c.samples.map(s => ({ "ISO No": s.iso, "Joint": s.joint_no, "Row ID": s.id, "Detail": s.detail }))), c.key.substring(0, 31));
     if (await downloadWithPicker(wb, `Data_Quality_${c.key}.xlsx`)) toast("✓ Exported");
-}
-
-// ── Pace & Forecast (Overview) ────────────────────────────────────────
-let _pace = null;
-const _PACE_TARGET_KEY = "ipcs.paceTarget";
-
-async function loadPace() {
-    const body = document.getElementById("paceBody");
-    if (!body) return;
-    try {
-        const t = localStorage.getItem(_PACE_TARGET_KEY);
-        if (t && !document.getElementById("pace-target").value) document.getElementById("pace-target").value = t;
-    } catch (e) { /* 저장된 목표일은 편의 기능이라 없어도 된다 */ }
-    if (!_pace) body.innerHTML = `<tr><td colspan="10" style="padding:14px;color:var(--text-dim)">Loading…</td></tr>`;
-    try {
-        _pace = await apiFetch("/api/pace-forecast", { noCache: true });
-        renderPace();
-    } catch (e) {
-        body.innerHTML = `<tr><td colspan="10" style="padding:14px;color:var(--red)">Failed to load: ${esc(e.message)}</td></tr>`;
-    }
-}
-
-function _paceEta(r, target) {
-    if (r.remaining_di === 0) return ["Done", "#059669"];
-    if (r.eta_weeks === null) return ["No progress", "#f59e0b"];
-    if (r.eta_weeks > 104) return ["> 2 years", "#ef4444"];
-    return [r.eta_date, target ? (r.eta_date <= target ? "#059669" : "#ef4444") : "inherit"];
-}
-
-function renderPace() {
-    if (!_pace) return;
-    const dim = document.getElementById("pace-dim").value, target = document.getElementById("pace-target").value;
-    try { localStorage.setItem(_PACE_TARGET_KEY, target); } catch (e) { /* 위와 같다 */ }
-    const weeksToTarget = target ? Math.max((new Date(target) - new Date(_pace.today)) / 6048e5, 0) : null;
-    document.getElementById("pace-req-head").style.display = target ? "" : "none";
-    document.getElementById("pace-gap-head").style.display = target ? "" : "none";
-    const rowHtml = (r, bold) => {
-        const [eta, color] = _paceEta(r, target);
-        const req = weeksToTarget === null ? null : (weeksToTarget > 0 ? r.remaining_di / weeksToTarget : null);
-        const gap = req === null ? null : r.per_week - req;
-        return `<tr style="${bold ? "font-weight:700;background:rgba(37,99,235,0.07)" : ""}">
-            <td>${esc(r.name)}</td><td style="text-align:right">${fmtNum(r.total_di, 0)}</td><td style="text-align:right">${r.pct.toFixed(1)}%</td>
-            <td style="text-align:right">${fmtNum(r.remaining_di, 0)}</td><td style="text-align:right">${fmtNum(r.recent_di, 0)}</td><td style="text-align:right">${fmtNum(r.per_week, 0)}</td>
-            <td style="text-align:right">${r.eta_weeks === null ? "—" : r.eta_weeks > 104 ? "> 104" : fmtNum(r.eta_weeks, 1)}</td><td style="text-align:center;color:${color};font-weight:700">${esc(eta)}</td>
-            ${target ? `<td style="text-align:right">${req === null ? "—" : fmtNum(req, 0)}</td><td style="text-align:right;color:${gap === null ? "inherit" : gap >= 0 ? "#059669" : "#ef4444"};font-weight:700">${gap === null ? "—" : (gap >= 0 ? "+" : "") + fmtNum(gap, 0)}</td>` : ""}
-        </tr>`;
-    };
-    const rows = (dim === "sub_area" ? _pace.by_sub_area : _pace.by_system).filter(r => r.total_di > 0);
-    document.getElementById("paceBody").innerHTML = rowHtml(_pace.overall, true) + rows.map(r => rowHtml(r, false)).join("");
-    document.getElementById("pace-note").textContent = `Pace = D/I welded in the last ${_pace.window_days} days ÷ 4 weeks · ${_isoUpdatedText(_pace)}`;
 }

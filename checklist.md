@@ -212,3 +212,6 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 화면 — ISO Status 탭, Data Quality 탭, Overview Pace & Forecast 표(목표일 입력 시 필요 속도·격차)
 - [x] pytest — 127건(집계·검사 24개 항목·속도 예측·캐시·엔드포인트·이스케이프)
 - [x] 실데이터 검증 — 운영과 같은 supabase 2.31 환경에서 21.6초·+50MB·오류 0, 합계가 대시보드 KPI와 일치, 화면 3곳 확인
+
+## 정정 (2026-11-08) — Pace & Forecast 삭제
+- 사용자 판단: 플랜트 공사는 System별로 꾸준히 진행되지 않아 최근 4주 속도로 만든 완료 예측은 의미 있는 데이터가 아님 → Overview의 Pace & Forecast 표와 `/api/pace-forecast`, 집계 코드, 테스트를 모두 제거.

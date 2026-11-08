@@ -265,3 +265,8 @@
 - Pace: 최근 28일 용접 DI ÷ 4주. 목표일은 화면 입력(브라우저에만 저장)으로 필요 속도·격차 계산. 104주 넘으면 "> 2 years".
 - 범위 밖으로 남긴 것: 집계 SQL(RPC) 이전(DDL 실행·검증 불가 — 이번엔 스캔+캐시), 기존 app.py/dashboard.js 전체 분리와 기존 15개 캐시 이관(테스트 없는 구간이라 회귀 위험), 시험 이후 공정(test_package_master에 line_check_date·punch_a_clear_date·reinstatement_date 칸은 이미 있음), 유료 인스턴스, Render에 DRAWING 환경변수.
 - 알게 된 것: `compress_response`는 `application/json`이면 정적 파일에도 gzip을 시도해 2KB 넘는 정적 JSON은 500이 난다(앱에 정적 JSON이 없어 실사용 영향 없음).
+
+## 2026-11-08 정정 — Pace & Forecast 삭제
+- 위 "Pace" 항목(최근 28일 속도, 목표일 대비 필요 속도)은 **삭제했다**. 이유: 플랜트 공사는 System별 작업이 꾸준하지 않아(몰아서 하고 쉬는 패턴) 최근 4주 평균 기반 예측이 의미가 없다. 같은 이유로 비슷한 "평균 속도 → 완료일" 계산은 다시 제안하지 말 것.
+- 제거 범위: index.html 패널, dashboard.js 호출 3곳, iso_tools.js Pace 구간, `/api/pace-forecast`(이제 404), `iso_analysis`의 속도 집계, 관련 pytest. ISO Status·Data Quality와 스캔·캐시 구조는 그대로(스캔이 조인트마다 하던 속도 누적만 줄어 약간 가벼워짐).
+- 기존 EP 보고서의 "Required pace / Recent 4-wk avg"(dashboard.js)는 원래 있던 별도 기능이라 건드리지 않았다.

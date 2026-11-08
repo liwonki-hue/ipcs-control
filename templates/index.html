@@ -140,22 +140,6 @@
           </div>
         </div>
       </div>
-      <div class="panel" id="pacePanel" style="margin-top:8px">
-        <div class="panel-title" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <span>Pace &amp; Forecast <span style="font-size:10px;font-weight:400;opacity:0.55">(Piping D/I, last 4 weeks)</span></span>
-          <span style="margin-left:auto;display:flex;align-items:center;gap:8px;font-weight:400;font-size:12px">
-            <select id="pace-dim" class="filter-sel" onchange="renderPace()"><option value="system">By System</option><option value="sub_area">By Sub Area</option></select>
-            Target <input id="pace-target" type="date" class="filter-sel" onchange="renderPace()" style="width:140px">
-          </span>
-        </div>
-        <div class="table-wrap" style="overflow-x:auto;max-height:340px;overflow-y:auto;scrollbar-gutter:stable">
-          <table class="data-table" id="paceTable" style="width:100%;min-width:760px">
-            <thead><tr><th>Name</th><th style="text-align:right">Total D/I</th><th style="text-align:right">Done</th><th style="text-align:right">Remaining</th><th style="text-align:right">Last 4 wk</th><th style="text-align:right">Avg / wk</th><th style="text-align:right">Weeks left</th><th style="text-align:center">Forecast finish</th><th id="pace-req-head" style="text-align:right;display:none">Need / wk</th><th id="pace-gap-head" style="text-align:right;display:none">Gap / wk</th></tr></thead>
-            <tbody id="paceBody"></tbody>
-          </table>
-        </div>
-        <div id="pace-note" style="font-size:10px;color:var(--text-dim);margin-top:4px"></div>
-      </div>
     </div>
 
     <div class="page hidden" id="page-early_power">
@@ -885,7 +869,7 @@
 
 
 <script defer src="/static/js/dashboard.js?v=7.99"></script>
-<script defer src="/static/js/iso_tools.js?v=1"></script>
+<script defer src="/static/js/iso_tools.js?v=2"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

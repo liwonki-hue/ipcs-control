@@ -1,4 +1,4 @@
-# ISO 집계·데이터 품질 검사·진행 속도 예측(iso_analysis.py)을 합성 행으로 확인하는 테스트
+# ISO 집계·데이터 품질 검사(iso_analysis.py)를 합성 행으로 확인하는 테스트
 from datetime import date
 
 import pytest
@@ -149,43 +149,3 @@ def test_checks_sorted_by_severity():
     order = {"error": 0, "warn": 1, "info": 2}
     sev = [order[c["severity"]] for c in analyze([make()])["quality"]["checks"]]
     assert sev == sorted(sev)
-
-
-# ── 진행 속도·예측 ────────────────────────────────────────────────────
-def pace_of(rows, name="AS"):
-    pace = analyze(rows)["pace"]
-    return pace["overall"], next(r for r in pace["by_system"] if r["name"] == name)
-
-
-def test_pace_window_boundaries():
-    inside_first = make(id=1, date_completed="2026-10-12", vt_date=None, vt_result=None, di=10)    # 오늘-27일 = 10-12, 포함
-    outside = make(id=2, date_completed="2026-10-11", vt_date=None, vt_result=None, di=100)       # 하루 밖
-    today_row = make(id=3, date_completed="2026-11-08", vt_date=None, vt_result=None, di=10)
-    _, row = pace_of([inside_first, outside, today_row])
-    assert row["recent_di"] == 20 and row["per_week"] == 5.0
-
-
-def test_pace_eta():
-    rows = [make(id=1, di=40, date_completed="2026-11-01", vt_date=None, vt_result=None),
-            make(id=2, di=60, date_completed=None, vt_date=None, vt_result=None)]
-    overall, row = pace_of(rows)
-    assert row["remaining_di"] == 60 and row["per_week"] == 10.0 and row["eta_weeks"] == 6.0
-    assert row["eta_date"] == "2026-12-20"                                  # 오늘 + 42일
-    assert overall["pct"] == 40.0
-
-
-def test_pace_no_recent_work_has_no_eta():
-    rows = [make(id=1, di=40, date_completed="2026-01-01", vt_date=None, vt_result=None),
-            make(id=2, di=60, date_completed=None, vt_date=None, vt_result=None)]
-    _, row = pace_of(rows)
-    assert row["per_week"] == 0 and row["eta_weeks"] is None and row["eta_date"] is None
-
-
-def test_pace_finished_group_is_today():
-    _, row = pace_of([make(id=1, di=10, date_completed="2026-01-01", vt_date=None, vt_result=None)])
-    assert row["remaining_di"] == 0 and row["eta_weeks"] == 0 and row["eta_date"] == "2026-11-08"
-
-
-def test_future_welds_do_not_count_as_recent():
-    _, row = pace_of([make(id=1, di=10, date_completed="2026-11-20", vt_date=None, vt_result=None)])
-    assert row["recent_di"] == 0

@@ -189,11 +189,10 @@ def test_no_string_arguments_in_inline_handlers():
     assert re.findall(r"""on[a-z]+="[^"]*'\$\{(?!r\.date\})[^}]*\}'""", JS) == []
 
 
-# ── ISO 현황·데이터 품질·속도 엔드포인트 ──────────────────────────────
+# ── ISO 현황·데이터 품질 엔드포인트 ──────────────────────────────
 FAKE_ANALYSIS = {"built_at": "2026-11-08 12:00", "today": "2026-11-08", "joints": 2,
                  "isos": [{"iso": "ISO-1", "status": "WELDING"}],
-                 "quality": {"checks": [], "drawing_available": False, "drawing_error": "Drawing DB not configured", "testpkg_checked": True},
-                 "pace": {"window_days": 28, "overall": {"name": "ALL"}, "by_system": [], "by_sub_area": []}}
+                 "quality": {"checks": [], "drawing_available": False, "drawing_error": "Drawing DB not configured", "testpkg_checked": True}}
 
 
 @pytest.fixture
@@ -208,8 +207,7 @@ def test_data_quality_requires_login(anon_client, fake_analysis):
 def test_analysis_endpoints_payloads(client, anon_client, fake_analysis):
     r = anon_client.get("/api/iso-status")                                      # 모니터링 화면이라 다른 조회 API처럼 로그인 없이 본다
     assert r.status_code == 200 and r.get_json()["isos"][0]["iso"] == "ISO-1" and "age_sec" in r.get_json()
-    r = anon_client.get("/api/pace-forecast")
-    assert r.status_code == 200 and r.get_json()["overall"]["name"] == "ALL" and r.get_json()["window_days"] == 28
+    assert anon_client.get("/api/pace-forecast").status_code == 404                # 제거된 API
     r = client.get("/api/data-quality")
     assert r.status_code == 200 and r.get_json()["joints"] == 2 and r.get_json()["isos"] == 1
 

@@ -1,7 +1,5 @@
-# ISO Drawing 단위 현황, 데이터 품질 검사, System별 진행 속도·완료 예측을 만드는 순수 함수 모음 (DB·Flask에 의존하지 않는다)
-import math
+# ISO Drawing 단위 현황과 데이터 품질 검사를 만드는 순수 함수 모음 (DB·Flask에 의존하지 않는다)
 import re
-from datetime import date, timedelta
 
 JOINT_COLUMNS = ("id,iso_drawing,joint_no,rev,system,sub_area,package,mat,size_inch,bore,sf,line_no,di,date_completed,welder,"
                  "inspection,pwht,vt_date,vt_result,pt_date,pt_result,mt_date,mt_result,rt_date,rt_result,rt_2_date,rt_2_result,"
@@ -9,7 +7,6 @@ JOINT_COLUMNS = ("id,iso_drawing,joint_no,rev,system,sub_area,package,mat,size_i
 SUPPORT_COLUMNS = "iso_drawing,system,completed,package"
 
 SAMPLE_CAP = 500         # 검사 항목마다 화면에 보여 줄 예시 최대 개수 (전체 건수는 count로 따로 센다)
-PACE_WINDOW_DAYS = 28    # 최근 4주 평균으로 속도를 잡는다
 _NDE = ("vt", "pt", "mt", "rt", "rt_2", "pwht")
 _MAT_RE = re.compile(r"CS|SS|ALLOY \(P\d+\)")
 
@@ -57,14 +54,11 @@ class Analyzer:
     accepted(row): 조인트가 시험 가능한 상태인지, required_pwht(mat): 재질별 PWHT 고정값 — 둘 다 app.py의 규칙 함수를 받는다."""
 
     def __init__(self, accepted, required_pwht, today):
-        self._accepted, self._required_pwht, self.today = accepted, required_pwht, today
+        self._accepted, self._required_pwht = accepted, required_pwht
         self._today_s = today.isoformat()
-        self._cutoff = (today - timedelta(days=PACE_WINDOW_DAYS - 1)).isoformat()
         self.isos = {}
         self.joint_count = 0
         self.checks = {k: {"count": 0, "samples": []} for k in CHECKS}
-        self.pace = {"system": {}, "sub_area": {}}
-        self.overall = [0.0, 0.0, 0.0, 0, 0]          # 전체 DI, 완료 DI, 최근 4주 완료 DI, 전체 조인트, 완료 조인트
         self.packages = {}                             # Joint Master Package → 조인트 수
         self._sup_systems = {}                         # iso → Support에 있는 System 집합
 
@@ -105,7 +99,6 @@ class Analyzer:
             a["fab_n"] += 1
         elif erect:
             a["erect_n"] += 1
-        recent = False
         if weld:
             a["welded"] += 1
             a["welded_di"] += di
@@ -115,28 +108,8 @@ class Analyzer:
                 a["erect_w"] += 1
             if weld > a["last_weld"]:
                 a["last_weld"] = weld
-            recent = self._cutoff <= weld <= self._today_s
         if accepted:
             a["accepted"] += 1
-
-        # 진행 속도(System·Sub Area별 전체/완료/최근 4주 DI)
-        for dim, key in (("system", system), ("sub_area", sub_area)):
-            g = self.pace[dim].setdefault(key or "(none)", [0.0, 0.0, 0.0, 0, 0])
-            g[0] += di
-            g[3] += 1
-            if weld:
-                g[1] += di
-                g[4] += 1
-                if recent:
-                    g[2] += di
-        o = self.overall
-        o[0] += di
-        o[3] += 1
-        if weld:
-            o[1] += di
-            o[4] += 1
-            if recent:
-                o[2] += di
 
         # 데이터 품질
         f = lambda key, detail: self._flag(key, iso, detail, rid, jno)
@@ -235,24 +208,4 @@ class Analyzer:
             "isos": rows,
             "quality": {"checks": checks, "drawing_available": drawing is not None, "drawing_error": drawing_error,
                         "testpkg_checked": testpkg_numbers is not None},
-            "pace": self._pace_tables(),
         }
-
-    # ── 진행 속도·완료 예측 ───────────────────────────────────────────
-    def _pace_row(self, name, g):
-        total, done, recent = g[0], g[1], g[2]
-        remaining = max(total - done, 0.0)
-        per_week = recent / (PACE_WINDOW_DAYS / 7)
-        weeks = remaining / per_week if per_week > 0 else None
-        eta = (self.today + timedelta(days=math.ceil(weeks * 7))).isoformat() if weeks is not None else None
-        if remaining == 0:
-            weeks, eta = 0.0, self._today_s
-        return {"name": name, "total_di": round(total, 1), "done_di": round(done, 1), "remaining_di": round(remaining, 1),
-                "pct": round(done / total * 100, 2) if total else 0.0, "recent_di": round(recent, 1),
-                "per_week": round(per_week, 1), "eta_weeks": None if weeks is None else round(weeks, 1), "eta_date": eta}
-
-    def _pace_tables(self):
-        def table(dim):
-            return sorted((self._pace_row(k, g) for k, g in self.pace[dim].items()), key=lambda x: (-x["remaining_di"], x["name"]))
-        return {"window_days": PACE_WINDOW_DAYS, "overall": self._pace_row("ALL", self.overall),
-                "by_system": table("system"), "by_sub_area": table("sub_area")}

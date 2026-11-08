@@ -238,7 +238,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
         renderOverview(data.kpi, data.weekly, data.units, data.systems, data.subareas);
-        if (typeof loadPace === "function") loadPace();
     } catch(e) {
         _loadError = true;
         console.error("[BOP] Init error:", e);
@@ -343,7 +342,7 @@ function navigate(page) {
     }
 
     switch(page) {
-        case "overview":    loadOverview(); loadPace(); break;
+        case "overview":    loadOverview();     break;
         case "early_power": loadEarlyPower();   break;
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
@@ -384,7 +383,7 @@ async function _autoRefreshCurrentPage() {
     try {
         await getDashData(true);
         switch (visPage) {
-            case "overview":    loadOverview(); loadPace(); break;
+            case "overview":    loadOverview();     break;
             case "early_power": loadEarlyPower();   break;
             case "systems":     loadSystems(); loadSubArea(); break;
             case "weekly":      loadWeekly();       break;
