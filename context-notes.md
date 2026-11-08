@@ -302,3 +302,8 @@
 - 요청: 표 높이를 조금 더 크게. 낭비되던 세로 공간을 줄였다 — ① 네비게이터 영역 여백(`.de-pagination` padding 20+20, margin 10)을 이 페이지만 6/6/6으로 축소(`#page-iso_status .de-pagination`, index.css 끝), ② 한 행 미만으로 남는 높이는 행의 위아래 여백(`--iso-pad`, 최대 6px)으로 나눠 표가 아래까지 채워지게 함(`isoFit`), ③ 행 기본 세로 여백 4px(`#isoTable td`).
 - 맞춤 한도는 `window.innerHeight - _isoBelow(pager)`: 네비게이터 아래에 깔리는 바깥 박스 여백(패널 padding·border·margin, page-body padding 등, 현재 29px)을 DOM에서 합산한다. 처음에는 고정 10px로 잡았다가 문서 스크롤바가 생겨(`docOverflow`) 실제 여백으로 바꿨다 — 고정값을 쓰면 안 된다.
 - 측정(문서 스크롤 0px): 1280×720 11→12행, 1366×768 12→13행, 1600×830 22→23행, 1920×1080 30→34행.
+
+## 2026-11-08 ISO Status — Test Package 필터 추가
+- 필터 줄에 `Test Package` 드롭다운 추가(System·Sub Area 다음). 옵션은 `No Package`(Package가 없는 ISO, 3,465개)와 JM에 실제 쓰이는 Package 16개.
+- 한 ISO가 여러 Package에 걸칠 수 있어(표에는 `(multi)`) 서버가 ISO별 전체 목록 `packages`(정렬된 리스트)를 함께 보내고, 필터는 그 목록에 포함되는지로 판단한다 — 그래서 두 Package에 걸친 ISO는 두 Package 필터에 모두 나온다. 기존 검색창(ISO/Package 문자열)은 그대로.
+- 검증: 필터 결과 수가 데이터에서 직접 센 값과 일치(AS-001 75, CCW-001 76, CCW-002 42, No Package 3,465), System+Package 동시 필터 정상, 1024·1280 폭에서도 필터 줄이 한 줄이고 문서 스크롤 0px.

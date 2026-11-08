@@ -63,6 +63,15 @@ def test_multi_values_are_marked_and_flagged():
     assert check(res, "iso_multi_rev")["count"] == 1 and check(res, "iso_multi_system")["count"] == 1
 
 
+def test_all_packages_of_an_iso_are_listed():
+    res = analyze([make(id=1, package="PKG-B"), make(id=2, package="PKG-A"), make(id=3, package=None), make(id=4, iso_drawing="ISO-2", package="PKG-A"),
+                   make(id=5, iso_drawing="ISO-3", package=None)])
+    by = {r["iso"]: r for r in res["isos"]}
+    assert by["ISO-1"]["packages"] == ["PKG-A", "PKG-B"] and by["ISO-1"]["package"] == "(multi)"
+    assert by["ISO-2"]["packages"] == ["PKG-A"] and by["ISO-2"]["package"] == "PKG-A"
+    assert by["ISO-3"]["packages"] == [] and by["ISO-3"]["package"] == ""
+
+
 def test_support_counts_and_system_mismatch():
     res = analyze([make()], supports=[{"iso_drawing": "ISO-1", "system": "AS", "completed": True},
                                       {"iso_drawing": "ISO-1", "system": "AS", "completed": False},

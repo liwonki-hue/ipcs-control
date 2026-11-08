@@ -726,6 +726,7 @@
           <input id="iso-search" class="filter-sel" type="text" placeholder="Search ISO No. / Package" oninput="isoRender(true)" style="width:220px">
           <select id="iso-system" class="filter-sel" style="min-width:100px" onchange="isoRender(true)"><option value="">System</option></select>
           <select id="iso-subarea" class="filter-sel" style="min-width:110px" onchange="isoRender(true)"><option value="">Sub Area</option></select>
+          <select id="iso-package" class="filter-sel" style="min-width:160px" onchange="isoRender(true)"><option value="">Test Package</option></select>
           <select id="iso-quick" class="filter-sel" style="min-width:170px" onchange="_isoRenderSummary();isoRender(true)">
             <option value="">All ISO</option><option value="NOT_STARTED">Not started</option><option value="WELDING">Welding</option>
             <option value="WELDED">Welded · inspection pending</option><option value="ACCEPTED">Accepted</option>
@@ -863,7 +864,7 @@
 
 
 <script defer src="/static/js/dashboard.js?v=8.00"></script>
-<script defer src="/static/js/iso_tools.js?v=11"></script>
+<script defer src="/static/js/iso_tools.js?v=12"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

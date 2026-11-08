@@ -41,6 +41,7 @@ async function loadIsoStatus() {
         if (note) note.textContent = _isoUpdatedText(d);
         _isoFillSelect("iso-system", "System", r => r.system);
         _isoFillSelect("iso-subarea", "Sub Area", r => r.sub_area);
+        _isoFillPackages();
         _isoRenderSummary();
         isoRender(true);
     } catch (e) {
@@ -56,6 +57,17 @@ function _isoFillSelect(id, label, pick) {
     const cur = sel.value;
     const vals = [...new Set(_iso.rows.map(pick).filter(Boolean))].sort();
     sel.innerHTML = `<option value="">${esc(label)}</option>` + vals.map(v => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
+}
+
+// Test Package 필터: 한 ISO가 여러 Package에 걸칠 수 있어 ISO별 전체 목록(r.packages)에서 고른다. "No Package"는 Package가 없는 ISO
+const _ISO_NO_PACKAGE = "__none__";
+function _isoFillPackages() {
+    const sel = document.getElementById("iso-package");
+    if (!sel) return;
+    const cur = sel.value;
+    const vals = [...new Set(_iso.rows.flatMap(r => r.packages || []))].sort();
+    sel.innerHTML = `<option value="">Test Package</option><option value="${_ISO_NO_PACKAGE}"${cur === _ISO_NO_PACKAGE ? " selected" : ""}>No Package</option>` +
+        vals.map(v => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
 }
 
 function _isoRenderSummary() {
@@ -104,9 +116,11 @@ function isoRender(resetPage) {
     const q = (document.getElementById("iso-search")?.value || "").trim().toLowerCase();
     const sys = document.getElementById("iso-system")?.value || "";
     const sub = document.getElementById("iso-subarea")?.value || "";
+    const pkg = document.getElementById("iso-package")?.value || "";
     const quick = _ISO_QUICK[document.getElementById("iso-quick")?.value || ""] || _ISO_QUICK[""];
     const { key, dir } = _iso.sort;
     _iso.filtered = _iso.rows.filter(r => quick(r) && (!sys || r.system === sys) && (!sub || r.sub_area === sub) &&
+        (!pkg || (pkg === _ISO_NO_PACKAGE ? !(r.packages || []).length : (r.packages || []).includes(pkg))) &&
         (!q || r.iso.toLowerCase().includes(q) || (r.package || "").toLowerCase().includes(q)))
         .sort((a, b) => {
             const av = key === "pct" ? (a.di ? a.welded_di / a.di : 0) : a[key], bv = key === "pct" ? (b.di ? b.welded_di / b.di : 0) : b[key];

@@ -184,7 +184,7 @@ class Analyzer:
                 "iso": iso, "rev": revs[0] if len(revs) == 1 else ("(multi)" if revs else ""),
                 "system": systems[0] if len(systems) == 1 else ("(multi)" if systems else ""),
                 "sub_area": subs[0] if len(subs) == 1 else ("(multi)" if subs else ""),
-                "package": pkgs[0] if len(pkgs) == 1 else ("(multi)" if pkgs else ""),
+                "package": pkgs[0] if len(pkgs) == 1 else ("(multi)" if pkgs else ""), "packages": pkgs,
                 "n": n, "di": round(a["di"], 2), "welded": w, "welded_di": round(a["welded_di"], 2),
                 "fab_n": a["fab_n"], "fab_w": a["fab_w"], "erect_n": a["erect_n"], "erect_w": a["erect_w"],
                 "accepted": a["accepted"], "pending": w - a["accepted"], "last_weld": a["last_weld"],
