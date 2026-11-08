@@ -240,3 +240,10 @@
 - 임원용 추가 지표는 2개만: 목표까지 남은 일수, 필요 주간 DI vs 최근 4주 평균.
 - 2026-10-29 수정: 제목을 `GT #11 Only`로, Target Date는 빨간 굵은 글씨(경보 용도, EP 탭 헤더·보고서 공통). 보고서 표 값 가운데 정렬, Sub Area 표는 `Progress by Area (1)/(2)`로 바꾸고 Area 열 삭제(정렬은 내부적으로 실제 Area 순서 유지), 하단에 KEY WORKS / ISSUES 입력 표(5행, 클릭해 직접 입력 후 인쇄 — 저장은 안 함). 인쇄 높이 670px(한계 733px).
 - 2026-10-29 Test Package Register에 Phase 열 추가(`test_package_master.phase`, DDL은 앱 키로 불가해 사용자가 SQL Editor에서 실행: `Reports/test_package_phase_20261029.sql`). 9건 모두 EP. EP 탭·보고서의 Test Package는 phase=EP인 것만 집계(`/api/ep-support-summary`의 testpkg_total/comp, 전체 KPI와 분리). Register에서 Phase는 `-`/`EP`/`Phase 2` 선택 후 Save, Sync는 JM의 phase를 가져옴. 검증: id 67을 완료로 바꾸니 EP 탭 1/9(11.11%)·Readiness 64.14%·보고서 반영, 이후 원복.
+
+## 2026-11-08 저장 API 수정 가능 컬럼 제한
+- 문제: `update({**body})`라서 편집 권한만 있으면 iso_drawing·system·mat 같은 기준 컬럼이나, 서버 검증이 없는 pt/mt/rt/pwht 결과 칸을 API로 직접 바꿀 수 있었다. 화면 버그로 폼 전체를 보내도 서버가 막지 못했다.
+- 결정: 허용 목록(화이트리스트) 방식. 목록은 화면이 지금 보내는 컬럼의 합집합 — Joint 19개(용접 6 + VT 3 + NDE 11 중 겹침 제외), Support 4개, Test Package 8개. 새 입력 칸을 만들면 `JOINT_EDITABLE` 등에도 추가해야 한다(없으면 400 `Not editable: ...`).
+- Support만 일관성 검사 추가: completed와 date_completed를 같이 보내면 `bool`이 같아야 한다. Test Package는 추가하지 않았다 — 화면이 결과 PASS면 날짜가 비어 있어도 completed=true로 저장하는 것을 허용하고 있어서, 막으면 기존 사용 방식이 깨진다.
+- 영향 없는 것: bulk-date, sync 엔드포인트들(별도 경로로 컬럼을 직접 지정), `_audit()`(updated_at/by는 계속 뒤에 덮어써서 위조 불가).
+- 기존 scratch/test_cache_clear_debounce.py·test_cache_clear_scopes.py는 6858506에서 삭제된 `_jm_iso_stats_cache`를 참조해 이미 실패 중(이번 변경과 무관).

@@ -166,3 +166,17 @@ Plan: 09-19 로그 점검에서 나온 예방책 중 무료 범위 1~4번을 수
 - [x] EP 목표 주/날짜 상수화(`EP_TARGET_WK`=39, `EP_TARGET_DATE`) — 화면 S-Curve와 보고서가 같은 값 사용
 - [x] 로컬 검증: 보고서 HTML이 A4 가로 1페이지에 들어가는지(PDF 쪽수), 수치가 EP 탭과 일치
 - [x] dashboard.js 캐시 버전(v=) 올림, 커밋 (push는 finish 후)
+
+---
+
+# Checklist — 저장(PATCH) API 수정 가능 컬럼 제한 (2026-11-08)
+
+Plan: Joint·Support·Test Package 저장 API가 요청 본문을 그대로 UPDATE에 넘기던 것을, 화면이 실제로 보내는 컬럼만 받도록 서버에서 제한한다. 화면 코드는 바꾸지 않는다.
+
+- [x] 화면이 보내는 PATCH 페이로드 전수 확인 (Joint 4곳, Support 3곳, Test Pkg 1곳)
+- [x] 허용 목록 상수 + 공용 헬퍼 `_editable_body` 추가 (`JOINT_EDITABLE`, `SUPPORT_EDITABLE`, `TESTPKG_EDITABLE`)
+- [x] 세 PATCH 엔드포인트에 적용, 목록 밖 컬럼·비객체·빈 본문은 400
+- [x] Support: completed와 date_completed가 함께 오면 서로 일치해야 함(화면은 항상 일치)
+- [x] 테스트 `scratch/test_patch_whitelist.py` — 가짜 DB로 거절·정상 저장·화면 페이로드 통과·401 확인 (45건 통과)
+- [x] 기존 테스트 test_bulk_date·test_sort_joints_numeric 영향 없음
+- [ ] 실제 화면에서 저장 동작 확인 — 운영 DB에 연결된 로컬이라 로그인 후 사용자가 직접 확인 필요

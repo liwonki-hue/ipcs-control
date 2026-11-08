@@ -250,6 +250,30 @@ def _audit(via=""):
             "updated_by": f"{who} ({via})" if via else who}
 
 
+# 저장(PATCH) API가 받는 컬럼. 화면(dashboard.js)이 실제로 보내는 컬럼만 둔다 — 새 입력 칸을 만들면 여기도 추가해야 한다.
+# 서버가 요청 본문을 그대로 UPDATE에 넘기면 iso_drawing·system·mat 같은 기준 컬럼이나 검증 없는 결과 칸까지 API 호출 한 번으로 바뀐다.
+JOINT_EDITABLE = frozenset({
+    "date_completed", "welder", "phase", "package", "inspection", "pwht",
+    "vt_date", "vt_result", "pt_date", "pt_result", "mt_date", "mt_result",
+    "rt_date", "rt_result", "rt_finding", "rt_2_date", "rt_2_result", "pwht_date", "pwht_result",
+})
+SUPPORT_EDITABLE = frozenset({"date_completed", "completed", "phase", "package"})
+TESTPKG_EDITABLE = frozenset({
+    "phase", "design_pressure", "test_pressure", "method", "media", "holding_time", "date_completed", "completed",
+})
+
+
+def _editable_body(allowed):
+    """저장 요청 본문을 읽어 (본문, None) 또는 (None, 오류 응답)을 돌려준다. 허용 목록 밖의 컬럼이 하나라도 있으면 400."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not body:
+        return None, (jsonify({"error": "JSON object body required"}), 400)
+    bad = sorted(set(body) - allowed)
+    if bad:
+        return None, (jsonify({"error": f"Not editable: {', '.join(bad)}"}), 400)
+    return body, None
+
+
 def _err_text(e):
     """API 오류 응답 문구. 로그인하지 않은 요청에는 오류 종류만 준다 — 오류 문구에 접속 키 같은 값이 섞일 수 있어서
     (2026-09-28 잘못 붙여 넣은 환경변수가 헤더 오류 문구로 공개 응답에 찍힘). 자세한 문구는 서버 로그에 남긴다."""
@@ -1978,7 +2002,9 @@ def _required_pwht(mat):
 @login_required
 def api_joints_patch(jid):
     try:
-        body = request.get_json()
+        body, bad = _editable_body(JOINT_EDITABLE)
+        if bad:
+            return bad
         sb = get_sb()
         err = _validate_joint_update(sb, jid, body)
         if err:
@@ -3019,7 +3045,12 @@ def api_support_get():
 @login_required
 def api_support_patch(rid):
     try:
-        get_sb().table("support_master").update({**(request.get_json() or {}), **_audit()}).eq("id", rid).execute()
+        body, bad = _editable_body(SUPPORT_EDITABLE)
+        if bad:
+            return bad
+        if "completed" in body and "date_completed" in body and bool(body["completed"]) != bool(body["date_completed"]):
+            return jsonify({"error": "completed and date_completed must be set together"}), 400
+        get_sb().table("support_master").update({**body, **_audit()}).eq("id", rid).execute()
         # Joint PATCH와 같은 이유로 여기서 캐시를 비우지 않는다: 프런트가 저장마다 /api/cache/clear?scope=support
         # (30초 병합)를 부르고 그 호출이 대시보드·EP·Area·Support 집계 캐시를 모두 비운다. 저장마다 직접 비우면
         # 다음 대시보드 요청이 병합을 건너뛰고 곧바로 전체 재빌드를 시작한다.
@@ -3387,7 +3418,10 @@ def api_testpkg_by_system():
 @login_required
 def api_testpkg_patch(rid):
     try:
-        get_sb().table("test_package_master").update({**(request.get_json() or {}), **_audit()}).eq("id", rid).execute()
+        body, bad = _editable_body(TESTPKG_EDITABLE)
+        if bad:
+            return bad
+        get_sb().table("test_package_master").update({**body, **_audit()}).eq("id", rid).execute()
         with _lock:
             _cache.clear()
             _pkg_stats_cache.clear()
