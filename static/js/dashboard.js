@@ -82,6 +82,10 @@ async function doLogout() {
 }
 
 const API = "";
+// DB 값을 innerHTML 템플릿에 넣을 때 쓰는 HTML 이스케이프. 따옴표·꺾쇠가 든 값이 속성이나 태그를 깨뜨리거나 스크립트로 실행되는 것을 막는다.
+function esc(v) {
+    return String(v ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+}
 let charts = {};
 
 // ── 날짜 헬퍼 ──────────────────────────────────────────────────────────────────
@@ -638,7 +642,7 @@ async function renderOverview(kpi, wkData, units, systems, subareas) {
                     const tt = s.testpkg_total || 0, tdn = s.testpkg_comp || 0;
                     T.pt += pt; T.pd += pd; T.st += st; T.sd += sd; T.tt += tt; T.td += tdn;
                     const tot = parseFloat((s.unified_readiness || ((s.progress_pct||0)*0.7 + (s.support_pct||0)*0.2 + (s.testpkg_pct||0)*0.1)).toFixed(2));
-                    return `<tr><td style="${td}">${s.system||"—"}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}${grp(tt, tdn, true)}
+                    return `<tr><td style="${td}">${esc(s.system||"—")}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}${grp(tt, tdn, true)}
                         <td style="${td};font-weight:700;color:${pctColor(tot)}">${tot.toFixed(2)}%</td></tr>`;
                 }).join("");
                 const pPip = T.pt > 0 ? T.pd / T.pt * 100 : 0, pSup = T.st > 0 ? T.sd / T.st * 100 : 0, pTst = T.tt > 0 ? T.td / T.tt * 100 : 0;
@@ -658,7 +662,7 @@ async function renderOverview(kpi, wkData, units, systems, subareas) {
                 const rows = subList.map(r => {
                     const pt = r.total_di || 0, pd = r.completed_di || 0, st = r.support_total || 0, sd = r.support_comp || 0;
                     T.pt += pt; T.pd += pd; T.st += st; T.sd += sd;
-                    return `<tr><td style="${td};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.sub_area}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}</tr>`;
+                    return `<tr><td style="${td};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.sub_area)}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}</tr>`;
                 }).join("");
                 subBody.innerHTML = `<tr style="${totRowStyle}"><td style="${td};color:var(--accent)">TOTAL</td>${grp(T.pt, T.pd, false, true)}${grp(T.st, T.sd, true)}</tr>` + rows;
             }
@@ -1010,7 +1014,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
             const sums = {p:{total_di:0,completed_di:0}, q:{total_di:0,completed_di:0}};
             const body = rows.map(r => {
                 ["p","q"].forEach(k => { sums[k].total_di += r[k].total_di || 0; sums[k].completed_di += r[k].completed_di || 0; });
-                return `<tr><td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${r.name||""}</td>${cells(side(r.p), false)}${cells(side(r.q), true)}</tr>`;
+                return `<tr><td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${esc(r.name||"")}</td>${cells(side(r.p), false)}${cells(side(r.q), true)}</tr>`;
             }).join("");
             // TOTAL은 표 맨 위에 둔다 — 항목이 많은 표에서도 화면 아래로 밀리지 않도록
             const totalRow = `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700">
@@ -1165,7 +1169,7 @@ async function loadSystems() {
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
-                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.system}${SYSTEM_FULL_NAMES[s.system] ? ` (${SYSTEM_FULL_NAMES[s.system]})` : ""} ${warn}</span>
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${esc(s.system)}${SYSTEM_FULL_NAMES[s.system] ? ` (${SYSTEM_FULL_NAMES[s.system]})` : ""} ${warn}</span>
                     <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">Ready: ${unified}%</span>
                 </div>
                 <!-- Triple Bar -->
@@ -1225,7 +1229,7 @@ async function loadSubArea() {
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
-                    <span class="prog-name" style="font-weight:700; color:#1e293b">${s.sub_area}${SUBAREA_FULL_NAMES[s.sub_area] ? ` (${SUBAREA_FULL_NAMES[s.sub_area]})` : ""} ${warn}</span>
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${esc(s.sub_area)}${SUBAREA_FULL_NAMES[s.sub_area] ? ` (${SUBAREA_FULL_NAMES[s.sub_area]})` : ""} ${warn}</span>
                     <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">${unified}%</span>
                 </div>
                 <div class="triple-bar-container">
@@ -1384,14 +1388,14 @@ async function loadWeekly() {
                 </tr>`;
             };
             const mkSysRows = arr => arr.map(r=>`<tr>
-                <td style="color:var(--accent)">${r.system||r.mat||r.name||""}</td>
+                <td style="color:var(--accent)">${esc(r.system||r.mat||r.name||"")}</td>
                 <td class="bd-date" style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
                 <td style="color:var(--accent)">${fmtNum(r.completed_di||0,1)}</td>
             </tr>`).join("") + mkTotalRow(arr);
             const mkSubRows = (arr, showTotal=false, totalArr=null) => arr.map(r=>`<tr>
-                <td style="color:var(--accent)">${r.sub_area||r.name||""}</td>
+                <td style="color:var(--accent)">${esc(r.sub_area||r.name||"")}</td>
                 <td class="bd-date" style="font-size:11px;color:var(--text-dim)">${dateRange}</td>
                 <td>${fmtNum(r.fab_di||0,1)}</td>
                 <td>${fmtNum(r.erect_di||0,1)}</td>
@@ -1430,7 +1434,7 @@ async function loadUnitArea() {
         const allAreasKpi = [...(dash.areas || [])].sort((a, b) => (_areaDisplayOrder[a.area]||99) - (_areaDisplayOrder[b.area]||99));
         document.getElementById("areaCards").innerHTML = allAreasKpi.map(a => {
             const p=a.progress_pct, c=pctColor(p);
-            return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${a.area}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p.toFixed(2)}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
+            return `<div class="unit-card" style="flex:1;"><div class="unit-card-name">Area: ${esc(a.area)}</div><div class="unit-card-pct" style="color:${c}">${fmtNum(a.completed_di,0)} <span style="font-size:13px;color:var(--text-dim)">/ ${fmtNum(a.total_di,0)} DI</span></div><div class="unit-card-sub" style="color:${c}">${p.toFixed(2)}% complete</div><div class="unit-card-bar"><div class="unit-card-fill" style="width:${Math.min(p,100)}%;background:${c}"></div></div></div>`;
         }).join("");
 
         // ── Unit Chart: Stacked (Completed DI + Remaining DI)
@@ -1659,17 +1663,17 @@ function renderJMTable(rows){
         const pkgVal=r.package||"";
         return `<tr id="jmrow-${r.id}" data-insp-min="${_inspMin(r)}"${_lastUpdatedTitle(r)}>
             <td style="display:none">${r.id}</td>
-            <td style="padding:2px"><input class="cell-input" id="phase-${r.id}" type="text" value="${phaseVal}" style="width:100%;text-align:center;padding:2px 4px"></td>
-            <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${pkgVal}" style="text-align:center;padding:2px 3px"></td>
-            <td style="text-align:center">${r.system||""}</td>
-            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.sub_area||""}</td>
-            <td title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
-            <td style="text-align:center">${r.rev||""}</td>
-            <td>${r.mat||""}</td>
-            <td style="text-align:center">${r.size_inch||""}</td>
-            <td style="text-align:center">${r.sf||""}</td>
-            <td style="text-align:center">${r.joint_no||""}</td>
-            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${wVal}" title="${wVal}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
+            <td style="padding:2px"><input class="cell-input" id="phase-${r.id}" type="text" value="${esc(phaseVal)}" style="width:100%;text-align:center;padding:2px 4px"></td>
+            <td><input class="cell-input" id="pkg-${r.id}" type="text" value="${esc(pkgVal)}" style="text-align:center;padding:2px 3px"></td>
+            <td style="text-align:center">${esc(r.system||"")}</td>
+            <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.sub_area||"")}</td>
+            <td title="${esc(r.iso_drawing||"")}">${esc(r.iso_drawing||"")}</td>
+            <td style="text-align:center">${esc(r.rev||"")}</td>
+            <td>${esc(r.mat||"")}</td>
+            <td style="text-align:center">${esc(r.size_inch||"")}</td>
+            <td style="text-align:center">${esc(r.sf||"")}</td>
+            <td style="text-align:center">${esc(r.joint_no||"")}</td>
+            <td><input class="cell-input" id="welder-${r.id}" type="text" value="${esc(wVal)}" title="${esc(wVal)}" style="width:100%;overflow:hidden;text-overflow:ellipsis"></td>
             <td style="padding:2px;text-align:center"><input class="cell-input${dStr?'':' date-empty'}" id="date-${r.id}" type="text" value="${dStr?dStr.slice(2):''}" data-full-date="${dStr}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
             <td>
                 <select class="cell-input" id="inspection-${r.id}" style="text-align:center;text-align-last:center;padding:2px 2px">
@@ -1740,11 +1744,11 @@ function renderNdeTable(rows){
         const pwht_date = r.pwht_date ? r.pwht_date.substring(0,10) : "";
         
         return `<tr id="nderow-${r.id}" data-weld="${(r.date_completed||"").substring(0,10)}">
-            <td style="text-align:center" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
-            <td style="text-align:center">${r.rev||""}</td>
-            <td style="text-align:center">${r.joint_no||""}</td>
-            <td style="text-align:center" title="${r.welder||""}">${r.welder||""}</td>
-            <td style="text-align:center;font-weight:700;color:var(--accent)">${r.inspection||""}</td>
+            <td style="text-align:center" title="${esc(r.iso_drawing||"")}">${esc(r.iso_drawing||"")}</td>
+            <td style="text-align:center">${esc(r.rev||"")}</td>
+            <td style="text-align:center">${esc(r.joint_no||"")}</td>
+            <td style="text-align:center" title="${esc(r.welder||"")}">${esc(r.welder||"")}</td>
+            <td style="text-align:center;font-weight:700;color:var(--accent)">${esc(r.inspection||"")}</td>
             
             <td style="text-align:center;border-right:none;padding:3px 2px;"><input type="text" class="cell-input${pt_date?'':' date-empty'}" id="nde-pt-date-${r.id}" value="${pt_date?pt_date.slice(2):''}" data-full-date="${pt_date}" style="width:100%;box-sizing:border-box;text-align:center;padding:3px 4px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
             <td style="text-align:center;border-left:none;padding:1px 0;">
@@ -2477,9 +2481,9 @@ function renderWelderDaily(daily, weekly) {
 // Helper: render one half of a welder table (No / Welder ID / Joint / Fab DI / Erect DI / Total DI / Avg DI/Day)
 function _welderHalfRows(rows, startIdx, accentColor) {
     if (!rows.length) return "";
-    return rows.map((r, i) => `<tr onclick="drillWelder('${r.welder}')" style="cursor:pointer">
+    return rows.map((r, i) => `<tr data-welder="${esc(r.welder)}" onclick="drillWelder(this.dataset.welder)" style="cursor:pointer">
         <td style="text-align:center;color:var(--text-dim)">${startIdx + i + 1}</td>
-        <td style="color:${accentColor}">${r.welder}</td>
+        <td style="color:${accentColor}">${esc(r.welder)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace">${fmtNum(r.joints, 1)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;color:#94a3b8">${r.fab_di != null ? fmtNum(r.fab_di, 1) : "—"}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;color:#94a3b8">${r.erect_di != null ? fmtNum(r.erect_di, 1) : "—"}</td>
@@ -3010,17 +3014,17 @@ function renderSMTable(rows) {
     tbody.innerHTML = rows.map(r => {
         const dc = r.date_completed ? r.date_completed.substring(0,10) : "";
         return `<tr id="smrow-${r.id}">
-          <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${r.phase||""}" style="width:100%;text-align:center;padding:2px 4px"></td>
-          <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${r.package||""}" style="text-align:center"></td>
-          <td>${r.unit||""}</td>
-          <td>${r.system||""}</td>
-          <td>${r.area||""}</td>
-          <td>${r.sub_area||""}</td>
-          <td>${r.support_drawing||""}</td>
-          <td style="text-align:center">${r.type||""}</td>
-          <td>${r.revision||""}</td>
-          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
-          <td>${r.line_no||""}</td>
+          <td style="padding:2px"><input class="cell-input" id="sm-phase-${r.id}" type="text" value="${esc(r.phase||"")}" style="width:100%;text-align:center;padding:2px 4px"></td>
+          <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${esc(r.package||"")}" style="text-align:center"></td>
+          <td>${esc(r.unit||"")}</td>
+          <td>${esc(r.system||"")}</td>
+          <td>${esc(r.area||"")}</td>
+          <td>${esc(r.sub_area||"")}</td>
+          <td>${esc(r.support_drawing||"")}</td>
+          <td style="text-align:center">${esc(r.type||"")}</td>
+          <td>${esc(r.revision||"")}</td>
+          <td style="font-size:11px;font-family:'DM Mono',monospace;word-break:break-all" title="${esc(r.iso_drawing||"")}">${esc(r.iso_drawing||"")}</td>
+          <td>${esc(r.line_no||"")}</td>
           <td style="padding:2px;text-align:center"><input class="cell-input${dc?'':' date-empty'}" id="sm-date-${r.id}" type="text" value="${dc?dc.slice(2):''}" data-full-date="${dc}" style="width:100%;text-align:center;padding:2px 2px;cursor:pointer" onclick="_pickDate(this)" readonly></td>
           <td style="white-space:nowrap">
             <button class="btn-save-row auth-write" onclick="saveSMRow(${r.id})">Save</button>
@@ -3171,10 +3175,10 @@ function renderTPTable(rows) {
         const vtLocked = !r.date_completed;
         const vtLockAttrs = vtLocked ? `disabled title="Enter Weld Date first"` : "";
         return `<tr id="tprow-${r.id}" data-weld="${(weldDate||"").substring(0,10)}">
-          <td style="text-align:center">${r.system||""}</td>
-          <td style="color:var(--indigo)">${r.package||""}</td>
-          <td style="font-size:11px" title="${r.iso_drawing||""}">${r.iso_drawing||""}</td>
-          <td style="text-align:center">${r.joint_no||""}</td>
+          <td style="text-align:center">${esc(r.system||"")}</td>
+          <td style="color:var(--indigo)">${esc(r.package||"")}</td>
+          <td style="font-size:11px" title="${esc(r.iso_drawing||"")}">${esc(r.iso_drawing||"")}</td>
+          <td style="text-align:center">${esc(r.joint_no||"")}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-insp-${r.id}" style="width:100%;box-sizing:border-box;padding:3px 2px;text-align:center;text-align-last:center;font-size:11px;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
@@ -3201,7 +3205,7 @@ function renderTPTable(rows) {
           <td style="text-align:center;${insp==="RT"?"background:rgba(249,115,22,0.07)":""}">${_tpResultBadge(r.rt_result)}</td>
           <td style="text-align:center;font-size:11px">${pwhtDate||"-"}</td>
           <td style="text-align:center">${_tpResultBadge(r.pwht_result)}</td>
-          <td style="text-align:center;font-size:11px;color:${statusColor}">${statusIcon} ${r.status}</td>
+          <td style="text-align:center;font-size:11px;color:${statusColor}">${statusIcon} ${esc(r.status)}</td>
           <td style="text-align:center"><button class="btn-save-row auth-write" style="padding:3px 8px;font-size:10px" onclick="saveTPVT(${r.id})">Save</button></td>
         </tr>`;
     }).join("");
@@ -3404,7 +3408,7 @@ function _populateTMSystemFilter() {
     const cur = sel.value;
     const systems = [...new Set(_tmAllData.map(r => r.system||"").filter(Boolean))].sort();
     sel.innerHTML = `<option value="">All Systems</option>` +
-        systems.map(s => `<option value="${s}"${s===cur?" selected":""}>${s}</option>`).join("");
+        systems.map(s => `<option value="${esc(s)}"${s===cur?" selected":""}>${esc(s)}</option>`).join("");
 }
 
 function tmOnSystemChange() {
@@ -3418,7 +3422,7 @@ function tmOnSystemChange() {
             .filter(Boolean)
     )].sort();
     pkgSel.innerHTML = `<option value="">All Packages</option>` +
-        pkgs.map(p => `<option value="${p}">${p}</option>`).join("");
+        pkgs.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
     tmCurrentPage = 0;
     loadTestMaster();
 }
@@ -3470,8 +3474,8 @@ function renderTMTable(data) {
                     <option value="Phase 2"${iopt(r.phase==="Phase 2")} style="color:#000">Phase 2</option>
                 </select>
             </td>
-            <td style="text-align:center">${r.system||"—"}</td>
-            <td style="text-align:center;font-size:11px">${r.test_pkg_no||"—"}</td>
+            <td style="text-align:center">${esc(r.system||"—")}</td>
+            <td style="text-align:center;font-size:11px">${esc(r.test_pkg_no||"—")}</td>
             <td style="padding:0">${readinessCell}</td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-method-${r.id}" style="${ssel}">
@@ -3482,8 +3486,8 @@ function renderTMTable(data) {
                     <option value="IN SERVICE"  ${mU==="IN SERVICE" ?" selected":""} style="color:#000">IN SERVICE</option>
                 </select>
             </td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${r.design_pressure||""}" style="${cin}"></td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${r.test_pressure||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-dp-${r.id}" value="${esc(r.design_pressure||"")}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-tp-${r.id}" value="${esc(r.test_pressure||"")}" style="${cin}"></td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-media-${r.id}" style="${ssel}">
                     <option value="" style="color:#000">-</option>
@@ -3492,7 +3496,7 @@ function renderTMTable(data) {
                     <option value="DEMI. WATER"   ${mdU==="DEMI. WATER"  ?" selected":""} style="color:#000">DEMI. WATER</option>
                 </select>
             </td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${r.holding_time||""}" style="${cin}"></td>
+            <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${esc(r.holding_time||"")}" style="${cin}"></td>
             <td style="text-align:center"><input type="text" class="cell-input${dc?'':' date-empty'}" id="tm-date-${r.id}" value="${dc?dc.slice(2):''}" data-full-date="${dc}"
                 style="width:100%;text-align:center;background:#fff;cursor:pointer;color:#000"
                 onclick="_pickDate(this)" readonly></td>
@@ -3517,7 +3521,7 @@ function _lastUpdatedTitle(r) {
     if (!r.updated_at) return "";
     const t = new Date(r.updated_at);
     const local = isNaN(t) ? r.updated_at : t.toLocaleString("en-GB", { hour12: false });
-    return ` title="Last updated ${local} by ${r.updated_by || "-"}"`;
+    return ` title="Last updated ${local} by ${esc(r.updated_by || "-")}"`;
 }
 
 async function saveTMRow(id) {
@@ -3819,7 +3823,7 @@ function _renderRtSystemTable(bySystem) {
         return;
     }
     tbody.innerHTML = bySystem.map(r =>
-        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.system}</td>`, r)
+        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${esc(r.system)}</td>`, r)
     ).join("");
 }
 
@@ -3831,7 +3835,7 @@ function _renderRtWelderTable(byWelder) {
         return;
     }
     tbody.innerHTML = byWelder.map(r =>
-        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${r.welder}</td>`, r)
+        _rtTableRow(`<td style="text-align:center;color:var(--text-dim)">${esc(r.welder)}</td>`, r)
     ).join("");
 }
 
@@ -3847,16 +3851,16 @@ function _renderRtRepairList(repairList) {
     tbody.innerHTML = repairList.map(r => {
         const res2Color = r.rt_2_result === "PASS" ? "var(--green)" : r.rt_2_result === "FAIL" ? "#ef4444" : "var(--text-dim)";
         return `<tr>
-            <td style="color:var(--text-dim)">${r.system || "—"}</td>
-            <td style="text-align:center">${r.sf || "—"}</td>
-            <td style="font-size:10px">${r.iso_drawing || "—"}</td>
-            <td style="text-align:center">${r.joint_no || "—"}</td>
-            <td style="color:var(--accent)">${r.welder || "—"}</td>
+            <td style="color:var(--text-dim)">${esc(r.system || "—")}</td>
+            <td style="text-align:center">${esc(r.sf || "—")}</td>
+            <td style="font-size:10px">${esc(r.iso_drawing || "—")}</td>
+            <td style="text-align:center">${esc(r.joint_no || "—")}</td>
+            <td style="color:var(--accent)">${esc(r.welder || "—")}</td>
             <td style="font-family:'DM Mono',monospace;font-size:10px">${r.rt_date ? r.rt_date.slice(0,10) : "—"}</td>
-            <td style="text-align:center;color:#ef4444;font-weight:700">${r.rt_result || "—"}</td>
-            <td style="font-size:9px">${r.rt_finding || "—"}</td>
+            <td style="text-align:center;color:#ef4444;font-weight:700">${esc(r.rt_result || "—")}</td>
+            <td style="font-size:9px">${esc(r.rt_finding || "—")}</td>
             <td style="font-family:'DM Mono',monospace;font-size:10px">${r.rt_2_date ? r.rt_2_date.slice(0,10) : "—"}</td>
-            <td style="text-align:center;color:${res2Color};font-weight:700">${r.rt_2_result || "—"}</td>
+            <td style="text-align:center;color:${res2Color};font-weight:700">${esc(r.rt_2_result || "—")}</td>
         </tr>`;
     }).join("");
 }
@@ -3956,7 +3960,7 @@ function renderDrBreakdown(date) {
 
     // 자재 표는 Piping만 (Support에는 자재 구분이 없다)
     const mkMatRows = arr => arr.map(r => `<tr>
-        <td style="color:var(--accent)">${r.mat || ""}</td>
+        <td style="color:var(--accent)">${esc(r.mat || "")}</td>
         <td>${fmtNum(r.fab_di || 0, 1)}</td>
         <td>${fmtNum(r.erect_di || 0, 1)}</td>
         <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
