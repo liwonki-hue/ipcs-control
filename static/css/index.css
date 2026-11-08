@@ -310,7 +310,7 @@ select:focus, input:focus { border-color: var(--accent); }
     border-top: 1px solid var(--border);
     position: relative;
 }
-#jm-count, #sm-count, #nde-count, #tp-count, #iso-count, #dq-count {
+#jm-count, #sm-count, #nde-count, #tp-count, #tm-count, #iso-count, #dq-count {
     position: absolute;
     left: 0;
     color: var(--text-dim);
