@@ -215,3 +215,14 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 
 ## 정정 (2026-11-08) — Pace & Forecast 삭제
 - 사용자 판단: 플랜트 공사는 System별로 꾸준히 진행되지 않아 최근 4주 속도로 만든 완료 예측은 의미 있는 데이터가 아님 → Overview의 Pace & Forecast 표와 `/api/pace-forecast`, 집계 코드, 테스트를 모두 제거.
+
+---
+
+# Checklist — 최적화 및 finish (2026-11-09)
+
+- [x] 1. 임시/불필요 코드 제거 — 추적 파일(app.py, iso_analysis.py, cache_util.py, iso_tools.js, tests)에 debug print·console.log·TODO·주석 처리된 코드 0건
+- [x] 2. 전체 코드 검증 — pyflakes(app.py·신규 모듈·tests) 지적 0건(도구 동작 확인함), JS 미참조 함수 0건(dashboard.js 126개, iso_tools.js 26개), iso_tools.js 전체 정독 → 버그 2건 수정(아래)
+- [x] 3. 기능 검증 — GET API 22개 전부 응답(데이터 품질만 로그인 필요라 401이 정상), 15개 탭 전부 렌더링·JS 오류 0, JM/Support/NDE/TP 페이지 이동·JM ISO 검색·용접사 상세 확인
+- [x] 4. 성능·안정성 — 운영 환경(supabase 2.31)에서 keep-alive 한 번에 재빌드+ISO 분석+사용자 조회 7건이 동시에 겹치는 최악 상황: 전부 200, 22초, 메모리 65→115MB(512MB 한도 대비 여유). 낡은 캐시는 0.03초에 응답, 압축 후 `/api/iso-status` 82KB
+- [x] 5. 로컬 웹 검증 — 서버 재시작 후 위 3·4번을 브라우저로 확인
+- [x] 6. pytest 128건(로컬, `.env` 없는 운영 환경 모두) → commit → push

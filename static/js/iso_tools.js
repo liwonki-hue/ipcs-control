@@ -121,7 +121,7 @@ function isoRender(resetPage) {
     const { key, dir } = _iso.sort;
     _iso.filtered = _iso.rows.filter(r => quick(r) && (!sys || r.system === sys) && (!sub || (r.sub_areas || []).includes(sub)) &&
         (!pkg || (pkg === _ISO_NO_PACKAGE ? !(r.packages || []).length : (r.packages || []).includes(pkg))) &&
-        (!q || r.iso.toLowerCase().includes(q) || (r.package || "").toLowerCase().includes(q)))
+        (!q || r.iso.toLowerCase().includes(q) || (r.packages || []).some(p => p.toLowerCase().includes(q))))
         .sort((a, b) => {
             const av = key === "pct" ? (a.di ? a.welded_di / a.di : 0) : a[key], bv = key === "pct" ? (b.di ? b.welded_di / b.di : 0) : b[key];
             return (typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""))) * dir || a.iso.localeCompare(b.iso);
@@ -251,7 +251,7 @@ async function exportIsoStatus() {
     if (!_iso.filtered.length) { toast("No data to export", "error"); return; }
     await ensureXlsx();
     const rows = _iso.filtered.map(r => ({
-        "ISO No": r.iso, "Rev": r.rev, "System": r.system, "Sub Area": r.sub_area, "Package": r.package, "Joints": r.n, "DI": r.di,
+        "ISO No": r.iso, "Rev": r.rev, "System": r.system, "Sub Area": r.sub_area, "Package": (r.packages || []).join("/"), "Joints": r.n, "DI": r.di,
         "Completed DI": r.welded_di, "Remaining DI": r.remaining_di, "Welded Joints": r.welded,
         "Accepted": r.accepted, "Inspection Pending": r.pending, "Support Done": r.sup_done, "Support Total": r.sup_n,
         "Last Weld": r.last_weld, "Status": _ISO_STATUS_TABLE[r.status] || r.status, "Fab done, Erect open": r.fab_done_erect_open ? "Y" : "",

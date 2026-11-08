@@ -334,3 +334,9 @@
 - 수정: ① 열 너비를 **px**로 지정(`<col style="width:Npx">`, 합계 = 표 `min-width` 1440px): ISO 202, Rev 52, Sys 64, Sub Area 150, Package 144, Jnts 64, D/I 74, Welded 90, Completed 88, Remaining 88, Acc. 60, Pend. 60, Supp. 66, Last Weld 88, Status 150. ② `#isoTable td, th`의 좌우 여백을 8px로 고정. ③ 오른쪽 정렬 숫자 열(`.iso-num`)은 오른쪽 여백 16px.
 - 필요 폭은 추측이 아니라 실제 최대 폭을 같은 글꼴로 재서 정했다: ISO 185px(`CCP-W-B032-PI-140-CWR-058-10`), Sub Area 132px(`HRSG #12/HRSG #12 PR`), Package 126px, Status 138px(`Inspection Pending ●`) + 좌우 여백 16px. 처음 188px로 잡았다가 ISO가 잘려 202px로 올렸다. **새 열이나 더 긴 값이 생기면 이 폭을 다시 재야 한다.**
 - 검증(1696×830, 표 폭 1441px): 3,973개 행을 전부 펼쳐 잘린 셀·머리글 0개, 가로 스크롤 없음, 네비게이터 화면 안. 이전 대비 Jnts 52→64, D/I 58→74, Acc./Pend. 52→60, Supp. 58→66. 컨테이너가 1440px보다 좁으면 표 안쪽에서 가로 스크롤(사용자 화면 폭에서는 원래도 스크롤됨).
+
+## 2026-11-09 최적화 및 finish
+- 전체 검토에서 찾아 고친 것 2건(ISO Status): ① 검색창이 `r.package`(여러 Package면 `(multi)`)로만 검색해 두 Package에 걸친 ISO가 `CCW-002` 같은 검색에서 빠졌다 → ISO별 `packages` 목록으로 검색. ② 엑셀 Package 열에 `(multi)`만 들어가 정보가 사라졌다 → 전체 값을 `/`로 이어서 내보냄.
+- 확인만 하고 고치지 않은 것: 낡은 분석 캐시는 `min_gap`(60초) 안에서는 다시 만들지 않는다 — 저장 직후 ISO Status가 최대 약 1분+스캔 시간 동안 이전 값을 보일 수 있다(의도). 로그인 없이 연 Data Quality는 콘솔에 401이 찍히지만 화면은 "Sign in" 안내로 처리됨. `compress_response`가 정적 JSON을 500으로 만드는 기존 결함은 앱에 정적 JSON이 없어 실사용 영향이 없다.
+- 이번 세션(2026-11-08~09) 변경 요약: 저장 API 컬럼 허용 목록, `esc()`, refresh 호출 간격, tests/(128건)+CI, ISO Status·Data Quality 탭, 낡은 값 먼저 보여 주는 TTLCache, 데이터 정정 1건(ISO CCP-W-B142-PI-140-CH-006-2 → DW), Joint Master Bulk Update 패널·API 삭제, Pace & Forecast 추가 후 삭제, 화면 문구 영어화.
+- 사용자 결정 대기(인증·접근 제어라 임의 변경 안 함): 조회 API 공개 범위, refresh-db-cache 토큰, Render의 DRAWING_SUPABASE_* 환경변수(없으면 Drawing DB 검사 생략), 개인 계정, 변경 이력 테이블. 범위 밖으로 남긴 것: 집계 SQL 이전, 기존 app.py·dashboard.js 분리와 캐시 15개 이관, Support Master의 Bulk Update 패널, ISO Status의 조인트 수 기준 열(Jnts·Acc.·Pend.·상태 판정).
