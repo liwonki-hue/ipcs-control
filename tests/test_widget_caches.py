@@ -1,12 +1,11 @@
 # 대시보드 보조 집계 4종(daily-actuals·weekly-last-breakdown·welder-daily·ep-support-summary)의 계산·캐시 무효화·미리 데우기·오류 응답을 가짜 DB로 확인하는 테스트
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
 import app as A
-import cache_util
 
 
 def reset(cache):
