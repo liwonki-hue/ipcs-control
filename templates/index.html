@@ -152,110 +152,31 @@
           </div>
         </div>
       </div>
-      <!-- Bottom: Piping 3-column table grid -->
-      <div class="rg3-12" style="align-items:start">
-        <!-- Col 1: Piping EP System table -->
-        <div class="panel">
-          <div class="panel-title">Piping Progress by EP System</div>
+      <!-- Bottom: Piping + Support를 한 표로 — EP System / EP Sub Area -->
+      <div class="rg2" style="align-items:start">
+        <div class="panel" style="min-width:0">
+          <div class="panel-title">Progress by EP System</div>
           <div class="table-wrap">
             <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:30%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SYSTEM</th>
-                <th>TOTAL DI</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
+              <colgroup><col style="width:19%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
+              <thead>
+                <tr><th rowspan="2" style="text-align:left;vertical-align:middle;font-size:11px">SYSTEM</th><th colspan="4" style="text-align:center;border-bottom:1px solid var(--border);font-size:11px;background:rgba(37,99,235,0.15)">PIPING (D/I)</th><th colspan="4" style="text-align:center;border-bottom:1px solid var(--border);font-size:11px;background:rgba(34,211,161,0.12)">SUPPORT (EA)</th></tr>
+                <tr><th style="font-size:11px">TOTAL</th><th style="font-size:11px">DONE</th><th style="font-size:11px">BALANCE</th><th style="font-size:11px">%</th><th style="font-size:11px;border-left:1px solid var(--border)">TOTAL</th><th style="font-size:11px">DONE</th><th style="font-size:11px">BALANCE</th><th style="font-size:11px">%</th></tr>
+              </thead>
               <tbody id="epSysTableBody"></tbody>
             </table>
           </div>
         </div>
-        <!-- Col 2: Piping EP Sub Area (1) -->
-        <div class="panel">
-          <div class="panel-title">Piping Progress by EP Sub Area (1)</div>
+        <div class="panel" style="min-width:0">
+          <div class="panel-title">Progress by EP Sub Area</div>
           <div class="table-wrap">
             <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SUB AREA</th>
-                <th>TOTAL DI</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
+              <colgroup><col style="width:19%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:11%"><col style="width:10%"><col style="width:10%"><col style="width:10%"><col style="width:10%"></colgroup>
+              <thead>
+                <tr><th rowspan="2" style="text-align:left;vertical-align:middle;font-size:11px">SUB AREA</th><th colspan="4" style="text-align:center;border-bottom:1px solid var(--border);font-size:11px;background:rgba(37,99,235,0.15)">PIPING (D/I)</th><th colspan="4" style="text-align:center;border-bottom:1px solid var(--border);font-size:11px;background:rgba(34,211,161,0.12)">SUPPORT (EA)</th></tr>
+                <tr><th style="font-size:11px">TOTAL</th><th style="font-size:11px">DONE</th><th style="font-size:11px">BALANCE</th><th style="font-size:11px">%</th><th style="font-size:11px;border-left:1px solid var(--border)">TOTAL</th><th style="font-size:11px">DONE</th><th style="font-size:11px">BALANCE</th><th style="font-size:11px">%</th></tr>
+              </thead>
               <tbody id="epAreaTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <!-- Col 3: Piping EP Sub Area (2) + TOTAL -->
-        <div class="panel">
-          <div class="panel-title">Piping Progress by EP Sub Area (2)</div>
-          <div class="table-wrap">
-            <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SUB AREA</th>
-                <th>TOTAL DI</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
-              <tbody id="epAreaTableBody2"></tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-      <!-- Support: 3-column table grid -->
-      <div class="rg3-12" style="align-items:start;margin-top:12px">
-        <!-- Col 1: Support EP System table -->
-        <div class="panel">
-          <div class="panel-title">Support Progress by EP System</div>
-          <div class="table-wrap">
-            <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:30%"><col style="width:18%"><col style="width:18%"><col style="width:18%"><col style="width:16%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SYSTEM</th>
-                <th>TOTAL</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
-              <tbody id="epSupSysTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <!-- Col 2: Support EP Sub Area (1) -->
-        <div class="panel">
-          <div class="panel-title">Support Progress by EP Sub Area (1)</div>
-          <div class="table-wrap">
-            <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SUB AREA</th>
-                <th>TOTAL</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
-              <tbody id="epSupAreaTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-        <!-- Col 3: Support EP Sub Area (2) + TOTAL -->
-        <div class="panel">
-          <div class="panel-title">Support Progress by EP Sub Area (2)</div>
-          <div class="table-wrap">
-            <table class="data-table" style="width:100%;table-layout:fixed">
-              <colgroup><col style="width:32%"><col style="width:17%"><col style="width:17%"><col style="width:17%"><col style="width:17%"></colgroup>
-              <thead><tr>
-                <th style="text-align:left">SUB AREA</th>
-                <th>TOTAL</th>
-                <th>COMPLETED</th>
-                <th>REMAINING</th>
-                <th>PROGRESS</th>
-              </tr></thead>
-              <tbody id="epSupAreaTableBody2"></tbody>
             </table>
           </div>
         </div>
@@ -877,7 +798,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.88"></script>
+<script defer src="/static/js/dashboard.js?v=7.89"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
   <div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:32px;min-width:300px;max-width:360px;width:90%">

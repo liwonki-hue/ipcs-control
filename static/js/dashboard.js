@@ -985,33 +985,22 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
             ].map(([l,v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
         }
 
-        // ── Progress tables ────────────────────────────────────────────
-        // allForTotal: optional, provides the full row set for the aggregate row
-        function _epTableRows(rows, nameKey, showTotal, allForTotal) {
-            const totRows = allForTotal || rows;
-            let sumT=0, sumC=0;
-            totRows.forEach(r => { sumT += r.total_di||0; sumC += r.completed_di||0; });
+        // ── Progress tables — Piping(D/I)과 Support(EA)를 한 행에 합쳐 보여준다 ──
+        // rows: [{name, p:{total_di,completed_di}, q:{total_di,completed_di}}]
+        function _epCombinedRows(rows) {
             const td = "padding:3px 5px;font-size:11px";
-            const rowHtml = rows.map(row => {
-                const tot=row.total_di||0, comp=row.completed_di||0, rem=tot-comp;
-                const p=tot>0?parseFloat((comp/tot*100).toFixed(2)):0, c=pctColor(p);
-                return `<tr>
-                    <td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${row[nameKey]||""}</td>
-                    <td style="${td}">${fmtNum(tot,0)}</td>
-                    <td style="${td};color:var(--green)">${fmtNum(comp,0)}</td>
-                    <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
-                    <td style="${td};color:${c}">${p.toFixed(2)}%</td>
-                </tr>`;
+            const side = r => { const tot = r.total_di || 0, comp = r.completed_di || 0; return {tot, comp, rem: Math.max(0, tot - comp), p: tot > 0 ? comp / tot * 100 : null}; };
+            const cells = (o, sep) => `<td style="${td}${sep ? ";border-left:1px solid var(--border)" : ""}">${fmtNum(o.tot,0)}</td>
+                <td style="${td};color:var(--green)">${fmtNum(o.comp,0)}</td>
+                <td style="${td};color:${o.rem>0?"var(--orange)":"var(--green)"}">${fmtNum(o.rem,0)}</td>
+                <td style="${td};color:${o.p==null?"var(--text-dim)":pctColor(o.p)}">${o.p==null?"—":o.p.toFixed(2)+"%"}</td>`;
+            const sums = {p:{total_di:0,completed_di:0}, q:{total_di:0,completed_di:0}};
+            const body = rows.map(r => {
+                ["p","q"].forEach(k => { sums[k].total_di += r[k].total_di || 0; sums[k].completed_di += r[k].completed_di || 0; });
+                return `<tr><td style="${td};text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0">${r.name||""}</td>${cells(side(r.p), false)}${cells(side(r.q), true)}</tr>`;
             }).join("");
-            if(!showTotal) return rowHtml;
-            const totRem = sumT-sumC, totP = sumT>0?parseFloat((sumC/sumT*100).toFixed(2)):0, totC=pctColor(totP);
-            return rowHtml + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
-                <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>
-                <td style="${td}">${fmtNum(sumT,0)}</td>
-                <td style="${td};color:var(--green)">${fmtNum(sumC,0)}</td>
-                <td style="${td};color:${totRem>0?"var(--orange)":"var(--green)"}">${fmtNum(totRem,0)}</td>
-                <td style="${td};color:${totC}">${totP.toFixed(2)}%</td>
-            </tr>`;
+            return body + `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700">
+                <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>${cells(side(sums.p), false)}${cells(side(sums.q), true)}</tr>`;
         }
 
         const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
@@ -1055,46 +1044,25 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         };
 
         const pipingSysSorted = [...(systems || [])].sort(_progressDesc);
+
+        // Piping 행과 Support 행을 이름으로 짝지어 한 표로 만든다 (한쪽에만 있는 항목도 포함). 순서는 Piping 기준(Report와 동일)
+        const _pairRows = (pipeRows, supRows, key, orderedPipeNames) => {
+            const pm = Object.fromEntries((pipeRows || []).map(r => [r[key], r]));
+            const sm = Object.fromEntries((supRows || []).map(r => [r[key], r]));
+            const names = [...orderedPipeNames, ...(supRows || []).map(r => r[key]).filter(n => !(n in pm))];
+            return [...new Set(names)].map(n => ({name: n, p: pm[n] || {}, q: sm[n] || {}}));
+        };
+        const supSysRows  = (sup && sup.sys)  || [];
+        const supAreaRows = (sup && sup.area) || [];
+
         const sysTb = document.getElementById("epSysTableBody");
-        if(sysTb && systems) sysTb.innerHTML = _epTableRows(pipingSysSorted, "system", true);
+        if(sysTb) sysTb.innerHTML = _epCombinedRows(_pairRows(systems, supSysRows, "system", pipingSysSorted.map(r => r.system)));
 
-        // Sub Area 표시 순서는 Piping 기준(Report와 동일)이고 Support 표도 같은 순서를 따른다
-        const _epAreaOrder = (areas && areas.length)
-            ? orderEpAreaRows([...areas].sort(_byAreaThenProgress(subareaMap)), r => r.sub_area).map(r => r.sub_area) : [];
-        const _epAreaIdx = name => { const i = _epAreaOrder.indexOf(name); return i < 0 ? 999 : i; };
-
-        // Support tables (sup already fetched above for KPI)
-        if(sup) {
-            const supSysTb = document.getElementById("epSupSysTableBody");
-            if(supSysTb && sup.sys) {
-                const pipingOrder = pipingSysSorted.map(s => s.system);
-                const supSysSorted = [...sup.sys].sort((a, b) => {
-                    const ia = pipingOrder.indexOf(a.system), ib = pipingOrder.indexOf(b.system);
-                    if (ia === -1 && ib === -1) return 0;
-                    if (ia === -1) return 1;
-                    if (ib === -1) return -1;
-                    return ia - ib;
-                });
-                supSysTb.innerHTML = _epTableRows(supSysSorted, "system", true);
-            }
-            if(sup.area && sup.area.length) {
-                const supSorted = orderEpAreaRows([...sup.area].sort((a, b) => _epAreaIdx(a.sub_area) - _epAreaIdx(b.sub_area)), r => r.sub_area);
-                const supMid = Math.ceil(supSorted.length / 2);
-                const supAreaTb  = document.getElementById("epSupAreaTableBody");
-                const supAreaTb2 = document.getElementById("epSupAreaTableBody2");
-                if(supAreaTb)  supAreaTb.innerHTML  = _epTableRows(supSorted.slice(0, supMid), "sub_area", false);
-                if(supAreaTb2) supAreaTb2.innerHTML = _epTableRows(supSorted.slice(supMid),    "sub_area", true, sup.area);
-            }
-        }
-
-        // Split sub areas evenly; TOTAL in col 2 uses ALL areas for correct aggregate
-        if(areas && areas.length) {
-            const sorted = orderEpAreaRows([...areas].sort(_byAreaThenProgress(subareaMap)), r => r.sub_area);
-            const mid = Math.ceil(sorted.length / 2);
-            const areaTb  = document.getElementById("epAreaTableBody");
-            const areaTb2 = document.getElementById("epAreaTableBody2");
-            if(areaTb)  areaTb.innerHTML  = _epTableRows(sorted.slice(0, mid), "sub_area", false);
-            if(areaTb2) areaTb2.innerHTML = _epTableRows(sorted.slice(mid),    "sub_area", true, areas);
+        const areaTb = document.getElementById("epAreaTableBody");
+        if(areaTb) {
+            const areaOrder = (areas && areas.length)
+                ? orderEpAreaRows([...areas].sort(_byAreaThenProgress(subareaMap)), r => r.sub_area).map(r => r.sub_area) : [];
+            areaTb.innerHTML = _epCombinedRows(_pairRows(areas, supAreaRows, "sub_area", areaOrder));
         }
 
         if(weekly && weekly.length > 0) {
@@ -2222,12 +2190,8 @@ async function exportTablesExcel(specs, fileName){
 
 async function exportEPExcel(){
     await exportTablesExcel([
-        ["epSysTableBody", "Piping by EP System"],
-        ["epAreaTableBody", "Piping by EP SubArea 1"],
-        ["epAreaTableBody2", "Piping by EP SubArea 2"],
-        ["epSupSysTableBody", "Support by EP System"],
-        ["epSupAreaTableBody", "Support by EP SubArea 1"],
-        ["epSupAreaTableBody2", "Support by EP SubArea 2"]
+        ["epSysTableBody", "EP System (Piping+Support)"],
+        ["epAreaTableBody", "EP Sub Area (Piping+Support)"]
     ], "Early_Power_Export.xlsx");
 }
 
