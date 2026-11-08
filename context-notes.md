@@ -389,3 +389,8 @@
 - 구현(app.py, cache_util.py): ① 계산 함수 `_build_*` 4개로 분리하고 독립 조회를 동시에 보냄(`_fetch_all_pages` 병렬 페이지, weekly는 마지막 날짜+주차 일정 동시, ep는 4개 동시, daily는 최근 14일을 한 번에 받는 빠른 경로 + 기존 2단계 느린 경로 보완). ② 캐시를 `cache_util.TTLCache`로 교체(`stale_when_dirty=False`: TTL이 지나면 낡은 값을 바로 주고 뒤에서 갱신, 저장으로 무효화되면 저장 전 값을 주지 않고 새로 계산). ③ `_prewarm_widgets()`가 최근 10분 안에 쓰인 캐시만 저장 직후(`_run_cache_clear`)와 keep-alive 때 미리 데움. ④ ep의 Test Package 부분 실패는 `_PartialEpSummary`로 캐시에 넣지 않고 불완전 결과만 응답(이전 동작 유지).
 - 검증: 실데이터 4개 API 응답이 개선 전 저장본과 **전부 동일**. 콜드 시간(운영 조건, 연결 예열 후) ep-support 2.1→0.83~1.3초 등 단축 확인. weekly 집계의 들여쓰기 결함(`result` 미정의)은 발견해 고침.
 - **남은 일(한도로 못 함)**: ① 새 테스트(`_fetch_all_pages`·빌더 단위 테스트, 미리 데우기 연결, 저장 후 `_run_cache_clear`가 네 캐시를 무효화하는지) 추가, ② 브라우저에서 EP·Overview·Welder·Weekly 화면 확인, ③ 콜드 시간 최종 측정과 `daily`·`welder-daily` 단축 폭 확인(둘은 1.3~1.5초로 큰 개선이 아직 아님: DB 왕복이 병목), ④ 체크리스트 기록과 finish(push).
+
+## 2026-11-09 남은 병목 개선 마무리(위 "진행 중 기록"의 남은 일 완료)
+- 새 테스트 `tests/test_widget_caches.py` 20개: `_fetch_all_pages`(0·1·9,999·10,000·10,001·25,000·30,000·30,001행과 여러 페이지 크기·워커 수에서 순서·개수가 순차 읽기와 같음), daily 빠른 경로(DB 왕복 1회)·느린 경로 보완, 저장(`_run_cache_clear`)이 네 캐시를 무효화하고 낡은 값을 주지 않는지(Support 저장은 EP 집계만), 미리 데우기가 최근 쓰인 캐시만 대상으로 하고 저장·keep-alive 양쪽에 연결됐는지, ep 부분 결과(`_PartialEpSummary`)는 응답하되 캐시하지 않고 온전한 이전 값을 덮어쓰지 않는지, 오류 응답이 로그인하지 않은 요청에 상세를 숨기는지.
+- 실서버 확인: 네 API 캐시 적중 0.21초, 화면 값 개선 전과 동일(EP Support 1,463/2,134, EP Test Package 3/12). **로컬 `.venv`(supabase 2.4.5)에서는 서버를 막 켠 직후 대시보드 재빌드·ISO 스캔과 겹치면 ep-support 첫 호출이 21초까지 느려지지만, 운영과 같은 supabase 2.31에서는 같은 겹침에서도 6.7초(단독 0.8~1.3초)**이고 전부 200이다 — 로컬 클라이언트의 동시 요청 한계.
+- 콜드 시간 단독 측정(운영 조건): daily 약 1.0초·weekly 약 0.8~1.2초·welder-daily 약 0.8~1.4초·ep 약 0.8~1.3초(이전 1.3~2.1초). daily·welder-daily는 DB 왕복이 병목이라 단축 폭이 작지만, 저장 직후에도 미리 데우기로 기다리지 않게 했다.

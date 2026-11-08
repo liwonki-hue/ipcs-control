@@ -257,3 +257,13 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 4. 속도·안정성 — 첫 표시 조회 2회→재방문 1회(맞춘 행 수 기억), `/api/joints` 병목 분석(건수 계산은 7%), 최악 동시 부하 메모리 115MB(지난 finish 때 측정)
 - [x] 5. 로컬 웹 검증 — 서버 재시작 후 브라우저로 확인
 - [ ] 6. commit → push → CI(Tests) 확인
+
+---
+
+# Checklist — finish (2026-11-09, `/api/joints` 윈도우 조회 + 보조 집계 4종 개선)
+
+- [x] 1. 임시 코드 제거 — 추가된 줄에 debug print·console.log·TODO 0건
+- [x] 2. 검토 — pyflakes 0건, 맨몸 `except:` 0곳, JS 문법 정상. 보조 집계 개선 중 주간 집계 들여쓰기 결함을 응답 비교로 찾아 고침
+- [x] 3. 테스트 — pytest 186건(`/api/joints` 윈도우 28개, 캐시 확장 7개, 보조 집계 20개 신규). 실데이터 비교: `/api/joints` 42개 요청 차이 0건, 보조 집계 4종 응답이 개선 전과 동일. 운영 조건 최악 겹침(10개 동시) 전부 200·메모리 최고 120MB, 저장 12초 뒤 네 캐시 재신선. 화면(Overview·Early Power·Weekly·Welder) 확인
+- [x] 4. commit
+- [ ] 5. push 후 CI(Tests)·Render 배포 확인
