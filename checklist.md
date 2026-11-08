@@ -180,3 +180,17 @@ Plan: Joint·Support·Test Package 저장 API가 요청 본문을 그대로 UPDA
 - [x] 테스트 `scratch/test_patch_whitelist.py` — 가짜 DB로 거절·정상 저장·화면 페이로드 통과·401 확인 (45건 통과)
 - [x] 기존 테스트 test_bulk_date·test_sort_joints_numeric 영향 없음
 - [ ] 실제 화면에서 저장 동작 확인 — 운영 DB에 연결된 로컬이라 로그인 후 사용자가 직접 확인 필요
+
+---
+
+# Checklist — 즉시 개선 3종: esc() · pytest · refresh 호출 제한 (2026-11-08)
+
+Plan: 컬럼 제한(9df5ba9)에 이어 나머지 "즉시" 항목을 적용한다. 인증·접근 제어를 바꾸는 항목(공개 조회 범위, 토큰, 환경변수, 개인 계정)은 사용자 확인 대상이라 제외.
+
+- [x] esc() — dashboard.js에 HTML 이스케이프 함수 추가, DB 문자열 보간 61곳 + 변수 보간 6곳에 적용
+- [x] drillWelder 인라인 핸들러(JS 문자열 컨텍스트)는 data-welder 속성으로 전환 — HTML 이스케이프로는 막을 수 없는 형태였음
+- [x] refresh-db-cache 최소 간격 300초 (건너뛴 호출은 200+skipped, 실패한 호출은 간격에 안 넣음)
+- [x] tests/ — pytest 72건 (합격 판정·PWHT·Rev 비교·Pkg 단계·날짜 검증·저장 API·호출 간격·esc 적용 여부)
+- [x] .github/workflows/tests.yml — 푸시마다 pytest (가짜 DB라 시크릿 불필요), requirements-dev.txt
+- [x] 검증: .env 없이도 72건 통과 / esc 하나를 일부러 빼면 테스트 실패 확인 / 로컬 서버 재시작 후 JM·Support·NDE·Test Pkg·RT·Welder·Overview·EP 렌더링과 콘솔 에러 0 확인 / 실서버에서 3회 호출 시 1회만 갱신
+- [ ] 로그인 후 실제 저장(JM·Support·Test Pkg)과 특수문자 값 표시는 사용자가 직접 확인 (운영 DB 연결 + 로그인 정보 규칙)

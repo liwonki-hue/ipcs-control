@@ -247,3 +247,10 @@
 - Support만 일관성 검사 추가: completed와 date_completed를 같이 보내면 `bool`이 같아야 한다. Test Package는 추가하지 않았다 — 화면이 결과 PASS면 날짜가 비어 있어도 completed=true로 저장하는 것을 허용하고 있어서, 막으면 기존 사용 방식이 깨진다.
 - 영향 없는 것: bulk-date, sync 엔드포인트들(별도 경로로 컬럼을 직접 지정), `_audit()`(updated_at/by는 계속 뒤에 덮어써서 위조 불가).
 - 기존 scratch/test_cache_clear_debounce.py·test_cache_clear_scopes.py는 6858506에서 삭제된 `_jm_iso_stats_cache`를 참조해 이미 실패 중(이번 변경과 무관).
+
+## 2026-11-08 esc() · pytest · refresh-db-cache 호출 제한
+- esc(): `${r.field}` 형태로 값을 그대로 출력하던 문자열 칸(iso_drawing, welder, system, package, phase 등)을 정규식으로 찾아 일괄 적용. 숫자·날짜·`==='VT'?'selected':''` 같은 비교식은 대상 아님. toast는 textContent라 안전, `${e.message}`는 그대로 둠.
+- 함정: `onclick="fn('${값}')"`처럼 HTML 속성 안의 JS 문자열은 HTML 이스케이프가 소용없다 — 브라우저가 `&#39;`를 `'`로 되돌린 뒤 JS를 해석한다. drillWelder만 해당돼 `data-welder` + `this.dataset.welder`로 바꿨다. tests/test_api.py가 이 형태의 재도입을 막는다.
+- 새 문자열 칸을 템플릿에 넣을 때: `${esc(r.field||"")}`. test_no_unescaped_db_strings_in_templates가 `${r.<알려진 필드>}`가 날것으로 들어가면 실패시킨다(새 필드는 이 테스트의 fields 목록에 추가).
+- refresh-db-cache: 로그인 없이 부르는 주소라 반복 호출이 120초짜리 MV 갱신+전체 재빌드를 겹치게 할 수 있었다. 최소 간격 300초(keep-alive는 12분 간격). 건너뛴 응답은 200 — keep-alive 워크플로가 실패로 오인하면 안 된다. 갱신이 실패하면 `_refresh_last`를 되돌려 워크플로의 즉시 재시도(`--retry 3 --retry-delay 5`)가 건너뛰어지지 않게 했다. 토큰 검증은 GitHub Secret·환경변수가 필요한 인증 변경이라 이번에 하지 않음(사용자 결정 대기).
+- pytest: tests/는 git 추적(scratch/는 gitignore). 앱은 임포트 시 DB에 접속하지 않아 환경변수 없이 돈다. 가짜 DB는 tests/conftest.py. 실행 `python -m pytest tests -q`. 옛 scratch/test_cache_clear_*.py는 삭제된 `_jm_iso_stats_cache`를 참조해 이미 깨져 있음(손대지 않음).

@@ -1,0 +1,20 @@
+name: Tests
+
+# 저장 API 컬럼 제한, 합격 판정·PWHT 같은 핵심 규칙, HTML 이스케이프 적용 여부를 푸시마다 확인한다.
+# 운영 DB에는 접속하지 않는다(가짜 DB 사용) — 시크릿이 필요 없다.
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest tests -q
