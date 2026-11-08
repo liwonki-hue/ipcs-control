@@ -814,7 +814,7 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
                          color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
         }))},
         options: {...opts, layout: {padding: {top: 4}},
-            scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+            scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 0, maxRotation: 0}},
                      y: {...opts.scales.y, stacked: true, max: 100, grace: 0, ticks: {...tick, stepSize: 50, callback: v => v + "%"}}},
             plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {...opts.plugins.legend.labels, boxWidth: 10, padding: 8, font: {family: "DM Mono, monospace", size: 9}}},
                       tooltip: {...opts.plugins.tooltip, callbacks: {label: ctx => `${ctx.dataset.label}: ${cnt(names[ctx.dataIndex], STAGES[ctx.datasetIndex].key)} / ${total(names[ctx.dataIndex])} pkg`}}}}
