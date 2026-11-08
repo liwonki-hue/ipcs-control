@@ -784,7 +784,7 @@ async function renderOverview(kpi, wkData, units, systems) {
 async function renderPressureTestChart(allSystems) {
     try {
         const rows = (await apiFetch("/api/testpkg-by-system")).data || [];
-        drawTestStageChart("pressureTestBar", (allSystems || []).map(s => s.system), rows);
+        drawTestStageChart("pressureTestBar", (allSystems || []).map(s => s.system), rows, ["GT MISC", "ST MISC"]);
     } catch (e) { console.error("Pressure test chart failed", e); }
 }
 
