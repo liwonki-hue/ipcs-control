@@ -349,3 +349,11 @@
 - 측정(문서 스크롤 0px, 네비게이터 뷰포트 안): 1280×720=12행, 1696×830=15행, 1920×1080=21행(JM·SM 동일). Support Master에서 ISO를 검색해 Bulk Update 패널이 위에 떠도 네비게이터가 화면 안.
 - 아직 고정 30행인 탭(이번 요청 범위 밖): NDE & PWHT(`NDE_PAGE_SIZE`), Test Pkg Joint Check, Test Pkg Register. 같은 방식으로 적용 가능.
 - push는 하지 않음(finish 절차 전).
+
+## 2026-11-09 NDE & PWHT · Test Pkg Joint Check · Test Pkg Register에도 행 수 맞춤 적용
+- 적용 전 상태: NDE는 Joint Master와 같은 문제(30행, 네비게이터 1314px/뷰포트 830px). Test Pkg 두 탭은 표가 `max-height: calc(100vh - 230px)` 안쪽 스크롤 영역에 들어 있어 네비게이터는 보였지만 일부 행이 안쪽 스크롤 아래에 가렸고 문서도 7~10px 스크롤됐다(Test Pkg Register는 16개 패키지인데 안쪽 스크롤로만 볼 수 있었다).
+- 수정: 세 탭에 `_ndeFit`/`_tpFit`/`_tmFit`과 `_fitNDE`/`_fitTP`/`_fitTM`을 추가해 Joint Master·Support Master와 같은 `_fitServerPage`를 쓴다(이제 서버 페이지 표 5개 모두 같은 방식). Test Pkg 두 표의 안쪽 세로 스크롤 제한은 제거(가로 스크롤만 유지). Test Pkg Register는 행 번호(`tmCurrentPage*_tmFit.size+i+1`)와 자체 네비게이터(`_renderTMPagination`)도 동적 행 수를 쓴다. 창 크기 변경 시 다섯 표 상태를 초기화하고 보이는 탭만 다시 맞춘다.
+- 측정(문서 스크롤 0px, 안쪽 세로 스크롤 없음, 네비게이터 뷰포트 안): 1280×720 NDE 15 / TP 12 / TM 11행, 1696×830 16 / 14 / 13행, 1920×1080 23 / 21 / 16행(Register는 16개 전부 한 페이지라 네비게이터 없음). Register 2페이지 행 번호 12~16으로 이어짐.
+- 알게 된 것(코드 변경 아님): 로컬 `.venv`(supabase 2.4.5)에서는 `/api/joints`를 4개 동시에 보내면 3개가 500(`statement timeout` 57014)이 난다 — 운영과 같은 supabase 2.31 환경에서는 4개 동시에도 전부 200(최대 2.7초). 로컬 전용 현상이라 로컬에서 빠르게 페이지를 연타하며 시험하면 "Loading…"이 남을 수 있다. 서버 페이지 표의 첫 표시 때 늘어나는 재조회는 순차라 겹치지 않는다.
+- 테스트: `test_paged_tables_follow_the_screen`이 다섯 탭 모두 고정 행 수 상수(JM_PAGE_SIZE, SM_PAGE_SIZE, NDE_PAGE_SIZE, TP_PAGE, TM_PAGE)로 되돌아가지 않게 하고, `test_test_pkg_tables_have_no_inner_scroll_limit`이 안쪽 스크롤 제한의 재도입을 막는다.
+- push는 하지 않음(finish 절차 전). 이 커밋과 앞선 `107ec00`이 미push 상태.

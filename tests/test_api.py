@@ -241,9 +241,15 @@ def test_joint_master_has_no_bulk_update_panel():
     assert "sm-bulk-date" in html                                              # Support Master의 패널은 그대로
 
 
-def test_jm_and_sm_page_size_follow_the_screen():
-    """Joint Master·Support Master는 화면 높이에 맞춘 행 수(_jmFit/_smFit.size)로 조회한다 — 고정 상수로 되돌아가면 네비게이터가 다시 스크롤해야 보인다."""
-    uses = re.findall(r"(?<![\w.])(?:JM|SM)_PAGE_SIZE(?![\w])", JS)
-    assert len(uses) == 4, uses                                                  # 선언 2개 + _jmFit/_smFit 초기값 2개뿐
-    assert "limit:_jmFit.size" in JS and "limit: _smFit.size" in JS
-    assert "_fitJM();" in JS and "_fitSM();" in JS
+def test_paged_tables_follow_the_screen():
+    """Joint Master·Support Master·NDE·Test Pkg 두 탭은 화면 높이에 맞춘 행 수(_xxxFit.size)로 조회한다 — 고정 상수로 되돌아가면 네비게이터가 다시 스크롤해야 보인다."""
+    for const, fit, fn in [("JM_PAGE_SIZE", "_jmFit", "_fitJM"), ("SM_PAGE_SIZE", "_smFit", "_fitSM"), ("NDE_PAGE_SIZE", "_ndeFit", "_fitNDE"),
+                           ("TP_PAGE", "_tpFit", "_fitTP"), ("TM_PAGE", "_tmFit", "_fitTM")]:
+        uses = re.findall(r"(?<![\w.])%s(?![\w])" % const, JS)
+        assert len(uses) == 2, (const, uses)                                     # 선언 + 맞춤 상태의 시작값뿐
+        assert f"{fit}.size" in JS and f"{fn}();" in JS, (fit, fn)
+
+
+def test_test_pkg_tables_have_no_inner_scroll_limit():
+    html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    assert "max-height:calc(100vh - 230px)" not in html

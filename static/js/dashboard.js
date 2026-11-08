@@ -1654,6 +1654,7 @@ function renderJMTable(rows){
 // ================================================================================
 let ndeCurrentPage=0;
 const NDE_PAGE_SIZE=30;
+const _ndeFit = { size: NDE_PAGE_SIZE, cap: Infinity, grewFrom: null, tries: 0 };   // _jmFit과 같다(화면 높이에 맞춘 행 수)
 let ndeData=[];
 
 async function loadNdePwht() {
@@ -1661,10 +1662,10 @@ async function loadNdePwht() {
     const isoVal=document.getElementById("nde-iso")?.value?.trim()||"";
     const inspVal=document.getElementById("nde-insp")?.value||"";
     const welderVal=document.getElementById("nde-welder")?.value?.trim()||"";
-    const offset=ndeCurrentPage*NDE_PAGE_SIZE;
+    const offset=ndeCurrentPage*_ndeFit.size;
     _tableLoading("ndeBody", 12);
     try {
-        const params=new URLSearchParams({limit:NDE_PAGE_SIZE,offset,nde_only:"true"});
+        const params=new URLSearchParams({limit:_ndeFit.size,offset,nde_only:"true"});
         if(unit)params.set("unit",unit); if(system)params.set("system",system);
         if(isoVal)params.set("iso",isoVal);
         if(inspVal)params.set("inspection",inspVal);
@@ -1672,9 +1673,10 @@ async function loadNdePwht() {
         const res=await apiFetch(`/api/joints?${params}`);
         ndeData=res.data;
         document.getElementById("nde-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
-        _renderPageNums("nde-page-nav", ndeCurrentPage, res.count||0, NDE_PAGE_SIZE, "ndeGoto");
+        _renderPageNums("nde-page-nav", ndeCurrentPage, res.count||0, _ndeFit.size, "ndeGoto");
 
         renderNdeTable(ndeData);
+        _fitNDE();
     } catch(e) { console.error("NDE load failed",e); }
 }
 
@@ -1963,7 +1965,7 @@ function _fitRows(body, pager, limit, size, setSize, draw) {
     }
 }
 
-// ── 서버가 페이지 단위로 내려주는 표(Joint Master·Support Master)의 한 페이지 행 수 맞춤 ────────────
+// ── 서버가 페이지 단위로 내려주는 표(Joint Master·Support Master·NDE·Test Pkg 두 탭)의 한 페이지 행 수 맞춤 ────────────
 // 한 번 그린 표를 재서 네비게이터가 화면 안에 들어오는 행 수를 구하고, 지금과 다르면 그 행 수로 다시 조회한다(서버가 limit 단위로 주므로).
 // 늘렸더니 넘치면 넘친 만큼만 줄이고 그 값을 상한(cap)으로 기억해, 두 값 사이를 오가지 않게 한다. 행 수는 st.size에 남아 다음 조회부터 바로 쓴다.
 function _fitServerPage(st, { pageId, bodyId, getPage, setPage, reload }) {
@@ -1995,13 +1997,20 @@ function _fitServerPage(st, { pageId, bodyId, getPage, setPage, reload }) {
 const _fitJM = () => _fitServerPage(_jmFit, { pageId: "page-joint_master", bodyId: "jmBody", getPage: () => jmCurrentPage, setPage: p => { jmCurrentPage = p; }, reload: loadJointMaster });
 const _fitSM = () => _fitServerPage(_smFit, { pageId: "page-support_master", bodyId: "smBody", getPage: () => smCurrentPage, setPage: p => { smCurrentPage = p; }, reload: loadSupportMaster });
 
+const _fitNDE = () => _fitServerPage(_ndeFit, { pageId: "page-nde_pwht", bodyId: "ndeBody", getPage: () => ndeCurrentPage, setPage: p => { ndeCurrentPage = p; }, reload: loadNdePwht });
+const _fitTP = () => _fitServerPage(_tpFit, { pageId: "page-testpkg_master", bodyId: "tpBody", getPage: () => tpCurrentPage, setPage: p => { tpCurrentPage = p; }, reload: loadTestPkgMaster });
+const _fitTM = () => _fitServerPage(_tmFit, { pageId: "page-test_master", bodyId: "tmBody", getPage: () => tmCurrentPage, setPage: p => { tmCurrentPage = p; }, reload: loadTestMaster });
+
 let _fitResizeTimer = null;
 window.addEventListener("resize", () => {
     clearTimeout(_fitResizeTimer);
     _fitResizeTimer = setTimeout(() => {
-        for (const st of [_jmFit, _smFit]) { st.cap = Infinity; st.grewFrom = null; st.tries = 0; }   // 화면 크기가 바뀌었으니 상한을 다시 찾는다
+        for (const st of [_jmFit, _smFit, _ndeFit, _tpFit, _tmFit]) { st.cap = Infinity; st.grewFrom = null; st.tries = 0; }   // 화면 크기가 바뀌었으니 상한을 다시 찾는다
         _fitJM();
         _fitSM();
+        _fitNDE();
+        _fitTP();
+        _fitTM();
     }, 150);
 });
 
@@ -3126,6 +3135,7 @@ async function exportSMExcel() {
 // ================================================================================
 let tpData = [], tpCurrentPage = 0;
 const TP_PAGE = 30;
+const _tpFit = { size: TP_PAGE, cap: Infinity, grewFrom: null, tries: 0 };   // _jmFit과 같다
 
 async function loadTestPkgMaster() {
     const iso    = document.getElementById("tp-iso")?.value?.trim() || "";
@@ -3133,7 +3143,7 @@ async function loadTestPkgMaster() {
     const insp   = document.getElementById("tp-insp")?.value || "";
     const system = document.getElementById("tp-system")?.value  || "";
     const status = document.getElementById("tp-status")?.value  || "";
-    const offset = tpCurrentPage * TP_PAGE;
+    const offset = tpCurrentPage * _tpFit.size;
     _tableLoading("tpBody", 18);
     try {
         const tpSys = document.getElementById("tp-system");
@@ -3141,7 +3151,7 @@ async function loadTestPkgMaster() {
         const tpPkg = document.getElementById("tp-package");
         if (tpPkg && !loadSystemPackages._seq) loadSystemPackages();   // 첫 화면: System 없이도 전체 Package를 고를 수 있게
 
-        const params = new URLSearchParams({limit: TP_PAGE, offset});
+        const params = new URLSearchParams({limit: _tpFit.size, offset});
         if (iso)    params.set("iso",     iso);
         if (pkg)    params.set("package", pkg);
         if (insp)   params.set("inspection", insp);
@@ -3150,8 +3160,9 @@ async function loadTestPkgMaster() {
         const res = await apiFetch(`/api/testpkg-joints?${params}`);
         tpData = res.data;
         document.getElementById("tp-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
-        _renderPageNums("tp-page-nav", tpCurrentPage, res.count||0, TP_PAGE, "tpGoto");
+        _renderPageNums("tp-page-nav", tpCurrentPage, res.count||0, _tpFit.size, "tpGoto");
         renderTPTable(tpData);
+        _fitTP();
     } catch(e) { console.error("Test Pkg Master load failed", e); }
 }
 
@@ -3353,6 +3364,7 @@ async function exportTPExcel() {
 // ================================================================================
 let tmData = [], tmCurrentPage = 0;
 const TM_PAGE = 20;
+const _tmFit = { size: TM_PAGE, cap: Infinity, grewFrom: null, tries: 0 };   // _jmFit과 같다
 
 // 전체 패키지 목록 캐시 (System 필터용)
 let _tmAllData = [];
@@ -3362,10 +3374,10 @@ async function loadTestMaster() {
     const pkg     = document.getElementById("tm-package")?.value || "";
     const status  = document.getElementById("tm-status")?.value  || "";
     const search  = document.getElementById("tm-search")?.value.trim() || "";
-    const offset  = tmCurrentPage * TM_PAGE;
+    const offset  = tmCurrentPage * _tmFit.size;
     _tableLoading("tmBody", 13);
     try {
-        let url = `/api/testpkg-master?limit=${TM_PAGE}&offset=${offset}`;
+        let url = `/api/testpkg-master?limit=${_tmFit.size}&offset=${offset}`;
         if (system) url += `&system=${encodeURIComponent(system)}`;
         if (pkg)    url += `&test_pkg_no=${encodeURIComponent(pkg)}`;
         if (status) url += `&status=${encodeURIComponent(status)}`;
@@ -3375,6 +3387,7 @@ async function loadTestMaster() {
         document.getElementById("tm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
         _renderTMPagination(tmCurrentPage, res.count || 0);
         renderTMTable(tmData);
+        _fitTM();
         if (!_tmAllData.length) await _loadTMAllForFilters();
     } catch(e) { toast("Load failed: "+e.message, "error"); }
 }
@@ -3383,8 +3396,8 @@ function _renderTMPagination(curPage, totalRows) {
     const el = document.getElementById("tm-page-nav");
     if (!el) return;
     el.innerHTML = "";
-    if (!totalRows || totalRows <= TM_PAGE) return;
-    const totalPages = Math.ceil(totalRows / TM_PAGE);
+    if (!totalRows || totalRows <= _tmFit.size) return;
+    const totalPages = Math.ceil(totalRows / _tmFit.size);
     const cur1 = curPage + 1;
     const pageSet = new Set([1, totalPages]);
     for (let p = Math.max(1, cur1 - 2); p <= Math.min(totalPages, cur1 + 2); p++) pageSet.add(p);
@@ -3489,7 +3502,7 @@ function renderTMTable(data) {
             </div>
         </div>`;
         return `<tr${_lastUpdatedTitle(r)}>
-            <td style="text-align:center">${tmCurrentPage*TM_PAGE+i+1}</td>
+            <td style="text-align:center">${tmCurrentPage*_tmFit.size+i+1}</td>
             <td style="text-align:center">
                 <select class="cell-input" id="tm-phase-${r.id}" style="width:98%;text-align:center;color:#000;background:#fff;${fnt}">
                     <option value=""${iopt(!r.phase)} style="color:#000">-</option>
