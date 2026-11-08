@@ -544,28 +544,6 @@ function renderKPI(d, wkData) {
         ? `<div class="kpi-sub-row">${feSeg("Fab", Math.max(0, fabTot - (d.fab_di||0)), fabTot)}${feSeg("Erect", Math.max(0, erectTot - (d.erect_di||0)), erectTot)}</div>`
         : "";
     document.getElementById("kpi-remain-sub").innerHTML = remainFeRow;
-
-    const actWks = (wkData || []).filter(w => w.completed_di > 0);
-    const kpiWeekVal = document.getElementById("kpi-week");
-    const kpiWeekSub = document.getElementById("kpi-week-sub");
-    if (actWks.length) {
-        const lw  = actWks[actWks.length - 1];
-        if (kpiWeekVal) {
-            kpiWeekVal.textContent = fmtNum(lw.completed_di, 0);
-            kpiWeekVal.style.color = "var(--accent)";
-        }
-        if (kpiWeekSub) {
-            kpiWeekSub.textContent = `Current Week Progress (${lw.week_label})`;
-        }
-    } else {
-        const card = document.getElementById("kpi-week-card");
-        if (card) card.style.borderTopColor = "#1e2d45";
-        if (kpiWeekVal) {
-            kpiWeekVal.textContent = "0";
-            kpiWeekVal.style.color = "#4a6080";
-        }
-        if (kpiWeekSub) kpiWeekSub.textContent = "No activity this week";
-    }
 }
 
 // ================================================================================

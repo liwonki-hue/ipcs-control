@@ -124,10 +124,10 @@ body { font-family: 'Barlow', 'Segoe UI', sans-serif; background: var(--bg); col
 }
 .kpi-row .kpi-card:first-child { flex: 1.5 1 220px; }
 /* Overview: Overall Progress는 줄이고 Completed·Remaining DI는 같은 폭으로 넓힌다 */
-#kpiRow .kpi-card:first-child { flex: 6.1 1 190px; }
-#kpiRow .kpi-card:nth-child(2) { flex: 2.1 1 140px; }
-#kpiRow .kpi-card:nth-child(3), #kpiRow .kpi-card:nth-child(4) { flex: 6.2 1 190px; }
-#kpiRow .kpi-card:nth-child(n+5) { flex: 4.6 1 150px; }
+#kpiRow .kpi-card:first-child { flex: 8 1 190px; }
+#kpiRow .kpi-card:nth-child(2) { flex: 5 1 140px; }
+#kpiRow .kpi-card:nth-child(3), #kpiRow .kpi-card:nth-child(4) { flex: 11 1 190px; }
+#kpiRow .kpi-card:nth-child(5) { flex: 8 1 150px; }
 .kpi-card.accent { border-top-color: var(--accent); }
 .kpi-card.cyan   { border-top-color: var(--accent); }
 .kpi-card.green  { border-top-color: var(--green); }
