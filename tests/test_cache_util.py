@@ -2,6 +2,8 @@
 import threading
 import time
 
+import pytest
+
 import cache_util
 from cache_util import TTLCache
 
@@ -109,3 +111,82 @@ def test_clear_scopes_only_touches_matching_caches():
     assert joint.peek()[1] is False and support.peek()[1] is True
     cache_util.clear_scopes({"all"})
     assert support.peek()[1] is False
+
+
+# ── 무효화 뒤 낡은 값을 주지 않는 캐시(stale_when_dirty=False) ──────────────
+def test_dirty_cache_without_stale_waits_for_fresh_value():
+    """저장으로 무효화된 뒤에는 저장 전 값을 돌려주면 안 된다 — 새로 만들 때까지 기다린다."""
+    c = TTLCache("d1", ttl=60, stale_when_dirty=False)
+    c.get_or_build(lambda: "before-save")
+    c.invalidate()
+    assert c.get_or_build(lambda: "after-save") == "after-save"
+    assert c.peek() == ("after-save", True)
+
+
+def test_expired_ttl_still_serves_stale_even_when_not_serving_dirty():
+    """TTL만 지난 경우(데이터는 그대로)는 낡은 값을 바로 주고 뒤에서 갱신한다."""
+    c = TTLCache("d2", ttl=0.05, min_gap=0, stale_when_dirty=False)
+    c.get_or_build(lambda: 1)
+    time.sleep(0.1)
+    assert c.get_or_build(lambda: 2) == 1
+    assert wait_until(lambda: c.peek()[0] == 2)
+
+
+def test_blocking_waiter_gets_value_built_by_background_refresh():
+    """무효화 직후 요청이 몰려도 만들기는 한 번이다 — 기다리던 요청은 먼저 끝난 결과를 받는다."""
+    c, calls, release = TTLCache("d3", ttl=60, min_gap=0, stale_when_dirty=False), [], threading.Event()
+    c.get_or_build(lambda: "old")
+    c.invalidate()
+
+    def build():
+        calls.append(1)
+        release.wait(2)
+        return "new"
+    out = []
+    ts = [threading.Thread(target=lambda: out.append(c.get_or_build(build))) for _ in range(4)]
+    [t.start() for t in ts]
+    time.sleep(0.15)
+    release.set()
+    [t.join() for t in ts]
+    assert out == ["new"] * 4 and len(calls) == 1
+
+
+def test_failed_blocking_build_returns_previous_value():
+    c = TTLCache("d4", ttl=60, stale_when_dirty=False)
+    c.get_or_build(lambda: "old")
+    c.invalidate()
+
+    def boom():
+        raise RuntimeError("db down")
+    assert c.get_or_build(boom) == "old"                                       # 이전 값이 있으면 오류 대신 돌려준다
+    empty = TTLCache("d4b", ttl=60)
+    with pytest.raises(RuntimeError):
+        empty.get_or_build(boom)                                               # 이전 값이 없으면 예외
+
+
+def test_clear_is_an_alias_of_invalidate():
+    c = TTLCache("d5", ttl=60, stale_when_dirty=False)
+    c.get_or_build(lambda: 1)
+    c.clear()
+    assert c.peek() == (1, False)
+
+
+# ── 미리 데우기 ─────────────────────────────────────────────────────────
+def test_prewarm_only_refreshes_recently_used_caches():
+    used, unused = TTLCache("p1", ttl=60, min_gap=0), TTLCache("p2", ttl=60, min_gap=0)
+    used.get_or_build(lambda: "u")
+    unused.get_or_build(lambda: "x")
+    unused._last_access = time.time() - 3600                                   # 한 시간 전에 마지막으로 썼다
+    used.invalidate()
+    unused.invalidate()
+    assert used.prewarm(lambda: "u2") is True
+    assert unused.prewarm(lambda: "x2") is False
+    assert wait_until(lambda: used.peek() == ("u2", True))
+    assert unused.peek() == ("x", False)
+
+
+def test_prewarm_skips_fresh_and_empty_caches():
+    fresh = TTLCache("p3", ttl=60, min_gap=0)
+    fresh.get_or_build(lambda: 1)
+    assert fresh.prewarm(lambda: 2) is False                                   # 이미 신선하다
+    assert TTLCache("p4", ttl=60, min_gap=0).prewarm(lambda: 3) is False       # 아무도 쓴 적이 없다

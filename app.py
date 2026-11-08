@@ -492,11 +492,14 @@ _build_fail      = False
 _build_fail_time = 0          # epoch seconds when last build failed
 BUILD_FAIL_RETRY_SEC = 60     # wait 60s before retrying after a failed build
 CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free tier
-_ep_sup_cache: dict = {}      # /api/ep-support-summary 메모리 캐시
+# 대시보드 보조 집계 4종. TTL이 지나면 낡은 값을 바로 주고 뒤에서 갱신하고(기다리지 않음), 저장으로 무효화되면 저장 전 값을 주지 않고 새로 만든다.
+# 최근에 쓰인 것만 저장 직후·keep-alive 때 미리 데운다(_prewarm_widgets).
+_daily_cache        = cache_util.TTLCache("daily_actuals", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/daily-actuals
+_wkbd_cache         = cache_util.TTLCache("weekly_breakdown", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)         # /api/weekly-last-breakdown
+_welder_daily_cache = cache_util.TTLCache("welder_daily", 900, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/welder-daily
+_ep_sup_cache       = cache_util.TTLCache("ep_support", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/ep-support-summary
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
-_daily_cache: dict = {"time": 0, "data": None}      # /api/daily-actuals 5분 캐시
-_wkbd_cache: dict  = {"time": 0, "data": None}      # /api/weekly-last-breakdown 5분 캐시
 _jm_fv_cache: dict = {}                             # /api/joints/filter-values 컬럼별 캐시 (1h)
 _welder_cache: dict = {"data": None, "time": 0}     # /api/welder-summary 캐시 (15min, 필터 없을 때)
 _rt_cache: dict     = {"data": None, "time": 0}     # /api/rt-quality 캐시 (15min)
@@ -506,7 +509,6 @@ _sub_area_cache: dict = {"data": None, "time": 0}   # sub_area 드롭다운 24h 
 _daily_report_cache: dict = {"data": None, "time": 0}  # /api/daily-report 5분 캐시
 _sup_test_cache: dict = {"data": None, "time": 0}   # support/testpkg 집계 2h 캐시
 _kpi_override_cache: dict = {"data": None, "time": 0}  # KPI override 집계 결과 1h 캐시
-_welder_daily_cache: dict = {"data": None, "time": 0}  # /api/welder-daily 15분 캐시
 _secondary_building: bool = False  # _build_secondary_caches() 중복 실행 방지 플래그 (겹치면 joint_master 풀스캔이 이중으로 돌아 OOM 위험)
 
 def _fast_kpi_sync(target=None):
@@ -1494,7 +1496,6 @@ def _run_cache_clear(scopes):
     with _lock:
         # 모든 범위 공통: 대시보드 결과와 조인트·지원 양쪽에서 파생되는 캐시
         _cache.clear()
-        _ep_sup_cache.clear()
         _pkg_stats_cache.clear()
         _testpkg_all_cache["data"] = None
         _testpkg_all_cache["time"] = 0
@@ -1504,10 +1505,6 @@ def _run_cache_clear(scopes):
             _meta_cache["data"] = None
             _pkg_cache["time"] = 0
             _pkg_cache["data"] = {}
-            _daily_cache["time"] = 0
-            _daily_cache["data"] = None
-            _wkbd_cache["time"] = 0
-            _wkbd_cache["data"] = None
             _jm_fv_cache.clear()
             _welder_cache["data"] = None
             _welder_cache["time"] = 0
@@ -1517,8 +1514,6 @@ def _run_cache_clear(scopes):
             _daily_report_cache["time"] = 0
             _kpi_override_cache["data"] = None
             _kpi_override_cache["time"] = 0
-            _welder_daily_cache["data"] = None
-            _welder_daily_cache["time"] = 0
         if support:
             _sup_test_cache["data"] = None
             _sup_test_cache["time"] = 0
@@ -1530,6 +1525,7 @@ def _run_cache_clear(scopes):
             _building = True
         else:
             _rebuild_pending = True
+    _prewarm_widgets()
     tag = "+".join(sorted(scopes))
     print(f"[cache] clear executed scope={tag} - starting background rebuild" if start
           else f"[cache] clear executed scope={tag} - build in progress, rebuilding again when it finishes")
@@ -1658,72 +1654,80 @@ def api_status():
 def api_health():
     return jsonify({"status": "ok", "uptime": "running"})
 
+# 페이지 여러 장을 동시에 읽어 모은다. 순서대로 읽으면 왕복 시간이 그대로 더해진다(14,402행 = 1만 행 2장이 약 1.7초).
+# 아직 없는 장은 PostgREST가 빈 목록을 주므로 한 묶음(workers장)을 한꺼번에 요청해도 된다. 정렬은 id라 결과 순서는 순차로 읽을 때와 같다.
+def _fetch_all_pages(make_query, page=10000, workers=3):
+    rows, off = [], 0
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        while True:
+            def one(o):
+                return _sb_exec(lambda sb: make_query(sb).order("id").range(o, o + page - 1).execute()).data or []
+            parts = list(pool.map(one, [off + i * page for i in range(workers)]))
+            for p in parts:
+                rows.extend(p)
+            if any(len(p) < page for p in parts):
+                return rows
+            off += page * workers
+
+
+def _daily_actuals_result(rows, last_5):
+    day_di, day_fab, day_erect = defaultdict(float), defaultdict(float), defaultdict(float)
+    for j in rows:
+        dc = str(j.get("date_completed") or "")[:10]
+        if dc not in last_5:
+            continue
+        di = float(j.get("di") or 0)
+        sf = (j.get("sf") or "").upper()
+        day_di[dc] += di
+        if sf in ("S", "SHOP"):    day_fab[dc]   += di
+        elif sf in ("F", "FIELD"): day_erect[dc] += di
+    return {"date_start": last_5[0], "date_end": last_5[-1], "data": [
+        {"date": dc, "completed_di": round(day_di.get(dc, 0), 2),
+         "fab_di": round(day_fab.get(dc, 0), 2), "erect_di": round(day_erect.get(dc, 0), 2)}
+        for dc in last_5]}
+
+
+def _build_daily_actuals():
+    """실제 작업 기록 기준 최근 5개 작업일의 일별 DI 실적.
+    빠른 경로: 최근 14일치를 한 번에 받아 그 안에서 최근 5개 작업일을 고른다(DB 왕복 1회). 실적이 있는 날이 5일 미만이거나 행이 1만 건을 채우면
+    (연휴, 대량 입력) 예전처럼 날짜를 먼저 찾고 그 범위를 다시 받는 2단계로 돌아간다."""
+    cutoff = (datetime.now(ALMT).date() - timedelta(days=14)).isoformat()
+    rows = _sb_exec(lambda sb: sb.table("joint_master").select("date_completed,di,sf")
+                    .not_.is_("date_completed", "null").gte("date_completed", cutoff)
+                    .order("date_completed", desc=True).limit(10000).execute()).data or []
+    dates = sorted({str(r["date_completed"])[:10] for r in rows if r.get("date_completed") and float(r.get("di") or 0) > 0})
+    if len(rows) < 10000 and len(dates) >= 5:
+        return _daily_actuals_result(rows, dates[-5:])
+    del rows
+
+    dates_res = _sb_exec(lambda sb: sb.table("joint_master")
+        .select("date_completed")
+        .not_.is_("date_completed", "null")
+        .gt("di", 0)
+        .order("date_completed", desc=True)
+        .limit(2000).execute())  # 최근 5개 작업일을 찾기 위한 날짜만 조회
+    distinct_dates = sorted({str(r["date_completed"])[:10] for r in (dates_res.data or []) if r.get("date_completed")})
+    del dates_res
+    if not distinct_dates:
+        return {"date_start": None, "date_end": None, "data": []}
+    last_5 = distinct_dates[-5:]
+    range_start, range_end = last_5[0], last_5[-1]
+    j_res = _sb_exec(lambda sb: sb.table("joint_master")
+        .select("date_completed,di,sf")
+        .gte("date_completed", range_start)
+        .lte("date_completed", range_end)
+        .not_.is_("date_completed", "null")
+        .execute())
+    return _daily_actuals_result(j_res.data or [], last_5)
+
+
 @app.route("/api/daily-actuals")
 def api_daily_actuals():
-    """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
-    with _lock:
-        cached = _daily_cache.get("data")
-        age    = time.time() - _daily_cache.get("time", 0)
-    if cached is not None and age < 300:
-        return jsonify(cached)
+    """실제 작업 기록 기준 최근 5일간 일별 DI 실적 집계 — 5분 캐시(낡은 값 먼저 + 뒤에서 갱신, 저장 직후에는 새로 계산)"""
     try:
-        # 실적이 있는 날짜만 최근 5일 추출 — 연결 오류 시 자동 재시도
-        dates_res = _sb_exec(lambda sb: sb.table("joint_master")
-            .select("date_completed")
-            .not_.is_("date_completed", "null")
-            .gt("di", 0)
-            .order("date_completed", desc=True)
-            .limit(2000).execute())  # 최근 5개 작업일을 찾기 위한 날짜만 조회. 500건이면 하루 125건 넘는 날이 이어지면 4일만 나올 수 있다
-        all_dates = dates_res.data or []
-        del dates_res
-
-        distinct_dates = sorted(set(
-            str(r["date_completed"])[:10] for r in all_dates if r.get("date_completed")
-        ))
-        del all_dates
-
-        if not distinct_dates:
-            return jsonify({"date_start": None, "date_end": None, "data": []})
-
-        last_5 = distinct_dates[-5:]
-        range_start, range_end = last_5[0], last_5[-1]
-
-        j_res = _sb_exec(lambda sb: sb.table("joint_master")
-            .select("date_completed,di,sf")
-            .gte("date_completed", range_start)
-            .lte("date_completed", range_end)
-            .not_.is_("date_completed", "null")
-            .execute())
-        joints = j_res.data or []
-        del j_res
-
-        day_di = defaultdict(float)
-        day_fab = defaultdict(float)
-        day_erect = defaultdict(float)
-        for j in joints:
-            dc = str(j.get("date_completed") or "")[:10]
-            if dc not in last_5:
-                continue
-            di = float(j.get("di") or 0)
-            sf = (j.get("sf") or "").upper()
-            day_di[dc] += di
-            if sf in ("S", "SHOP"):   day_fab[dc]   += di
-            elif sf in ("F", "FIELD"): day_erect[dc] += di
-        del joints
-
-        result = {"date_start": range_start, "date_end": range_end, "data": [
-            {"date": dc, "completed_di": round(day_di.get(dc,0),2),
-             "fab_di": round(day_fab.get(dc,0),2), "erect_di": round(day_erect.get(dc,0),2)}
-            for dc in last_5
-        ]}
-        with _lock:
-            _daily_cache["data"] = result
-            _daily_cache["time"] = time.time()
-        return jsonify(result)
+        return jsonify(_daily_cache.get_or_build(_build_daily_actuals))
     except Exception as e:
         print(f"[daily-actuals] Error: {e}")
-        if cached is not None:          # 오류 시 stale 캐시라도 반환
-            return jsonify(cached)
         return jsonify({"date_start": None, "date_end": None, "data": []}), 500
 
 
@@ -1764,6 +1768,7 @@ def api_refresh_db_cache():
                 rebuild_started = False
         threading.Thread(target=_sync_rev_from_drawing, daemon=True).start()
         _joint_analysis_cache.refresh_async(_build_joint_analysis)   # ISO 현황·데이터 품질·속도 표를 미리 데워 첫 화면이 기다리지 않게 한다
+        _prewarm_widgets()                                           # 최근 쓰인 대시보드 보조 집계도 같은 이유로
         return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress",
                         "rev_sync_last": _rev_sync_last})
     except Exception as e:
@@ -2082,98 +2087,91 @@ def api_joints_patch(jid):
 
 
 # ── Weekly Last-Week System/SubArea Breakdown ─────────────────────────
+def _build_weekly_breakdown():
+    # 1. 완료된 조인트의 마지막 날짜 + 주차 일정 전체(작은 표)를 동시에 받는다 — 둘은 서로 필요 없어 왕복이 하나로 합쳐진다
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        f_last = ex.submit(lambda: _sb_exec(lambda sb: sb.table("joint_master").select("date_completed")
+                                            .not_.is_("date_completed", "null")
+                                            .order("date_completed", desc=True).limit(1).execute()).data)
+        f_weeks = ex.submit(lambda: _sb_exec(lambda sb: sb.table("week_schedule")
+                                             .select("week_no,week_start_date,week_end_date").order("week_no").execute()).data or [])
+        last_row, weeks = f_last.result(), f_weeks.result()
+    if not last_row:
+        return {"systems": [], "subareas": [], "week_label": "—", "week_start": "", "week_end": ""}
+    last_date = str(last_row[0]["date_completed"])[:10]
+
+    # 2. 그 날짜가 속한 주
+    last_week = next((w for w in weeks if str(w["week_start_date"])[:10] <= last_date <= str(w["week_end_date"])[:10]), None)
+    if not last_week:
+        return {"systems": [], "subareas": [], "week_label": "—", "week_start": last_date, "week_end": last_date}
+
+    ws_date = str(last_week["week_start_date"])[:10]
+    we_date = str(last_week["week_end_date"])[:10]
+    week_no = last_week["week_no"]
+
+    # 3. 그 주에 완료된 조인트
+    sb = get_sb()
+    joints = []
+    _q = sb.table("joint_master") \
+           .select("system,sub_area,sf,size_inch,mat") \
+           .gte("date_completed", ws_date) \
+           .lte("date_completed", we_date) \
+           .not_.is_("date_completed", "null")
+    _off = 0
+    while True:
+        _page = _q.order("id").range(_off, _off + 9999).execute().data or []
+        joints.extend(_page)
+        if len(_page) < 10000: break
+        _off += 10000
+
+    # 4. Aggregate
+    sys_map, sub_map, mat_map = {}, {}, {}
+    for j in joints:
+        sys = j.get("system") or "—"
+        sub = j.get("sub_area") or "—"
+        mat = j.get("mat") or "—"
+        sf  = (j.get("sf") or "").upper()
+        di  = float(j.get("size_inch") or 0)
+        is_fab   = sf == "S" or "FAB" in sf
+        is_erect = sf == "F" or "ERE" in sf or "FIELD" in sf
+        for key, mapping in [(sys, sys_map), (sub, sub_map), (mat, mat_map)]:
+            if key not in mapping:
+                mapping[key] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+            mapping[key]["completed_di"] += di
+            if is_fab:     mapping[key]["fab_di"]   += di
+            elif is_erect: mapping[key]["erect_di"] += di
+
+    for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
+        if always_mat not in mat_map:
+            mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+
+    def to_list(mapping, key_field):
+        return sorted(
+            [{key_field: k, "fab_di": round(v["fab_di"],1),
+              "erect_di": round(v["erect_di"],1), "completed_di": round(v["completed_di"],1)}
+             for k, v in mapping.items()],
+            key=lambda x: x[key_field]
+        )
+
+    result = {
+        "week_no":    week_no,
+        "week_label": f"W{week_no}",
+        "week_start": ws_date,
+        "week_end":   we_date,
+        "systems":    to_list(sys_map, "system"),
+        "subareas":   to_list(sub_map, "sub_area"),
+        "materials":  to_list(mat_map, "mat"),
+    }
+    return result
+
+
 @app.route("/api/weekly-last-breakdown")
 def api_weekly_last_breakdown():
-    """주간 breakdown 집계 — 5분 서버 캐시 + 연결 오류 재시도"""
-    with _lock:
-        cached = _wkbd_cache.get("data")
-        age    = time.time() - _wkbd_cache.get("time", 0)
-    if cached is not None and age < 300:
-        return jsonify(cached)
+    """주간 breakdown 집계 — 5분 캐시(낡은 값 먼저 + 뒤에서 갱신, 저장 직후에는 새로 계산)"""
     try:
-        # 1. Find the last date with completed joints — 연결 오류 시 재시도
-        last_row = _sb_exec(lambda sb: sb.table("joint_master").select("date_completed")
-                     .not_.is_("date_completed", "null")
-                     .order("date_completed", desc=True).limit(1).execute()).data
-        if not last_row:
-            return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": "", "week_end": ""})
-        last_date = str(last_row[0]["date_completed"])[:10]
-
-        # 2. Find which week contains that date
-        wk_rows = _sb_exec(lambda sb: sb.table("week_schedule")
-                    .select("week_no,week_start_date,week_end_date")
-                    .lte("week_start_date", last_date)
-                    .gte("week_end_date",   last_date)
-                    .limit(1).execute()).data or []
-        last_week = wk_rows[0] if wk_rows else None
-        if not last_week:
-            return jsonify({"systems": [], "subareas": [], "week_label": "—", "week_start": last_date, "week_end": last_date})
-
-        ws_date = str(last_week["week_start_date"])[:10]
-        we_date = str(last_week["week_end_date"])[:10]
-        week_no = last_week["week_no"]
-
-        # 3. Query joints completed in this week
-        sb = get_sb()
-        joints = []
-        _q = sb.table("joint_master") \
-               .select("system,sub_area,sf,size_inch,mat") \
-               .gte("date_completed", ws_date) \
-               .lte("date_completed", we_date) \
-               .not_.is_("date_completed", "null")
-        _off = 0
-        while True:
-            _page = _q.order("id").range(_off, _off + 9999).execute().data or []
-            joints.extend(_page)
-            if len(_page) < 10000: break
-            _off += 10000
-
-        # 4. Aggregate
-        sys_map, sub_map, mat_map = {}, {}, {}
-        for j in joints:
-            sys = j.get("system") or "—"
-            sub = j.get("sub_area") or "—"
-            mat = j.get("mat") or "—"
-            sf  = (j.get("sf") or "").upper()
-            di  = float(j.get("size_inch") or 0)
-            is_fab   = sf == "S" or "FAB" in sf
-            is_erect = sf == "F" or "ERE" in sf or "FIELD" in sf
-            for key, mapping in [(sys, sys_map), (sub, sub_map), (mat, mat_map)]:
-                if key not in mapping:
-                    mapping[key] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-                mapping[key]["completed_di"] += di
-                if is_fab:     mapping[key]["fab_di"]   += di
-                elif is_erect: mapping[key]["erect_di"] += di
-
-        for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
-            if always_mat not in mat_map:
-                mat_map[always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-
-        def to_list(mapping, key_field):
-            return sorted(
-                [{key_field: k, "fab_di": round(v["fab_di"],1),
-                  "erect_di": round(v["erect_di"],1), "completed_di": round(v["completed_di"],1)}
-                 for k, v in mapping.items()],
-                key=lambda x: x[key_field]
-            )
-
-        result = {
-            "week_no":    week_no,
-            "week_label": f"W{week_no}",
-            "week_start": ws_date,
-            "week_end":   we_date,
-            "systems":    to_list(sys_map, "system"),
-            "subareas":   to_list(sub_map, "sub_area"),
-            "materials":  to_list(mat_map, "mat"),
-        }
-        with _lock:
-            _wkbd_cache["data"] = result
-            _wkbd_cache["time"] = time.time()
-        return jsonify(result)
+        return jsonify(_wkbd_cache.get_or_build(_build_weekly_breakdown))
     except Exception as e:
         print(f"[weekly-breakdown] Error: {e}")
-        if cached is not None:      # 오류 시 stale 캐시라도 반환
-            return jsonify(cached)
         return jsonify({"error": _err_text(e)}), 500
 
 
@@ -2456,56 +2454,41 @@ def api_welder_summary():
 
 
 # ── Welder Daily Stats ─────────────────────────────────────────────────
+def _build_welder_daily():
+    cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
+    # 120일치 완료 조인트는 1만 건(PostgREST 1회 최대 행 수)을 넘으므로 페이지를 나눠 모두 읽는다(한 번에 읽던 때는 14,402건 중 1만 건만
+    # 집계돼 일별 용접사 실적이 누락됐다, 2026-09-27). 이제 페이지를 동시에 읽는다.
+    rows = _fetch_all_pages(lambda sb: sb.table("joint_master")
+                            .select("date_completed, welder, di")
+                            .gte("date_completed", cutoff)
+                            .not_.is_("date_completed", "null")
+                            .not_.is_("welder", "null"))
+    daily = defaultdict(lambda: {"welders": set(), "total_di": 0.0})
+    for row in rows:
+        day = str(row.get("date_completed") or "")[:10]
+        wl  = (row.get("welder") or "").strip()
+        if not day or not wl:
+            continue
+        for w in [x.strip() for x in wl.split("/") if x.strip()]:
+            daily[day]["welders"].add(w)
+        daily[day]["total_di"] += float(row.get("di") or 0)
+    del rows
+    result = []
+    for day in sorted(daily.keys(), reverse=True):
+        d   = daily[day]
+        wc  = len(d["welders"])
+        tot = round(d["total_di"], 1)
+        avg = round(tot / wc, 2) if wc > 0 else 0
+        result.append({"day": day, "welder_count": wc, "total_di": tot, "avg_di_per_welder": avg})
+    return result
+
+
 @app.route("/api/welder-daily")
 def api_welder_daily():
-    with _lock:
-        _wd_age  = time.time() - _welder_daily_cache.get("time", 0)
-        _wd_data = _welder_daily_cache.get("data")
-    if _wd_data is not None and _wd_age < 900:
-        return jsonify(_wd_data)
     try:
-        sb  = get_sb()
-        cutoff = (datetime.now() - timedelta(days=120)).strftime("%Y-%m-%d")
-        # 120일치 완료 조인트는 1만 건(PostgREST 1회 최대 행 수)을 넘으므로 페이지를 나눠 모두 읽는다
-        # (한 번에 읽던 때는 14,402건 중 1만 건만 집계돼 일별 용접사 실적이 누락됐다, 2026-09-27)
-        rows, off = [], 0
-        while True:
-            page = sb.table("joint_master") \
-                .select("date_completed, welder, di") \
-                .gte("date_completed", cutoff) \
-                .not_.is_("date_completed", "null") \
-                .not_.is_("welder", "null") \
-                .order("id").range(off, off + 9999).execute().data or []
-            rows.extend(page)
-            if len(page) < 10000:
-                break
-            off += 10000
-        daily = defaultdict(lambda: {"welders": set(), "total_di": 0.0})
-        for row in rows:
-            day = str(row.get("date_completed") or "")[:10]
-            wl  = (row.get("welder") or "").strip()
-            if not day or not wl:
-                continue
-            for w in [x.strip() for x in wl.split("/") if x.strip()]:
-                daily[day]["welders"].add(w)
-            daily[day]["total_di"] += float(row.get("di") or 0)
-        del rows
-        result = []
-        for day in sorted(daily.keys(), reverse=True):
-            d   = daily[day]
-            wc  = len(d["welders"])
-            tot = round(d["total_di"], 1)
-            avg = round(tot / wc, 2) if wc > 0 else 0
-            result.append({"day": day, "welder_count": wc, "total_di": tot, "avg_di_per_welder": avg})
-        del daily
-        with _lock:
-            _welder_daily_cache["data"] = result
-            _welder_daily_cache["time"] = time.time()
-        return jsonify(result)
+        return jsonify(_welder_daily_cache.get_or_build(_build_welder_daily))
     except Exception as e:
         print(f"[welder-daily] Error: {e}")
-        if _wd_data is not None:
-            return jsonify(_wd_data)
         return jsonify([]), 500
 
 
@@ -2933,75 +2916,88 @@ def api_rt_quality():
 
 
 # ── Support Master CRUD ───────────────────────────────────────────────
+class _PartialEpSummary(Exception):
+    """Test Package 부분을 못 읽었을 때의 불완전한 결과. 캐시에 넣지 않고(낡은 값이 있으면 그것을 주고) 없을 때만 이 결과를 그대로 응답한다."""
+    def __init__(self, result):
+        super().__init__("test package part unavailable")
+        self.result = result
+
+
+def _with_retry(fn, tries=2):
+    """연결이 잠깐 끊기면 한 번 더 시도한다."""
+    for attempt in range(tries):
+        try:
+            return fn()
+        except Exception as e:
+            print(f"[ep-support-summary] test package unavailable (try {attempt + 1}): {e}")
+            if attempt == tries - 1:
+                raise
+
+
+def _build_ep_support():
+    # 서로 필요 없는 조회를 동시에 보낸다: EP Support 행, EP 조인트가 쓰는 Package, Test Package Register, Package별 진행 수치
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        f_sup = ex.submit(lambda: _fetch_all_pages(lambda sb: sb.table("support_master")
+                                                    .select("system,sub_area,area,date_completed,package").eq("phase", "EP")))
+        f_jp = ex.submit(lambda: _with_retry(lambda: _fetch_all_pages(lambda sb: sb.table("joint_master").select("package")
+                                                                      .eq("phase", "EP").not_.is_("package", "null"))))
+        f_tp = ex.submit(lambda: _with_retry(lambda: _sb_exec(lambda sb: sb.table("test_package_master")
+                                                              .select("test_pkg_no,system,completed").execute()).data or []))
+        f_stats = ex.submit(lambda: _with_retry(lambda: _load_pkg_stats(get_sb())))
+        rows = f_sup.result()
+        tp_parts = []
+        for f in (f_jp, f_tp, f_stats):
+            try:
+                tp_parts.append(f.result())
+            except Exception:
+                tp_parts.append(None)
+    sys_map, area_map, subarea_map = {}, {}, {}
+    for r in rows:
+        s, sa, ar = r.get("system", ""), r.get("sub_area", ""), r.get("area", "")
+        comp = 1 if r.get("date_completed") else 0
+        sys_map.setdefault(s, {"system": s, "total_di": 0, "completed_di": 0})
+        sys_map[s]["total_di"] += 1; sys_map[s]["completed_di"] += comp
+        area_map.setdefault(sa, {"sub_area": sa, "area": ar, "total_di": 0, "completed_di": 0})
+        area_map[sa]["total_di"] += 1; area_map[sa]["completed_di"] += comp
+        if sa and ar: subarea_map[sa] = ar
+    tp_total = tp_comp = 0
+    tp_sys = {}
+    tp_ok = all(p is not None for p in tp_parts)
+    if tp_ok:
+        joint_pkgs, tp, pkg_stats = tp_parts
+        # EP Test Package = EP 조인트·서포트가 실제로 쓰는 Package (test_package_master.phase 값에 의존하지 않는다)
+        ep_pkgs_now = {r["package"] for r in rows if r.get("package")} | {r["package"] for r in joint_pkgs if r.get("package")}
+        tp_map = {r["test_pkg_no"]: r for r in tp}
+        tp_total = len(ep_pkgs_now)
+        tp_comp = sum(1 for p in ep_pkgs_now if tp_map.get(p, {}).get("completed"))
+        for p in sorted(ep_pkgs_now):
+            row = tp_map.get(p, {})
+            a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
+            a["total"] += 1
+            a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
+    result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
+              "testpkg_total": tp_total, "testpkg_comp": tp_comp,
+              "testpkg_sys": [{"system": k, **v} for k, v in sorted(tp_sys.items())]}
+    if not tp_ok:
+        raise _PartialEpSummary(result)
+    return result
+
+
 @app.route("/api/ep-support-summary")
 def api_ep_support_summary():
-    with _lock:
-        cached = _ep_sup_cache.get("data")
-        if cached and time.time() - _ep_sup_cache.get("time", 0) < CACHE_TTL:
-            return jsonify(cached)
     try:
-        sb = get_sb()
-        rows, off = [], 0
-        while True:
-            r = (sb.table("support_master")
-                   .select("system,sub_area,area,date_completed,package")
-                   .eq("phase", "EP")
-                   .order("id").range(off, off + 9999).execute())
-            rows.extend(r.data or [])
-            if len(r.data or []) < 10000:
-                break
-            off += 10000
-        sys_map, area_map, subarea_map = {}, {}, {}
-        for r in rows:
-            s, sa, ar = r.get("system",""), r.get("sub_area",""), r.get("area","")
-            comp = 1 if r.get("date_completed") else 0
-            sys_map.setdefault(s, {"system": s, "total_di": 0, "completed_di": 0})
-            sys_map[s]["total_di"] += 1; sys_map[s]["completed_di"] += comp
-            area_map.setdefault(sa, {"sub_area": sa, "area": ar, "total_di": 0, "completed_di": 0})
-            area_map[sa]["total_di"] += 1; area_map[sa]["completed_di"] += comp
-            if sa and ar: subarea_map[sa] = ar
-        # EP Test Package = EP 조인트·서포트가 실제로 쓰는 Package (test_package_master.phase 값에 의존하지 않는다)
-        ep_pkgs = {r["package"] for r in rows if r.get("package")}
-        tp_total = tp_comp = 0
-        tp_sys = {}
-        tp_ok = False
-        for _attempt in range(2):          # 연결이 잠깐 끊기면 한 번 더 시도 — 실패한 값은 캐시하지 않는다
-            try:
-                ep_pkgs_now = set(ep_pkgs)
-                tp_total = tp_comp = 0
-                tp_sys = {}
-                j_off = 0
-                while True:
-                    jr = (sb.table("joint_master").select("package").eq("phase", "EP").not_.is_("package", "null")
-                            .order("id").range(j_off, j_off + 1999).execute().data or [])
-                    ep_pkgs_now.update(r["package"] for r in jr if r.get("package"))
-                    if len(jr) < 2000:
-                        break
-                    j_off += 2000
-                tp = sb.table("test_package_master").select("test_pkg_no,system,completed").execute().data or []
-                tp_map = {r["test_pkg_no"]: r for r in tp}
-                pkg_stats = _load_pkg_stats(sb)
-                tp_total = len(ep_pkgs_now)
-                tp_comp = sum(1 for p in ep_pkgs_now if tp_map.get(p, {}).get("completed"))
-                for p in sorted(ep_pkgs_now):
-                    row = tp_map.get(p, {})
-                    a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
-                    a["total"] += 1
-                    a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
-                tp_ok = True
-                break
-            except Exception as e:
-                print(f"[ep-support-summary] test package unavailable (try {_attempt + 1}): {e}")
-        result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
-                  "testpkg_total": tp_total, "testpkg_comp": tp_comp,
-                  "testpkg_sys": [{"system": k, **v} for k, v in sorted(tp_sys.items())]}
-        if tp_ok:
-            with _lock:
-                _ep_sup_cache["data"] = result
-                _ep_sup_cache["time"] = time.time()
-        return jsonify(result)
+        return jsonify(_ep_sup_cache.get_or_build(_build_ep_support))
+    except _PartialEpSummary as p:
+        return jsonify(p.result)
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
+
+
+# 최근에 쓰인 보조 집계만 미리 새로 만든다(저장 직후·keep-alive). 쓰지 않는 집계를 괜히 돌리지 않는다.
+def _prewarm_widgets():
+    for cache, build in ((_daily_cache, _build_daily_actuals), (_wkbd_cache, _build_weekly_breakdown),
+                         (_welder_daily_cache, _build_welder_daily), (_ep_sup_cache, _build_ep_support)):
+        cache.prewarm(build)
 
 
 @app.route("/api/support-master", methods=["GET"])

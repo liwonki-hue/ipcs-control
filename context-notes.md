@@ -383,3 +383,9 @@
 - 검증: ① 실데이터 42개 요청(페이지 크기 12/15/30/100/2000, 처음·중간·끝·범위 밖 offset, iso·status·system·nde_only·sub_area·package·mat 필터)의 행 id 순서와 total을 개선 전 저장본과 비교 → **차이 0건**. ② 응답 시간(운영 조건 supabase 2.31): 페이지 크기 15/30 요청 중앙값 0.99초→0.62초(−37%), 평균 1.10→0.73초, 2,000행 조회 1.82→1.41초. ③ 새 테스트 `tests/test_joints_window.py` 28개 — 무작위 데이터에서 여유분 0·3·12·40 모두 "전체 숫자순 정렬 후 자르기"와 같음, 여유분이 충분하면 재조회 0회, 여유분이 작으면 보완 경로가 실제로 동작.
 - 범위: 숫자 정렬 도우미를 쓰는 곳은 `/api/joints`뿐(Joint Master·NDE 탭이 공통 사용).
 - 남은 병목(손대지 않음): 캐시가 비었을 때 첫 호출이 2~3초인 `weekly-last-breakdown`(2.7s)·`ep-support-summary`(2.1s)·`daily-actuals`(1.8s)·`welder-daily`(1.7s)는 이후 5~15분 캐시 적중으로 0.2초. DB 왕복 자체(약 0.5초)는 앱 쪽에서 줄일 수 없다(joint_no 숫자 정렬 칼럼을 DB에 두려면 DDL이 필요해 사용자 SQL 실행 대상).
+
+## 2026-11-09 남은 병목 개선 — 대시보드 보조 집계 4종 (진행 중 기록, 한도 도달로 중단)
+- 대상: `daily-actuals`·`weekly-last-breakdown`·`welder-daily`·`ep-support-summary`. 원인은 DB 조회를 순차로 보내 왕복(0.5~0.8초)이 더해지는 것, 그리고 저장 때마다 캐시가 비워져 저장 직후 첫 사용자가 콜드 시간을 기다리는 것.
+- 구현(app.py, cache_util.py): ① 계산 함수 `_build_*` 4개로 분리하고 독립 조회를 동시에 보냄(`_fetch_all_pages` 병렬 페이지, weekly는 마지막 날짜+주차 일정 동시, ep는 4개 동시, daily는 최근 14일을 한 번에 받는 빠른 경로 + 기존 2단계 느린 경로 보완). ② 캐시를 `cache_util.TTLCache`로 교체(`stale_when_dirty=False`: TTL이 지나면 낡은 값을 바로 주고 뒤에서 갱신, 저장으로 무효화되면 저장 전 값을 주지 않고 새로 계산). ③ `_prewarm_widgets()`가 최근 10분 안에 쓰인 캐시만 저장 직후(`_run_cache_clear`)와 keep-alive 때 미리 데움. ④ ep의 Test Package 부분 실패는 `_PartialEpSummary`로 캐시에 넣지 않고 불완전 결과만 응답(이전 동작 유지).
+- 검증: 실데이터 4개 API 응답이 개선 전 저장본과 **전부 동일**. 콜드 시간(운영 조건, 연결 예열 후) ep-support 2.1→0.83~1.3초 등 단축 확인. weekly 집계의 들여쓰기 결함(`result` 미정의)은 발견해 고침.
+- **남은 일(한도로 못 함)**: ① 새 테스트(`_fetch_all_pages`·빌더 단위 테스트, 미리 데우기 연결, 저장 후 `_run_cache_clear`가 네 캐시를 무효화하는지) 추가, ② 브라우저에서 EP·Overview·Welder·Weekly 화면 확인, ③ 콜드 시간 최종 측정과 `daily`·`welder-daily` 단축 폭 확인(둘은 1.3~1.5초로 큰 개선이 아직 아님: DB 왕복이 병목), ④ 체크리스트 기록과 finish(push).
