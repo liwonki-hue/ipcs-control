@@ -236,3 +236,13 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 3. 테스트 — pytest 130건(로컬, `.env` 없는 운영 환경 모두), 15개 탭 재확인(JS 오류 0). ISO 분석이 처음 만들어지는 약 20초 동안 다른 탭 조회와 겹치면 로컬(supabase 2.4.5)에서만 500이 날 수 있음(운영 조건에서는 동시 4건 전부 200) — 분석이 끝난 뒤 재확인에서 전부 정상
 - [x] 4. commit — 미push 커밋 3개(`107ec00`, `605c5fe`, `402d05a`) + 이 기록
 - [ ] 5. push 후 GitHub Actions(Tests) 결과와 Render 배포 확인
+
+---
+
+# Checklist — finish (2026-11-09, 네비게이터 개수 위치 정렬)
+
+- [x] 1. 임시 코드 제거 — 추가된 줄에 debug print·console.log·TODO 0건
+- [x] 2. 검토 — pyflakes 0건, JS 문법 정상, 변경은 CSS 규칙 2줄과 캐시 버전뿐
+- [x] 3. 테스트 — pytest 130건(로컬, `.env` 없는 운영 환경 모두), 행 수 맞춤 5개 탭이 1696×830에서 네비게이터 화면 안·문서 스크롤 0px
+- [x] 4. commit — `6fdd4d7` + 이 기록
+- [ ] 5. push 후 CI(Tests) 확인
