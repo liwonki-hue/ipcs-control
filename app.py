@@ -855,9 +855,10 @@ def _build_secondary_caches_impl():
                     reset_sb()
                 sb = get_sb()
                 sub_total: dict = {}; sub_comp: dict = {}
+                sub_area_cnt: dict = {}     # sub_area → {area: 건수} — Overview 정렬용 대표 Area
                 _soff = 0
                 while True:
-                    _sr = sb.table("joint_master").select("sub_area,di,date_completed").order("id").range(_soff, _soff + 9999).execute()
+                    _sr = sb.table("joint_master").select("sub_area,area,di,date_completed").order("id").range(_soff, _soff + 9999).execute()
                     for r in (_sr.data or []):
                         sa = r.get("sub_area") or ""
                         if not sa:
@@ -866,10 +867,15 @@ def _build_secondary_caches_impl():
                         sub_total[sa] = sub_total.get(sa, 0) + di
                         if r.get("date_completed"):
                             sub_comp[sa] = sub_comp.get(sa, 0) + di
+                        ar = r.get("area") or ""
+                        if ar:
+                            _c = sub_area_cnt.setdefault(sa, {})
+                            _c[ar] = _c.get(ar, 0) + 1
                     if len(_sr.data or []) < 10000:
                         break
                     _soff += 10000
                 m_sub = sorted(sub_total.keys())
+                area_map = {sa: max(c.items(), key=lambda kv: kv[1])[0] for sa, c in sub_area_cnt.items() if c}
                 # 기존 subareas의 Support/Test 필드 보존 (덮어쓰기로 사라지지 않도록 병합)
                 with _lock:
                     _old_subareas = {
@@ -887,6 +893,7 @@ def _build_secondary_caches_impl():
                     tst_pct = round(tst_comp / tst_tot * 100, 2) if tst_tot > 0 else 0.0
                     subareas.append({
                         "sub_area":         sa,
+                        "area":             area_map.get(sa, ""),
                         "total_di":         t,
                         "completed_di":     c,
                         "remaining_di":     t - c,
@@ -901,6 +908,7 @@ def _build_secondary_caches_impl():
                     })
                 with _lock:
                     _sub_area_cache["data"] = m_sub
+                    _sub_area_cache["area_map"] = area_map
                     _sub_area_cache["time"] = time.time()
                     if _meta_cache.get("data"):
                         _meta_cache["data"]["sub_areas"] = m_sub
@@ -1289,8 +1297,10 @@ def _build():
                 _a = _item.get("area") or ""
                 _item["support_total"] = _sup_a_tot.get(_a, 0)
                 _item["support_comp"]  = _sup_a_done.get(_a, 0)
+            _sa_area = _sub_area_cache.get("area_map") or {}
             for _item in (raw.get("subareas") or []):
                 _sa = _item.get("sub_area") or _item.get("area") or ""
+                if _sa_area.get(_sa): _item["area"] = _sa_area[_sa]
                 _item["support_total"] = _sup_sa_tot.get(_sa, 0)
                 _item["support_comp"]  = _sup_sa_done.get(_sa, 0)
                 _item["testpkg_total"] = _tst_sa_tot.get(_sa, 0)

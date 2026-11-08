@@ -649,7 +649,8 @@ async function renderOverview(kpi, wkData, units, systems, subareas) {
         }
         const subBody = document.getElementById("subBreakdownBody");
         if (subBody) {
-            const subList = (subareas || []).slice().filter(r => r.sub_area).sort((a, b) => (b.completed_di||0) - (a.completed_di||0));
+            const subAreaOf = Object.fromEntries((subareas || []).filter(r => r.sub_area && r.area).map(r => [r.sub_area, r.area]));
+            const subList = (subareas || []).slice().filter(r => r.sub_area).sort(_byAreaThenProgress(subAreaOf));
             if (!subList.length) {
                 subBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:16px">No sub area data</td></tr>`;
             } else {
@@ -823,6 +824,38 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
 // ================================================================================
 //  EARLY POWER OVERVIEW
 // ================================================================================
+// Sub Area 정렬 — Area 순서(YD BLDG → YARD → MB #1 → MB #2) 안에서 YARD는 일반 → PR #n(번호순), MB는 MB STR → HRSG → GT(번호순). EP 탭과 Overview가 같이 쓴다
+const SUB_AREA_AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
+const _progressDesc = (a, b) => {
+    const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
+    const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
+    return pb - pa;
+};
+const _byAreaThenProgress = (subareaMap) => (a, b) => {
+    const rank = n => { const i = SUB_AREA_AREA_ORDER.indexOf(n); return i < 0 ? 99 : i; };
+    const ra = rank(subareaMap[a.sub_area] || ""), rb = rank(subareaMap[b.sub_area] || "");
+    if (ra !== rb) return ra - rb;
+    const area = subareaMap[a.sub_area] || "";
+    const isPR = n => /^PR\s*#/i.test(n);
+    const prNum = n => { const m = n.match(/PR\s*#\s*(\d+)/i); return m ? parseInt(m[1]) : 0; };
+    const numOf = n => { const m = n.match(/#\s*(\d+)/); return m ? parseInt(m[1]) : 0; };
+    const mbRank = n => n === "MB STR" ? 0 : /^HRSG/i.test(n) ? 1 : /^GT/i.test(n) ? 2 : 3;
+    if (area === "YARD") {
+        const aP = isPR(a.sub_area), bP = isPR(b.sub_area);
+        if (aP !== bP) return aP ? 1 : -1;                              // 일반 항목이 PR보다 먼저
+        if (aP)        return prNum(a.sub_area) - prNum(b.sub_area);    // PR: 번호 오름차순
+        return _progressDesc(a, b);                                     // 일반 항목: 진행률 내림차순
+    }
+    if (area === "MB #1" || area === "MB #2") {
+        const ma = mbRank(a.sub_area), mb = mbRank(b.sub_area);
+        if (ma !== mb) return ma - mb;                                  // MB STR → HRSG → GT
+        const na = numOf(a.sub_area), nb = numOf(b.sub_area);
+        if (na !== nb) return na - nb;                                  // 번호 오름차순
+        return _progressDesc(a, b);
+    }
+    return _progressDesc(a, b);
+};
+
 // EP Area(Sub Area) 표시 순서 — EP 탭과 보고서가 같은 규칙을 쓴다.
 // CCWPH #1 → FFC #1 → FGSS → PS 계열 → TK 계열 → 그 외(입력 순서 유지) → PR #n(번호순) → MB STR → HRSG #11 PR → HRSG #11 → GT #11(맨 끝)
 function orderEpAreaRows(rows, nameOf) {
@@ -984,46 +1017,6 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                 <td style="${td};text-align:left;color:var(--accent)">TOTAL</td>${cells(side(sums.p), false)}${cells(side(sums.q), true)}</tr>`;
             return totalRow + body;
         }
-
-        const AREA_ORDER = ["YD BLDG", "YARD", "MB #1", "MB #2"];
-        const _areaRank = (areaName) => { const i = AREA_ORDER.indexOf(areaName); return i < 0 ? 99 : i; };
-        const _progressDesc = (a, b) => {
-            const pa = a.total_di > 0 ? a.completed_di / a.total_di : 0;
-            const pb = b.total_di > 0 ? b.completed_di / b.total_di : 0;
-            return pb - pa;
-        };
-        const _prNum = (name) => { const m = name.match(/PR\s*#\s*(\d+)/i); return m ? parseInt(m[1]) : 0; };
-        const _mbRank = (name) => {
-            if (name === "MB STR") return 0;
-            if (/^HRSG/i.test(name)) return 1;
-            if (/^GT/i.test(name))   return 2;
-            return 3;
-        };
-        const _byAreaThenProgress = (subareaMap) => (a, b) => {
-            const ra = _areaRank(subareaMap[a.sub_area] || "");
-            const rb = _areaRank(subareaMap[b.sub_area] || "");
-            if (ra !== rb) return ra - rb;
-
-            const area = subareaMap[a.sub_area] || "";
-            const isPR = (n) => /^PR\s*#/i.test(n);
-
-            if (area === "YARD") {
-                const aP = isPR(a.sub_area), bP = isPR(b.sub_area);
-                if (aP !== bP) return aP ? 1 : -1;       // non-PR before PR
-                if (aP)        return _prNum(a.sub_area) - _prNum(b.sub_area); // PR: 오름차순
-                return _progressDesc(a, b);               // non-PR: progress 내림차순
-            }
-            if (area === "MB #1" || area === "MB #2") {
-                const ma = _mbRank(a.sub_area), mb2 = _mbRank(b.sub_area);
-                if (ma !== mb2) return ma - mb2;          // MB STR → HRSG → GT
-                // HRSG/GT 내부: 번호 오름차순 (#11 → #12)
-                const numOf = (n) => { const m = n.match(/#\s*(\d+)/); return m ? parseInt(m[1]) : 0; };
-                const na = numOf(a.sub_area), nb = numOf(b.sub_area);
-                if (na !== nb) return na - nb;
-                return _progressDesc(a, b);
-            }
-            return _progressDesc(a, b);
-        };
 
         const pipingSysSorted = [...(systems || [])].sort(_progressDesc);
 
