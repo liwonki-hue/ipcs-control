@@ -156,6 +156,32 @@ function _isoBelow(el) {
     return gap;
 }
 
+// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status와 Data Quality가 함께 쓴다.
+// 실제로 그려진 표를 재서 맞춘다: 넘치면 넘친 만큼 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌린다.
+function _fitRows(body, pager, limit, size, setSize, draw) {
+    for (let i = 0; i < 4; i++) {
+        const shown = body.rows.length;
+        if (!shown) break;
+        const rowH = body.getBoundingClientRect().height / shown;
+        const free = limit() - pager.getBoundingClientRect().bottom;
+        if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
+            setSize(Math.max(5, size() + Math.floor(free / rowH)));
+            draw();
+            continue;
+        }
+        const grow = Math.floor(free / rowH);
+        if (grow <= 0 || shown < size()) break;                      // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
+        const prev = size();
+        setSize(Math.min(200, prev + grow));
+        draw();
+        while (size() > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
+            setSize(size() - 1);
+            draw();
+        }
+        break;
+    }
+}
+
 // 네비게이터가 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다.
 // 실제로 그려진 표를 재서 맞춘다: 아래 여유(또는 넘친 만큼)를 행 높이로 나눠 행 수를 늘리거나 줄이고, 2~3번 안에 수렴한다.
 function isoFit() {
@@ -170,27 +196,7 @@ function isoFit() {
         const table = document.getElementById("isoTable");
         table.style.setProperty("--iso-pad", "0px");                     // 행 높이를 기본값으로 재기 위해 먼저 걷어 둔다
         const limit = () => window.innerHeight - _isoBelow(pager);        // 네비게이터 아래에 실제로 깔리는 여백만 남긴다(문서 스크롤이 생기지 않게)
-        for (let i = 0; i < 4; i++) {
-            const body = document.getElementById("iso-body"), shown = body.rows.length;
-            if (!shown) break;
-            const rowH = body.getBoundingClientRect().height / shown;
-            const free = limit() - pager.getBoundingClientRect().bottom;
-            if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
-                _iso.size = Math.max(5, _iso.size + Math.floor(free / rowH));
-                _isoDraw();
-                continue;
-            }
-            const grow = Math.floor(free / rowH);
-            if (grow <= 0 || shown < _iso.size) break;                   // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
-            const prev = _iso.size;
-            _iso.size = Math.min(200, prev + grow);
-            _isoDraw();
-            while (_iso.size > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
-                _iso.size--;
-                _isoDraw();
-            }
-            break;
-        }
+        _fitRows(document.getElementById("iso-body"), pager, limit, () => _iso.size, v => { _iso.size = v; }, _isoDraw);
         // 한 행 미만으로 남은 높이는 행의 위아래 여백으로 나눠 표가 아래까지 채워지게 한다(페이지가 꽉 찼을 때만)
         const rows = document.getElementById("iso-body").rows.length;
         if (rows && rows >= _iso.size) {
@@ -257,14 +263,14 @@ async function exportIsoStatus() {
 
 // ── Data Quality ──────────────────────────────────────────────────────
 const _DQ_SEV = { error: ["#ef4444", "Error"], warn: ["#f59e0b", "Warning"], info: ["#94a3b8", "Info"] };
-let _dq = { checks: [], open: null };
+let _dq = { checks: [], open: null, page: 0, size: 10 };
 
 async function loadDataQuality() {
     const host = document.getElementById("dq-cards");
     if (!_dq.checks.length) host.innerHTML = `<div style="padding:18px;color:var(--text-dim)">Loading… (the first load can take about 30 seconds)</div>`;
     try {
         const d = await apiFetch("/api/data-quality", { noCache: true });
-        _dq = { checks: d.checks || [], open: _dq.open, meta: d };
+        _dq = { checks: d.checks || [], open: _dq.open, page: _dq.page, size: _dq.size, meta: d };
         document.getElementById("dq-updated").textContent = _isoUpdatedText(d);
         renderDataQuality();
     } catch (e) {
@@ -276,7 +282,7 @@ async function loadDataQuality() {
 }
 
 function renderDataQuality() {
-    const d = _dq.meta, failing = _dq.checks.filter(c => c.count > 0), passing = _dq.checks.filter(c => !c.count);
+    const d = _dq.meta, failing = _dq.checks.filter(c => c.count > 0);
     const errs = failing.filter(c => c.severity === "error").length, warns = failing.filter(c => c.severity === "warn").length;
     const drawing = d.drawing_available ? "Drawing DB connected" : `Drawing DB checks skipped (${esc(d.drawing_error || "unavailable")})`;
     document.getElementById("dq-summary").innerHTML =
@@ -289,39 +295,61 @@ function renderDataQuality() {
             return `<button onclick="dqShow('${esc(c.key)}')" style="text-align:left;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-left:4px solid ${color};border-radius:8px;padding:10px 12px;${_dq.open === c.key ? "outline:2px solid " + color : ""}">
                 <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:700;font-size:13px">${esc(c.title)}</span><span style="font-family:'DM Mono',monospace;font-weight:700;color:${color}">${c.count.toLocaleString()}</span></div>
                 <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${esc(label)} · ${esc(c.hint)}</div></button>`;
-        }).join("") : `<div style="padding:12px;color:#059669;font-weight:700">✓ No problems found.</div>`) +
-        (passing.length ? `<div style="grid-column:1/-1;font-size:11px;color:var(--text-dim);margin-top:4px">✓ Passed (${passing.length}): ${passing.map(c => esc(c.title)).join(" · ")}</div>` : "");
+        }).join("") : `<div style="padding:12px;color:#059669;font-weight:700">✓ No problems found.</div>`);
     const detail = document.getElementById("dq-detail");
     if (!failing.some(c => c.key === _dq.open)) _dq.open = failing.length ? failing[0].key : null;   // 문제가 있는 첫 항목(가장 심각한 것)을 기본으로 연다
     detail.style.display = _dq.open ? "" : "none";
-    if (_dq.open) dqShow(_dq.open, true);
+    if (_dq.open) _dqRenderDetail();
 }
 
-function dqShow(key, keepScroll) {
-    const c = _dq.checks.find(x => x.key === key);
+// 카드를 누르면 그 검사의 목록을 연다
+function dqShow(key) {
+    if (!_dq.checks.some(x => x.key === key)) return;
     _dq.open = key;
+    _dq.page = 0;
+    renderDataQuality();
+}
+
+function _dqRenderDetail() {
+    const c = _dq.checks.find(x => x.key === _dq.open);
     if (!c) return;
-    if (!keepScroll) renderDataQuality();
-    const rows = c.samples.map(s => `<tr data-iso="${esc(s.iso)}" ${s.iso ? 'onclick="isoOpenInJM(this.dataset.iso)" style="cursor:pointer"' : ""}>
-        <td style="font-size:11px;word-break:break-all">${esc(s.iso || "—")}</td><td style="text-align:center">${esc(s.joint_no ?? "")}</td><td style="font-size:12px">${esc(s.detail)}</td></tr>`).join("");
-    document.getElementById("dq-detail").innerHTML = `<div class="panel-title">${esc(c.title)} <span style="font-size:11px;font-weight:400;opacity:.6">— ${c.count.toLocaleString()} found${c.samples.length < c.count ? `, showing the first ${c.samples.length}` : ""}</span>
+    document.getElementById("dq-detail").innerHTML = `<div class="panel-title">${esc(c.title)} <span style="font-size:11px;font-weight:400;opacity:.6">— ${c.count.toLocaleString()} found${c.samples.length < c.count ? `, listing the first ${c.samples.length.toLocaleString()}` : ""}</span>
         <button class="btn-de btn-de-export" onclick="exportDataQuality('${esc(c.key)}')" style="float:right;padding:3px 10px;font-size:11px">⬇ Export</button></div>
-        <div class="table-wrap" style="overflow:auto"><table class="data-table" style="width:100%;table-layout:fixed"><colgroup><col style="width:42%"><col style="width:10%"><col style="width:48%"></colgroup>
-        <thead><tr><th>ISO No</th><th>Joint</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+        <div class="table-wrap"><table class="data-table" style="width:100%;table-layout:fixed"><colgroup><col style="width:42%"><col style="width:10%"><col style="width:48%"></colgroup>
+        <thead><tr><th>ISO No</th><th>Joint</th><th>Detail</th></tr></thead><tbody id="dq-body"></tbody></table></div>
+        <div class="de-pagination"><div id="dq-count">0 rows</div><div id="dq-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div></div>`;
+    _dqDraw();
     dqFit();
 }
 
-// 상세 표가 화면 아래까지 채우도록 높이를 정한다(넘치는 행은 표 안쪽 스크롤). 아래에 깔리는 바깥 여백은 ISO Status와 같은 방식으로 DOM에서 구한다
+// 한 줄 행으로 현재 페이지를 그린다(긴 값은 말줄임표 + 툴팁)
+function _dqDraw() {
+    const c = _dq.checks.find(x => x.key === _dq.open);
+    if (!c || !document.getElementById("dq-body")) return;
+    const total = c.samples.length, pages = Math.max(1, Math.ceil(total / _dq.size));
+    _dq.page = Math.min(_dq.page, pages - 1);
+    const cut = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+    document.getElementById("dq-body").innerHTML = c.samples.slice(_dq.page * _dq.size, (_dq.page + 1) * _dq.size).map(s => `<tr data-iso="${esc(s.iso)}" ${s.iso ? 'onclick="isoOpenInJM(this.dataset.iso)" style="cursor:pointer" title="Open in Joint Master"' : ""}>
+        <td style="font-size:11px;${cut}" title="${esc(s.iso)}">${esc(s.iso || "—")}</td><td style="text-align:center;white-space:nowrap">${esc(s.joint_no ?? "")}</td><td style="font-size:12px;${cut}" title="${esc(s.detail)}">${esc(s.detail)}</td></tr>`).join("");
+    document.getElementById("dq-count").textContent = `Total ${total.toLocaleString()} row${total === 1 ? "" : "s"}`;
+    _renderPageNums("dq-page-nav", _dq.page, total, _dq.size, "dqGoto");
+}
+
+function dqGoto(page) {
+    _dq.page = Math.max(0, page);
+    _dqDraw();
+}
+
+// 목록이 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다(ISO Status와 같은 방식)
 function dqFit() {
     const page = document.getElementById("page-data_quality");
-    const wrap = document.querySelector("#dq-detail .table-wrap");
-    if (!page || page.classList.contains("hidden") || !wrap) return;
+    const body = document.getElementById("dq-body");
+    const pager = page && page.querySelector("#dq-detail .de-pagination");
+    if (!page || page.classList.contains("hidden") || !body || !pager || !body.rows.length) return;
     const scroller = document.querySelector(".page-body");
     if (scroller) scroller.scrollTop = 0;
     window.scrollTo(0, 0);
-    wrap.style.maxHeight = "none";
-    const avail = window.innerHeight - wrap.getBoundingClientRect().top - _isoBelow(wrap);
-    wrap.style.maxHeight = Math.max(160, Math.floor(avail)) + "px";
+    _fitRows(body, pager, () => window.innerHeight - _isoBelow(pager), () => _dq.size, v => { _dq.size = v; }, _dqDraw);
 }
 
 async function exportDataQuality(key) {
