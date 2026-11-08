@@ -2926,6 +2926,7 @@ def api_ep_support_summary():
         # EP Test Package = EP 조인트·서포트가 실제로 쓰는 Package (test_package_master.phase 값에 의존하지 않는다)
         ep_pkgs = {r["package"] for r in rows if r.get("package")}
         tp_total = tp_comp = 0
+        tp_sys = {}
         try:
             j_off = 0
             while True:
@@ -2935,14 +2936,21 @@ def api_ep_support_summary():
                 if len(jr) < 2000:
                     break
                 j_off += 2000
-            tp = sb.table("test_package_master").select("test_pkg_no,completed").execute().data or []
-            done = {r["test_pkg_no"] for r in tp if r.get("completed")}
+            tp = sb.table("test_package_master").select("test_pkg_no,system,completed").execute().data or []
+            tp_map = {r["test_pkg_no"]: r for r in tp}
+            pkg_stats = _load_pkg_stats(sb)
             tp_total = len(ep_pkgs)
-            tp_comp = len(ep_pkgs & done)
+            tp_comp = sum(1 for p in ep_pkgs if tp_map.get(p, {}).get("completed"))
+            for p in sorted(ep_pkgs):
+                row = tp_map.get(p, {})
+                a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
+                a["total"] += 1
+                a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
         except Exception as e:
             print(f"[ep-support-summary] test package unavailable: {e}")
         result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
-                  "testpkg_total": tp_total, "testpkg_comp": tp_comp}
+                  "testpkg_total": tp_total, "testpkg_comp": tp_comp,
+                  "testpkg_sys": [{"system": k, **v} for k, v in sorted(tp_sys.items())]}
         with _lock:
             _ep_sup_cache["data"] = result
             _ep_sup_cache["time"] = time.time()
@@ -3257,6 +3265,19 @@ def _load_pkg_stats(sb):
     return pkg_stats
 
 
+def _pkg_stage(completed, st):
+    """Test Package 진행 단계 — completed(시험 완료) / ready(Piping 100% + Support 설치 완료) / in_progress / not_started"""
+    pt, pc = st.get("piping_total", 0), st.get("piping_completed", 0)
+    stt, sti = st.get("support_total", 0), st.get("support_installed", 0)
+    if completed:
+        return "completed"
+    if pt > 0 and pc >= pt and sti >= stt:
+        return "ready"
+    if pc > 0 or sti > 0:
+        return "in_progress"
+    return "not_started"
+
+
 # ── Test Package Master CRUD ──────────────────────────────────────────
 @app.route("/api/testpkg-master", methods=["GET"])
 def api_testpkg_get():
@@ -3332,17 +3353,7 @@ def api_testpkg_by_system():
             for r in rows:
                 a = agg.setdefault(r.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
                 a["total"] += 1
-                st = pkg_stats.get(r.get("test_pkg_no") or "", {})
-                pt, pc = st.get("piping_total", 0), st.get("piping_completed", 0)
-                stt, sti = st.get("support_total", 0), st.get("support_installed", 0)
-                if r.get("completed"):                                   # 시험 완료
-                    a["completed"] += 1
-                elif pt > 0 and pc >= pt and sti >= stt:                  # Piping 100% + Support 설치 완료
-                    a["ready"] += 1
-                elif pc > 0 or sti > 0:
-                    a["in_progress"] += 1
-                else:
-                    a["not_started"] += 1
+                a[_pkg_stage(r.get("completed"), pkg_stats.get(r.get("test_pkg_no") or "", {}))] += 1
             if len(rows) < 5000:
                 break
             off += 5000

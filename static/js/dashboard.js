@@ -780,37 +780,43 @@ async function renderOverview(kpi, wkData, units, systems) {
 // System별 Test Package 진행 단계 누적 막대 (Overview의 Pressure Test Progress). 막대는 100%, 숫자는 Package 수
 // 단계는 서버(/api/testpkg-by-system)가 분류한다 — 완료 → 시험 대기(Piping 100% + Support 설치 완료) → 진행 중 → 미착수
 async function renderPressureTestChart(allSystems) {
-    const el = document.getElementById("pressureTestBar");
-    if (!el) return;
     try {
-        const byName = Object.fromEntries(((await apiFetch("/api/testpkg-by-system")).data || []).map(r => [r.system, r]));
-        const names = [...new Set([...(allSystems || []).map(s => s.system), ...Object.keys(byName)])].filter(Boolean).sort();
-        const STAGES = [
-            {key: "completed",   label: "Completed",     color: "rgba(5,150,105,0.75)"},
-            {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
-            {key: "in_progress", label: "In Progress",   color: "rgba(245,158,11,0.75)"},
-            {key: "not_started", label: "Not Started",   color: "rgba(148,163,184,0.55)"},
-        ];
-        const cnt = (n, k) => byName[n]?.[k] || 0;
-        const total = n => byName[n]?.total || 0;
-        destroyChart("pressureTestBar");
-        const opts = chartOpts();
-        const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
-        charts["pressureTestBar"] = new Chart(el.getContext("2d"), {
-            type: "bar",
-            data: {labels: names, datasets: STAGES.map(st => ({
-                label: st.label, backgroundColor: st.color, borderWidth: 0, barPercentage: 0.8, categoryPercentage: 0.9,
-                data: names.map(n => total(n) > 0 ? cnt(n, st.key) / total(n) * 100 : 0),
-                datalabels: {display: ctx => cnt(names[ctx.dataIndex], st.key) > 0, formatter: (v, ctx) => cnt(names[ctx.dataIndex], st.key),
-                             color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
-            }))},
-            options: {...opts, layout: {padding: {top: 4}},
-                scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
-                         y: {...opts.scales.y, stacked: true, max: 100, grace: 0, ticks: {...tick, stepSize: 50, callback: v => v + "%"}}},
-                plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {...opts.plugins.legend.labels, boxWidth: 10, padding: 8, font: {family: "DM Mono, monospace", size: 9}}},
-                          tooltip: {...opts.plugins.tooltip, callbacks: {label: ctx => `${ctx.dataset.label}: ${cnt(names[ctx.dataIndex], STAGES[ctx.datasetIndex].key)} / ${total(names[ctx.dataIndex])} pkg`}}}}
-        });
+        const rows = (await apiFetch("/api/testpkg-by-system")).data || [];
+        drawTestStageChart("pressureTestBar", (allSystems || []).map(s => s.system), rows);
     } catch (e) { console.error("Pressure test chart failed", e); }
+}
+
+// 계통별 Test Package 단계 누적 막대 — Overview(전체 Package)와 EP 탭(EP Package만)이 같은 모양으로 쓴다
+function drawTestStageChart(canvasId, systemNames, rows) {
+    const el = document.getElementById(canvasId);
+    if (!el) return;
+    const byName = Object.fromEntries((rows || []).map(r => [r.system, r]));
+    const names = [...new Set([...(systemNames || []), ...Object.keys(byName)])].filter(Boolean).sort();
+    const STAGES = [
+        {key: "completed",   label: "Completed",     color: "rgba(5,150,105,0.75)"},
+        {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
+        {key: "in_progress", label: "In Progress",   color: "rgba(245,158,11,0.75)"},
+        {key: "not_started", label: "Not Started",   color: "rgba(148,163,184,0.55)"},
+    ];
+    const cnt = (n, k) => byName[n]?.[k] || 0;
+    const total = n => byName[n]?.total || 0;
+    destroyChart(canvasId);
+    const opts = chartOpts();
+    const tick = {color: "#7a95b8", font: {family: "DM Mono, monospace", size: 9}};
+    charts[canvasId] = new Chart(el.getContext("2d"), {
+        type: "bar",
+        data: {labels: names, datasets: STAGES.map(st => ({
+            label: st.label, backgroundColor: st.color, borderWidth: 0, barPercentage: 0.8, categoryPercentage: 0.9,
+            data: names.map(n => total(n) > 0 ? cnt(n, st.key) / total(n) * 100 : 0),
+            datalabels: {display: ctx => cnt(names[ctx.dataIndex], st.key) > 0, formatter: (v, ctx) => cnt(names[ctx.dataIndex], st.key),
+                         color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
+        }))},
+        options: {...opts, layout: {padding: {top: 4}},
+            scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 90, maxRotation: 90}},
+                     y: {...opts.scales.y, stacked: true, max: 100, grace: 0, ticks: {...tick, stepSize: 50, callback: v => v + "%"}}},
+            plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {...opts.plugins.legend.labels, boxWidth: 10, padding: 8, font: {family: "DM Mono, monospace", size: 9}}},
+                      tooltip: {...opts.plugins.tooltip, callbacks: {label: ctx => `${ctx.dataset.label}: ${cnt(names[ctx.dataIndex], STAGES[ctx.datasetIndex].key)} / ${total(names[ctx.dataIndex])} pkg`}}}}
+    });
 }
 
 // ================================================================================
@@ -863,6 +869,8 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
             support_comp = (sup.sys || []).reduce((s,r) => s + (r.completed_di || 0), 0);
         } catch(e) { console.error("EP support summary failed", e); }
         const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
+        // EP Pressure Test Progress — EP Package만 (서버가 EP 조인트·서포트가 쓰는 Package 기준으로 집계)
+        if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || []);
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
         // Test Package는 Test Package Register에서 Phase=EP로 등록된 것만 집계
