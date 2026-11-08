@@ -403,7 +403,7 @@ def _parse_rpc(raw):
                     "week_start": str(sd)[:10],
                     "week_end":   str(ed)[:10] if ed else str(sd)[:10],
                 }
-        except: continue
+        except Exception: continue
 
     for i in range(1, max_wk + 1):
         label = date_map.get(i, f"W{i}")
@@ -440,7 +440,7 @@ def _parse_rpc(raw):
                 all_weeks[wk]["completed_di"] += float(a.get("completed_di", 0) or 0)
                 all_weeks[wk]["fab_di"]       += float(a.get("fab_di", 0) or 0)
                 all_weeks[wk]["erect_di"]     += float(a.get("erect_di", 0) or 0)
-        except: continue
+        except Exception: continue
 
     # EP weekly
     ep_week_map = {}
@@ -449,7 +449,7 @@ def _parse_rpc(raw):
             wk = int(a.get("week_no") or 0)
             if wk in all_weeks:
                 ep_week_map[wk] = ep_week_map.get(wk, 0.0) + float(a.get("completed_di", 0) or 0)
-        except: continue
+        except Exception: continue
 
     cum_a = ep_cum_a = 0.0
     final_weekly = []
@@ -1031,7 +1031,7 @@ def _extract_d2(d2, raw, sb):
     if d2.get("act") and raw.get("weekly"):
         if not raw.get("weeks"):
             try: raw["weeks"] = sb.table("week_schedule").select("*").order("week_no").execute().data or []
-            except: pass
+            except Exception: pass
         sched_map = {w["week_no"]: str(w["week_start_date"])[:10] for w in (raw.get("weeks") or [])}
         v2_date_map, v2_wk_map = {}, {}
         for a in (d2["act"] or []):
@@ -1980,7 +1980,7 @@ def api_joints_filter_values():
             if v is not None and str(v) not in seen:
                 seen.add(str(v)); vals.append(v)
         try:    vals.sort()
-        except: vals.sort(key=str)
+        except TypeError: vals.sort(key=str)
         with _lock:
             _jm_fv_cache[col] = {"data": vals, "time": time.time()}
         return jsonify({"values": vals})

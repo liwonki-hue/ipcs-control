@@ -1968,7 +1968,20 @@ function _fitRows(body, pager, limit, size, setSize, draw) {
 // ── 서버가 페이지 단위로 내려주는 표(Joint Master·Support Master·NDE·Test Pkg 두 탭)의 한 페이지 행 수 맞춤 ────────────
 // 한 번 그린 표를 재서 네비게이터가 화면 안에 들어오는 행 수를 구하고, 지금과 다르면 그 행 수로 다시 조회한다(서버가 limit 단위로 주므로).
 // 늘렸더니 넘치면 넘친 만큼만 줄이고 그 값을 상한(cap)으로 기억해, 두 값 사이를 오가지 않게 한다. 행 수는 st.size에 남아 다음 조회부터 바로 쓴다.
-function _fitServerPage(st, { pageId, bodyId, getPage, setPage, reload }) {
+// 같은 화면 크기에서 다시 열면 맞춘 행 수로 처음부터 조회한다(첫 표시 때 한 번 더 받는 것을 피한다).
+// 저장은 이 브라우저의 편의 기능이라 못 해도(비공개 창 등) 괜찮다 — 그러면 평소처럼 한 번 더 받아 맞춘다.
+const _FIT_KEY = "ipcs.pageRows.";
+function _fitLoad(name, st) {
+    try {
+        const v = JSON.parse(localStorage.getItem(_FIT_KEY + name) || "null");
+        if (v && Math.abs(v.vh - window.innerHeight) <= 8 && Math.abs(v.vw - window.innerWidth) <= 8 && v.size >= 5 && v.size <= 100) st.size = v.size;
+    } catch (e) { /* 저장값이 없거나 읽을 수 없으면 기본 행 수로 시작 */ }
+}
+function _fitSave(name, st) {
+    try { localStorage.setItem(_FIT_KEY + name, JSON.stringify({ size: st.size, vh: window.innerHeight, vw: window.innerWidth })); } catch (e) { /* 위와 같다 */ }
+}
+
+function _fitServerPage(st, { name, pageId, bodyId, getPage, setPage, reload }) {
     const page = document.getElementById(pageId), body = document.getElementById(bodyId);
     const pager = page && page.querySelector(".de-pagination");
     if (!page || page.classList.contains("hidden") || !body || !pager || !body.rows.length) return;
@@ -1987,19 +2000,19 @@ function _fitServerPage(st, { pageId, bodyId, getPage, setPage, reload }) {
         if (grow > 0 && rows >= st.size && st.size < st.cap) { target = Math.min(st.cap, 100, st.size + grow); st.grewFrom = st.size; }
         else st.grewFrom = null;
     }
-    if (target === st.size || st.tries >= 3) { st.tries = 0; return; }
+    if (target === st.size || st.tries >= 3) { if (target === st.size) _fitSave(name, st); st.tries = 0; return; }
     st.tries++;
     const firstRow = getPage() * st.size;                                 // 지금 보던 첫 행이 새 페이지에도 들어 있게
     st.size = target;
     setPage(Math.floor(firstRow / target));
     reload();
 }
-const _fitJM = () => _fitServerPage(_jmFit, { pageId: "page-joint_master", bodyId: "jmBody", getPage: () => jmCurrentPage, setPage: p => { jmCurrentPage = p; }, reload: loadJointMaster });
-const _fitSM = () => _fitServerPage(_smFit, { pageId: "page-support_master", bodyId: "smBody", getPage: () => smCurrentPage, setPage: p => { smCurrentPage = p; }, reload: loadSupportMaster });
+const _fitJM = () => _fitServerPage(_jmFit, { name: "jm", pageId: "page-joint_master", bodyId: "jmBody", getPage: () => jmCurrentPage, setPage: p => { jmCurrentPage = p; }, reload: loadJointMaster });
+const _fitSM = () => _fitServerPage(_smFit, { name: "sm", pageId: "page-support_master", bodyId: "smBody", getPage: () => smCurrentPage, setPage: p => { smCurrentPage = p; }, reload: loadSupportMaster });
 
-const _fitNDE = () => _fitServerPage(_ndeFit, { pageId: "page-nde_pwht", bodyId: "ndeBody", getPage: () => ndeCurrentPage, setPage: p => { ndeCurrentPage = p; }, reload: loadNdePwht });
-const _fitTP = () => _fitServerPage(_tpFit, { pageId: "page-testpkg_master", bodyId: "tpBody", getPage: () => tpCurrentPage, setPage: p => { tpCurrentPage = p; }, reload: loadTestPkgMaster });
-const _fitTM = () => _fitServerPage(_tmFit, { pageId: "page-test_master", bodyId: "tmBody", getPage: () => tmCurrentPage, setPage: p => { tmCurrentPage = p; }, reload: loadTestMaster });
+const _fitNDE = () => _fitServerPage(_ndeFit, { name: "nde", pageId: "page-nde_pwht", bodyId: "ndeBody", getPage: () => ndeCurrentPage, setPage: p => { ndeCurrentPage = p; }, reload: loadNdePwht });
+const _fitTP = () => _fitServerPage(_tpFit, { name: "tp", pageId: "page-testpkg_master", bodyId: "tpBody", getPage: () => tpCurrentPage, setPage: p => { tpCurrentPage = p; }, reload: loadTestPkgMaster });
+const _fitTM = () => _fitServerPage(_tmFit, { name: "tm", pageId: "page-test_master", bodyId: "tmBody", getPage: () => tmCurrentPage, setPage: p => { tmCurrentPage = p; }, reload: loadTestMaster });
 
 let _fitResizeTimer = null;
 window.addEventListener("resize", () => {
@@ -4085,3 +4098,6 @@ async function exportDailyReportExcel() {
     const ok = await downloadWithPicker(wb, "Daily_Report_Export.xlsx");
     if (ok) toast(`✓ ${daily.length.toLocaleString()} rows exported`);
 }
+
+// 저장된 행 수를 적용한다(상태 변수가 모두 정의된 뒤여야 한다)
+for (const [name, st] of [["jm", _jmFit], ["sm", _smFit], ["nde", _ndeFit], ["tp", _tpFit], ["tm", _tmFit]]) _fitLoad(name, st);

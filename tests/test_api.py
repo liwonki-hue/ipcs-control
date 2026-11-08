@@ -253,3 +253,10 @@ def test_paged_tables_follow_the_screen():
 def test_test_pkg_tables_have_no_inner_scroll_limit():
     html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     assert "max-height:calc(100vh - 230px)" not in html
+
+
+def test_page_rows_are_remembered_for_the_same_screen():
+    """맞춘 행 수를 같은 화면 크기에서 다시 쓴다 — 없으면 첫 표시마다 조회가 두 번 일어난다."""
+    assert "function _fitLoad(" in JS and "function _fitSave(" in JS
+    assert JS.count("_fitLoad(name, st);") == 1 and '[["jm", _jmFit]' in JS            # 다섯 표 모두 시작 때 적용
+    assert JS.count('name: "') >= 5
