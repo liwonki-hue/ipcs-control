@@ -291,3 +291,9 @@
 - 제거: index.html 패널, dashboard.js의 `updateIsoBulkPanel`·`_bulkSetDate`·`applyIsoBulkDate`·`clearIsoBulkDate`·`_autoRefreshKpi`(이 함수들만 쓰던 alias), app.py의 `/api/joints/bulk-date`와 `_BULK_DATE_*` 상수, `scratch/test_bulk_date.py`. 이제 용접일은 행마다 입력·저장(PATCH)한다.
 - 남긴 것: **Support Master의 같은 Bulk Update 패널**(`sm-iso-bulk-panel`, `applySmBulkDate`, `clearSmBulkDate`)은 요청 범위 밖이라 그대로 둠 — 필요 없으면 별도로 지시받아 지운다. 매뉴얼의 "Bulk Updates" 절은 Support Master 기준 문구로 고침.
 - 앞선 기록의 "bulk-date" 언급(09-26 일괄 저장, `_update_tp_status_cache` 호출 지점 등)은 당시 이력이며 지금은 존재하지 않는다.
+
+## 2026-11-08 ISO Status — 네비게이터를 스크롤 없이 보이게, 상태 이름 정리
+- 요청: 페이지 네비게이터가 화면을 스크롤해야 보였다. → 한 페이지 행 수를 화면 높이에 맞춘다(`isoFit`). 모든 행을 한 줄 높이로 고정(ISO·Sub Area·Package·Status는 `nowrap`+말줄임표+툴팁)하고, 실제로 그려진 표를 재서 네비게이터 하단이 `window.innerHeight - 12` 안에 들어오는 최대 행 수를 찾는다(넘치면 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌림). 필터·정렬·로딩 때 맞추고 창 크기 변경(`resize`, 150ms 디바운스) 때 다시 맞춘다. 페이지만 넘길 때는 다시 맞추지 않는다. Joint Master의 고정 30행과 달리 이 탭은 행 수가 화면에 따라 변한다(5~200행).
+- 측정(미리보기 브라우저): 1280×720=11행, 1366×768=12행, 1600×830=22행, 1920×1080=30행, 1024×600=7행 — 모두 네비게이터가 뷰포트 안. **이 미리보기 브라우저는 크기를 바꿔도 `resize` 이벤트를 내지 않고 ResizeObserver도 반응하지 않아**, 크기별 재조정은 `window.dispatchEvent(new Event('resize'))`로 검증했다(실제 브라우저는 창 크기를 바꾸면 이벤트가 발생). ResizeObserver 보강은 효과를 확인하지 못해 넣지 않았다.
+- 상태 이름: 표의 상태 열은 `Inspection Pending`(이전 `Welded · inspection pending`/`Insp. pending`), 엑셀 Status 열도 같은 이름. 위쪽 칩과 필터 드롭다운은 사용자 지시로 `Welded · inspection pending` 그대로(`_ISO_STATUS_LABEL`). 상태 열 너비 9%→11%.
+- 점(●): Fab 조인트는 전부 용접됐고 Erect 조인트가 남은 ISO(`fab_done_erect_open`) 표시. 상태와 별개이며 툴팁 `Fab done · Erect open`.

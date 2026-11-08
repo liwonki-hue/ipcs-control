@@ -1,8 +1,9 @@
 // ISO Status · Data Quality 화면 (ISO Drawing 단위 현황, 데이터 점검)
 // dashboard.js 다음에 로드된다. apiFetch · esc · fmtNum · toast · navigate · printPage · downloadWithPicker · ensureXlsx를 쓴다.
 
-const ISO_PAGE_SIZE = JM_PAGE_SIZE;   // Joint Master와 같은 행 수
 const _ISO_STATUS_LABEL = { NOT_STARTED: "Not started", WELDING: "Welding", WELDED: "Welded · inspection pending", ACCEPTED: "Accepted" };
+// 표의 상태 열에 쓰는 이름(위쪽 칩·필터는 _ISO_STATUS_LABEL 그대로). 한 줄에 들어가야 행 높이가 일정하다
+const _ISO_STATUS_TABLE = { NOT_STARTED: "Not started", WELDING: "Welding", WELDED: "Inspection Pending", ACCEPTED: "Accepted" };
 const _ISO_STATUS_COLOR = { NOT_STARTED: "#94a3b8", WELDING: "#2563eb", WELDED: "#f59e0b", ACCEPTED: "#059669" };
 const _ISO_QUICK = {
     "": () => true,
@@ -13,7 +14,7 @@ const _ISO_QUICK = {
     FAB_ERECT: r => r.fab_done_erect_open,
     SUPPORT_OPEN: r => r.sup_n > r.sup_done,
 };
-const _iso = { rows: [], page: 0, all: false, sort: { key: "iso", dir: 1 }, filtered: [], meta: null };
+const _iso = { rows: [], page: 0, all: false, size: 10, fitting: false, sort: { key: "iso", dir: 1 }, filtered: [], meta: null };
 
 function _isoUpdatedText(meta) {
     if (!meta) return "";
@@ -97,6 +98,7 @@ async function isoPrint() {
     try { await printPage("iso_status"); } finally { _iso.all = false; isoRender(false); }
 }
 
+// 필터·정렬을 바꿀 때(resetPage=true)는 1페이지로 돌아가 화면 높이에 행 수를 다시 맞추고, 페이지만 넘길 때는 다시 그리기만 한다
 function isoRender(resetPage) {
     if (resetPage) _iso.page = 0;
     const q = (document.getElementById("iso-search")?.value || "").trim().toLowerCase();
@@ -110,11 +112,17 @@ function isoRender(resetPage) {
             const av = key === "pct" ? (a.di ? a.welded_di / a.di : 0) : a[key], bv = key === "pct" ? (b.di ? b.welded_di / b.di : 0) : b[key];
             return (typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""))) * dir || a.iso.localeCompare(b.iso);
         });
-    const total = _iso.filtered.length, pages = Math.max(1, Math.ceil(total / ISO_PAGE_SIZE));
+    _isoDraw();
+    if (resetPage || _iso.size <= 10) isoFit();
+}
+
+function _isoDraw() {
+    const { key, dir } = _iso.sort;
+    const total = _iso.filtered.length, pages = Math.max(1, Math.ceil(total / _iso.size));
     _iso.page = Math.min(_iso.page, pages - 1);
-    const start = _iso.all ? 0 : _iso.page * ISO_PAGE_SIZE, end = _iso.all ? total : start + ISO_PAGE_SIZE;
+    const start = _iso.all ? 0 : _iso.page * _iso.size, end = _iso.all ? total : start + _iso.size;
     document.getElementById("iso-count").textContent = `Total ${total.toLocaleString()} ISO`;
-    _renderPageNums("iso-page-nav", _iso.page, _iso.all ? 0 : total, ISO_PAGE_SIZE, "isoGoto");
+    _renderPageNums("iso-page-nav", _iso.page, _iso.all ? 0 : total, _iso.size, "isoGoto");
     document.getElementById("iso-body-msg").innerHTML = total ? "" : `<div style="padding:18px;color:var(--text-dim)">No ISO matches the filters.</div>`;
     document.getElementById("iso-body").innerHTML = _iso.filtered.slice(start, end).map(_isoRowHtml).join("");
     document.querySelectorAll("#isoTable th[data-sort]").forEach(th => {
@@ -123,16 +131,59 @@ function isoRender(resetPage) {
     });
 }
 
+// 네비게이터가 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다.
+// 실제로 그려진 표를 재서 맞춘다: 아래 여유(또는 넘친 만큼)를 행 높이로 나눠 행 수를 늘리거나 줄이고, 2~3번 안에 수렴한다.
+function isoFit() {
+    const page = document.getElementById("page-iso_status");
+    if (_iso.fitting || _iso.all || !page || page.classList.contains("hidden") || !_iso.filtered.length) return;
+    _iso.fitting = true;
+    try {
+        const scroller = document.querySelector(".page-body");
+        if (scroller) scroller.scrollTop = 0;
+        window.scrollTo(0, 0);
+        const pager = page.querySelector(".de-pagination");
+        const limit = () => window.innerHeight - 12;
+        for (let i = 0; i < 4; i++) {
+            const body = document.getElementById("iso-body"), shown = body.rows.length;
+            if (!shown) break;
+            const rowH = body.getBoundingClientRect().height / shown;
+            const free = limit() - pager.getBoundingClientRect().bottom;
+            if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
+                _iso.size = Math.max(5, _iso.size + Math.floor(free / rowH));
+                _isoDraw();
+                continue;
+            }
+            const grow = Math.floor(free / rowH);
+            if (grow <= 0 || shown < _iso.size) break;                   // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
+            const prev = _iso.size;
+            _iso.size = Math.min(200, prev + grow);
+            _isoDraw();
+            while (_iso.size > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
+                _iso.size--;
+                _isoDraw();
+            }
+            break;
+        }
+    } finally { _iso.fitting = false; }
+}
+
+// 창 크기가 바뀌면 다시 맞춘다
+let _isoResizeTimer = null;
+window.addEventListener("resize", () => {
+    clearTimeout(_isoResizeTimer);
+    _isoResizeTimer = setTimeout(isoFit, 150);
+});
+
 function _isoRowHtml(r) {
     const pct = r.di ? Math.round(r.welded_di / r.di * 100) : 0;
     const color = _ISO_STATUS_COLOR[r.status] || "#94a3b8";
     const cell = (done, n) => n ? `${done}/${n}` : "—";
     return `<tr data-iso="${esc(r.iso)}" onclick="isoOpenInJM(this.dataset.iso)" style="cursor:pointer" title="Open in Joint Master">
-        <td style="font-size:11px;word-break:break-all">${esc(r.iso)}</td>
+        <td style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.iso)}">${esc(r.iso)}</td>
         <td style="text-align:center">${esc(r.rev)}</td>
         <td style="text-align:center">${esc(r.system)}</td>
-        <td>${esc(r.sub_area)}</td>
-        <td style="font-size:11px">${esc(r.package || "—")}</td>
+        <td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.sub_area)}">${esc(r.sub_area)}</td>
+        <td style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.package)}">${esc(r.package || "—")}</td>
         <td style="text-align:center">${r.n}</td>
         <td style="text-align:right">${fmtNum(r.di, 1)}</td>
         <td><div style="display:flex;align-items:center;gap:6px"><div class="bar-track" style="flex:1;height:6px"><div style="width:${pct}%;height:100%;background:${color}"></div></div><span style="font-size:11px;width:34px;text-align:right">${pct}%</span></div></td>
@@ -142,7 +193,7 @@ function _isoRowHtml(r) {
         <td style="text-align:center;${r.pending ? "color:#f59e0b;font-weight:700" : ""}">${r.pending}</td>
         <td style="text-align:center">${cell(r.sup_done, r.sup_n)}</td>
         <td style="text-align:center;font-size:11px">${esc(r.last_weld || "—")}</td>
-        <td style="text-align:center"><span style="color:${color};font-weight:700;font-size:11px">${esc(_ISO_STATUS_LABEL[r.status] || r.status)}</span>${r.fab_done_erect_open ? ' <span title="Fab done · Erect open" style="color:#7c3aed">●</span>' : ""}</td>
+        <td style="text-align:center;white-space:nowrap" title="${esc(_ISO_STATUS_TABLE[r.status] || r.status)}"><span style="color:${color};font-weight:700;font-size:11px">${esc(_ISO_STATUS_TABLE[r.status] || r.status)}</span>${r.fab_done_erect_open ? ' <span title="Fab done · Erect open" style="color:#7c3aed">●</span>' : ""}</td>
     </tr>`;
 }
 
@@ -160,7 +211,7 @@ async function exportIsoStatus() {
         "ISO No": r.iso, "Rev": r.rev, "System": r.system, "Sub Area": r.sub_area, "Package": r.package, "Joints": r.n, "DI": r.di,
         "Welded Joints": r.welded, "Welded DI": r.welded_di, "Fab Welded": r.fab_w, "Fab Total": r.fab_n, "Erect Welded": r.erect_w, "Erect Total": r.erect_n,
         "Accepted": r.accepted, "Inspection Pending": r.pending, "Support Done": r.sup_done, "Support Total": r.sup_n,
-        "Last Weld": r.last_weld, "Status": _ISO_STATUS_LABEL[r.status] || r.status, "Fab done, Erect open": r.fab_done_erect_open ? "Y" : "",
+        "Last Weld": r.last_weld, "Status": _ISO_STATUS_TABLE[r.status] || r.status, "Fab done, Erect open": r.fab_done_erect_open ? "Y" : "",
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "ISO Status");
