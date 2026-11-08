@@ -470,3 +470,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 
 /* 주간 Breakdown 표: 날짜는 패널 제목에 표시하고 칸은 숨김(엑셀 내보내기용으로 DOM에는 유지) */
 .bd-date { display:none; }
+
+/* ISO Status: 표에 더 많은 높이를 준다(네비게이터 여백 축소) + 남는 높이를 행 여백으로 채운다(--iso-pad, iso_tools.js의 isoFit이 정함) */
+#page-iso_status .de-pagination { padding: 6px 0; margin-top: 6px; }
+#isoTable td { padding-top: calc(4px + var(--iso-pad, 0px)); padding-bottom: calc(4px + var(--iso-pad, 0px)); }

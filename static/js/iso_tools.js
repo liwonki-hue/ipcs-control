@@ -131,6 +131,17 @@ function _isoDraw() {
     });
 }
 
+// 요소 아래쪽으로 바깥 박스들이 더하는 여백(자신의 margin-bottom + 조상들의 padding-bottom·border-bottom·margin-bottom)
+function _isoBelow(el) {
+    let gap = 0;
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        gap += parseFloat(cs.marginBottom) || 0;
+        if (n !== el) gap += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0);
+    }
+    return gap;
+}
+
 // 네비게이터가 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다.
 // 실제로 그려진 표를 재서 맞춘다: 아래 여유(또는 넘친 만큼)를 행 높이로 나눠 행 수를 늘리거나 줄이고, 2~3번 안에 수렴한다.
 function isoFit() {
@@ -142,7 +153,9 @@ function isoFit() {
         if (scroller) scroller.scrollTop = 0;
         window.scrollTo(0, 0);
         const pager = page.querySelector(".de-pagination");
-        const limit = () => window.innerHeight - 12;
+        const table = document.getElementById("isoTable");
+        table.style.setProperty("--iso-pad", "0px");                     // 행 높이를 기본값으로 재기 위해 먼저 걷어 둔다
+        const limit = () => window.innerHeight - _isoBelow(pager);        // 네비게이터 아래에 실제로 깔리는 여백만 남긴다(문서 스크롤이 생기지 않게)
         for (let i = 0; i < 4; i++) {
             const body = document.getElementById("iso-body"), shown = body.rows.length;
             if (!shown) break;
@@ -163,6 +176,16 @@ function isoFit() {
                 _isoDraw();
             }
             break;
+        }
+        // 한 행 미만으로 남은 높이는 행의 위아래 여백으로 나눠 표가 아래까지 채워지게 한다(페이지가 꽉 찼을 때만)
+        const rows = document.getElementById("iso-body").rows.length;
+        if (rows && rows >= _iso.size) {
+            let pad = Math.min(6, Math.floor((limit() - pager.getBoundingClientRect().bottom) / rows / 2));
+            for (; pad > 0; pad--) {
+                table.style.setProperty("--iso-pad", pad + "px");
+                if (pager.getBoundingClientRect().bottom <= limit()) break;
+            }
+            if (pad <= 0) table.style.setProperty("--iso-pad", "0px");
         }
     } finally { _iso.fitting = false; }
 }

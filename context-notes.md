@@ -297,3 +297,8 @@
 - 측정(미리보기 브라우저): 1280×720=11행, 1366×768=12행, 1600×830=22행, 1920×1080=30행, 1024×600=7행 — 모두 네비게이터가 뷰포트 안. **이 미리보기 브라우저는 크기를 바꿔도 `resize` 이벤트를 내지 않고 ResizeObserver도 반응하지 않아**, 크기별 재조정은 `window.dispatchEvent(new Event('resize'))`로 검증했다(실제 브라우저는 창 크기를 바꾸면 이벤트가 발생). ResizeObserver 보강은 효과를 확인하지 못해 넣지 않았다.
 - 상태 이름: 표의 상태 열은 `Inspection Pending`(이전 `Welded · inspection pending`/`Insp. pending`), 엑셀 Status 열도 같은 이름. 위쪽 칩과 필터 드롭다운은 사용자 지시로 `Welded · inspection pending` 그대로(`_ISO_STATUS_LABEL`). 상태 열 너비 9%→11%.
 - 점(●): Fab 조인트는 전부 용접됐고 Erect 조인트가 남은 ISO(`fab_done_erect_open`) 표시. 상태와 별개이며 툴팁 `Fab done · Erect open`.
+
+## 2026-11-08 ISO Status — 표 높이 확대
+- 요청: 표 높이를 조금 더 크게. 낭비되던 세로 공간을 줄였다 — ① 네비게이터 영역 여백(`.de-pagination` padding 20+20, margin 10)을 이 페이지만 6/6/6으로 축소(`#page-iso_status .de-pagination`, index.css 끝), ② 한 행 미만으로 남는 높이는 행의 위아래 여백(`--iso-pad`, 최대 6px)으로 나눠 표가 아래까지 채워지게 함(`isoFit`), ③ 행 기본 세로 여백 4px(`#isoTable td`).
+- 맞춤 한도는 `window.innerHeight - _isoBelow(pager)`: 네비게이터 아래에 깔리는 바깥 박스 여백(패널 padding·border·margin, page-body padding 등, 현재 29px)을 DOM에서 합산한다. 처음에는 고정 10px로 잡았다가 문서 스크롤바가 생겨(`docOverflow`) 실제 여백으로 바꿨다 — 고정값을 쓰면 안 된다.
+- 측정(문서 스크롤 0px): 1280×720 11→12행, 1366×768 12→13행, 1600×830 22→23행, 1920×1080 30→34행.
