@@ -226,3 +226,13 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 4. 성능·안정성 — 운영 환경(supabase 2.31)에서 keep-alive 한 번에 재빌드+ISO 분석+사용자 조회 7건이 동시에 겹치는 최악 상황: 전부 200, 22초, 메모리 65→115MB(512MB 한도 대비 여유). 낡은 캐시는 0.03초에 응답, 압축 후 `/api/iso-status` 82KB
 - [x] 5. 로컬 웹 검증 — 서버 재시작 후 위 3·4번을 브라우저로 확인
 - [x] 6. pytest 128건(로컬, `.env` 없는 운영 환경 모두) → commit → push
+
+---
+
+# Checklist — finish (2026-11-09, 서버 페이지 표 행 수 맞춤·제목 변경 마무리)
+
+- [x] 1. 임시/불필요 코드 제거 — 지난 push(`3e2a63c`) 이후 추가된 줄에 debug print·console.log·TODO·주석 처리된 코드 0건
+- [x] 2. 전체 코드 검토 — pyflakes 0건, JS 미참조 함수 0건(dashboard.js 139개·iso_tools.js 24개), 공용 `_fitServerPage` 정독(로딩·빈 결과 행, 반복 3회 제한, 상한 기억, 페이지 위치 유지) 이상 없음
+- [x] 3. 테스트 — pytest 130건(로컬, `.env` 없는 운영 환경 모두), 15개 탭 재확인(JS 오류 0). ISO 분석이 처음 만들어지는 약 20초 동안 다른 탭 조회와 겹치면 로컬(supabase 2.4.5)에서만 500이 날 수 있음(운영 조건에서는 동시 4건 전부 200) — 분석이 끝난 뒤 재확인에서 전부 정상
+- [x] 4. commit — 미push 커밋 3개(`107ec00`, `605c5fe`, `402d05a`) + 이 기록
+- [ ] 5. push 후 GitHub Actions(Tests) 결과와 Render 배포 확인
