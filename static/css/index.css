@@ -387,11 +387,11 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* ══ RESPONSIVE ═════════════════════════════════════════════════════ */
 .rg-12  { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:12px; }
 .rg2    { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:14px; }
-/* EP 탭 System·Sub Area 표 — 항목 수가 달라도 두 패널을 같은 높이로 맞추고, 짧은 표는 행 높이를 늘려 채운다 */
-.ep-equal-tables { align-items:stretch; }
-.ep-equal-tables > .panel { display:flex; flex-direction:column; }
-.ep-equal-tables > .panel > .table-wrap { flex:1; }
-.ep-equal-tables > .panel table { height:100%; }
+/* EP 탭·Overview의 System·Sub Area 표 — 항목 수가 달라도 두 패널을 같은 높이로 맞추고, 짧은 표는 행 높이를 늘려 채운다 */
+.ep-equal-tables, .rg-ov-bottom { align-items:stretch; }
+.ep-equal-tables > .panel, .rg-ov-bottom > .panel { display:flex; flex-direction:column; }
+.ep-equal-tables > .panel > .table-wrap, .rg-ov-bottom > .panel > .table-wrap { flex:1; }
+.ep-equal-tables > .panel table, .rg-ov-bottom > .panel table { height:100%; }
 .rg2-10 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
 .rg3    { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
 .rg3-12 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
