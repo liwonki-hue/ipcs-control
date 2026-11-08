@@ -1,7 +1,7 @@
 // ISO Status · Data Quality 화면 (ISO Drawing 단위 현황, 데이터 점검)
 // dashboard.js 다음에 로드된다. apiFetch · esc · fmtNum · toast · navigate · printPage · downloadWithPicker · ensureXlsx를 쓴다.
 
-const ISO_PAGE_SIZE = 100;
+const ISO_PAGE_SIZE = JM_PAGE_SIZE;   // Joint Master와 같은 행 수
 const _ISO_STATUS_LABEL = { NOT_STARTED: "Not started", WELDING: "Welding", WELDED: "Welded · inspection pending", ACCEPTED: "Accepted" };
 const _ISO_STATUS_COLOR = { NOT_STARTED: "#94a3b8", WELDING: "#2563eb", WELDED: "#f59e0b", ACCEPTED: "#059669" };
 const _ISO_QUICK = {
@@ -13,7 +13,7 @@ const _ISO_QUICK = {
     FAB_ERECT: r => r.fab_done_erect_open,
     SUPPORT_OPEN: r => r.sup_n > r.sup_done,
 };
-const _iso = { rows: [], page: 0, sort: { key: "iso", dir: 1 }, filtered: [], meta: null };
+const _iso = { rows: [], page: 0, all: false, sort: { key: "iso", dir: 1 }, filtered: [], meta: null };
 
 function _isoUpdatedText(meta) {
     if (!meta) return "";
@@ -85,10 +85,16 @@ function isoSort(key) {
     isoRender(true);
 }
 
-function isoPage(delta) {
-    const pages = Math.max(1, Math.ceil(_iso.filtered.length / ISO_PAGE_SIZE));
-    _iso.page = Math.min(pages - 1, Math.max(0, _iso.page + delta));
+function isoGoto(page) {
+    _iso.page = Math.max(0, page);
     isoRender(false);
+}
+
+// 인쇄할 때만 필터된 전체 행을 펼친다(화면은 페이지 단위)
+async function isoPrint() {
+    _iso.all = true;
+    isoRender(false);
+    try { await printPage("iso_status"); } finally { _iso.all = false; isoRender(false); }
 }
 
 function isoRender(resetPage) {
@@ -105,10 +111,12 @@ function isoRender(resetPage) {
             return (typeof av === "number" && typeof bv === "number" ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""))) * dir || a.iso.localeCompare(b.iso);
         });
     const total = _iso.filtered.length, pages = Math.max(1, Math.ceil(total / ISO_PAGE_SIZE));
-    const start = _iso.page * ISO_PAGE_SIZE;
-    document.getElementById("iso-count").textContent = `${total.toLocaleString()} ISO` + (total ? ` · page ${_iso.page + 1} / ${pages}` : "");
+    _iso.page = Math.min(_iso.page, pages - 1);
+    const start = _iso.all ? 0 : _iso.page * ISO_PAGE_SIZE, end = _iso.all ? total : start + ISO_PAGE_SIZE;
+    document.getElementById("iso-count").textContent = `Total ${total.toLocaleString()} ISO`;
+    _renderPageNums("iso-page-nav", _iso.page, _iso.all ? 0 : total, ISO_PAGE_SIZE, "isoGoto");
     document.getElementById("iso-body-msg").innerHTML = total ? "" : `<div style="padding:18px;color:var(--text-dim)">No ISO matches the filters.</div>`;
-    document.getElementById("iso-body").innerHTML = _iso.filtered.slice(start, start + ISO_PAGE_SIZE).map(_isoRowHtml).join("");
+    document.getElementById("iso-body").innerHTML = _iso.filtered.slice(start, end).map(_isoRowHtml).join("");
     document.querySelectorAll("#isoTable th[data-sort]").forEach(th => {
         th.dataset.arrow = th.dataset.sort === key ? (dir > 0 ? " ▲" : " ▼") : "";
         th.textContent = th.dataset.label + th.dataset.arrow;

@@ -280,3 +280,8 @@
 - 요청: ISO Status에서 이 ISO가 System `(multi)`(CDS 21건 + DW 1건)로 보여, 사용자가 System을 DW로 입력하라고 지시.
 - 조치: joint_master 22건(CDS 21건 → DW)과 support_master 6건(CDS → DW)을 DW로 변경(System은 세 곳에 걸쳐 있어 Support도 함께). Package가 비어 있어 test_package_master 변경은 없음. `updated_by`는 `system (manual)`. 롤백용 백업 `Reports/system_DW_CCP-W-B142-PI-140-CH-006-2_backup_20261108_230506.json`(변경 전 id·system). 변경 후 재조회로 전부 DW 확인, 대시보드·ISO 캐시 재생성 후 이 ISO가 DW로 표시되고 `(multi)` ISO는 0개.
 - 참고(사용자에게 알린 것): 같은 Line No(`1"-CH-B1-42/006-FM1-NR`)의 다른 ISO는 CDS 34건·DW 1건이었고 이전 DW→CDS 재분류와 방향이 반대라, 되돌릴 일이 생기면 위 백업으로 한다.
+
+## 2026-11-08 정정 — ISO Status 표를 Joint Master식 페이지 네비게이터로
+- 문제: 표를 `max-height` 안쪽 스크롤 영역에 넣어(100행) 아래 행이 잘려 보였다. 다른 데이터 탭은 표 안쪽 스크롤이 없고 표 아래 `de-pagination`에 `_renderPageNums` 네비게이터를 둔다.
+- 수정: 안쪽 스크롤과 위쪽 ◀▶ 버튼을 없애고 Joint Master와 같은 `de-pagination`(`Total N ISO` + ‹ 1 2 3 … N ›)을 표 아래에 둠. 행 수는 `JM_PAGE_SIZE`(30)를 그대로 써서 다른 탭과 맞춘다. 필터·정렬을 바꾸면 1페이지로 돌아가고, 결과가 줄어 페이지가 넘치면 마지막 페이지로 당긴다.
+- 인쇄: 화면은 페이지 단위지만 Print 버튼(`isoPrint`)은 인쇄하는 동안만 필터된 전체 행을 펼치고 끝나면 되돌린다(Joint Master가 인쇄 때 전체를 읽어 오는 것과 같은 취지).
