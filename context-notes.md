@@ -357,3 +357,6 @@
 - 알게 된 것(코드 변경 아님): 로컬 `.venv`(supabase 2.4.5)에서는 `/api/joints`를 4개 동시에 보내면 3개가 500(`statement timeout` 57014)이 난다 — 운영과 같은 supabase 2.31 환경에서는 4개 동시에도 전부 200(최대 2.7초). 로컬 전용 현상이라 로컬에서 빠르게 페이지를 연타하며 시험하면 "Loading…"이 남을 수 있다. 서버 페이지 표의 첫 표시 때 늘어나는 재조회는 순차라 겹치지 않는다.
 - 테스트: `test_paged_tables_follow_the_screen`이 다섯 탭 모두 고정 행 수 상수(JM_PAGE_SIZE, SM_PAGE_SIZE, NDE_PAGE_SIZE, TP_PAGE, TM_PAGE)로 되돌아가지 않게 하고, `test_test_pkg_tables_have_no_inner_scroll_limit`이 안쪽 스크롤 제한의 재도입을 막는다.
 - push는 하지 않음(finish 절차 전). 이 커밋과 앞선 `107ec00`이 미push 상태.
+
+## 2026-11-09 화면 제목 변경
+- 상단 헤더 제목 `TRUKISTAN CCGT PIPING DASHBOARD` → `TRUKISTAN CCGT BOP PIPING DASHBOARD`(templates/index.html 한 곳). 사이드바 로고 아래 `CCGT PIPING PROGRESS`, 브라우저 탭 제목 `BOP Piping Progress Dashboard`, 매뉴얼의 프로젝트명은 별개 문구라 그대로 둠. 1696·1280px에서 한 줄·잘림 없음 확인.
