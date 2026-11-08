@@ -3136,7 +3136,7 @@ def api_support_sync_phase_package():
             _joff += 10000
 
         if not iso_map:
-            return jsonify({"ok": False, "error": "joint_master에 phase/package 데이터 없음"}), 404
+            return jsonify({"ok": False, "error": "No phase/package data in joint_master"}), 404
 
         # 2. support_master에서 iso_drawing이 있는 행 조회 (페이지네이션)
         sm_rows = []

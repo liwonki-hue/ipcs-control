@@ -12,29 +12,29 @@ _MAT_RE = re.compile(r"CS|SS|ALLOY \(P\d+\)")
 
 # key: (심각도, 제목, 조치 안내) — 화면에는 이 순서대로 보여 준다(심각도 error → warn → info)
 CHECKS = {
-    "missing_system":      ("error", "System 없음", "Joint Master에서 System을 입력"),
-    "missing_sub_area":    ("error", "Sub Area 없음", "Joint Master에서 Sub Area를 입력"),
-    "missing_mat":         ("error", "Material 없음", "Material을 입력(PWHT 규칙과 Material별 집계에 영향)"),
-    "missing_size":        ("error", "Size 없음/0", "size_inch를 입력(Bore 구분과 DI 계산에 영향)"),
-    "mat_format":          ("error", "Material 표기 오류", "CS · SS · ALLOY (P22) · ALLOY (P91) 형식이어야 함(공백 포함)"),
-    "gm1_not_ss":          ("error", "Line No에 GM1이 있는데 Material이 SS가 아님", "GM1 라인은 SS"),
-    "pwht_rule":           ("error", "PWHT 규칙 위반", "CS·SS·P22는 N, P91은 Y"),
-    "bore_rule":           ("error", "Bore 구분 오류", "size_inch ≤ 2 → Small, 그 외 Large"),
-    "date_order":          ("error", "검사일이 용접일보다 빠름", "날짜를 바로잡기"),
-    "result_without_date": ("error", "결과는 있는데 검사일이 없음", "검사일을 입력"),
-    "nde_without_weld":    ("error", "용접일 없이 검사가 기록됨", "용접일을 입력하거나 검사 기록을 확인"),
-    "weld_future":         ("error", "용접일이 오늘 이후", "날짜 오타 확인"),
-    "welded_no_welder":    ("warn", "용접일은 있는데 용접사가 없음", "용접사를 입력"),
-    "sf_invalid":          ("warn", "S/F 값이 S 또는 F가 아님", "대문자 S 또는 F로 통일(소문자 s는 집계에서 Shop으로 취급됨)"),
-    "iso_multi_rev":       ("warn", "한 ISO 안에 Rev가 여러 개", "ISO 전체를 같은 Rev로"),
-    "iso_multi_system":    ("warn", "한 ISO 안에 System이 여러 개", "ISO 하나는 한 System이어야 함"),
-    "iso_multi_sub_area":  ("info", "한 ISO 안에 Sub Area가 여러 개", "배관이 여러 구역을 지나면 정상일 수 있음 — 의도한 것인지만 확인"),
-    "iso_system_mismatch": ("warn", "Joint와 Support의 System이 다름", "두 곳의 System을 맞추기(System 변경은 3곳을 같이 고쳐야 함)"),
-    "package_orphan":      ("warn", "Test Package Register에 없는 Package", "Register에 등록하거나 Package 표기 확인"),
-    "missing_in_drawing":  ("warn", "Drawing DB에 없는 ISO", "도면 업로드 여부 확인"),
-    "rev_mismatch":        ("warn", "Joint Rev와 Drawing DB Rev가 다름", "개정 전 도면으로 시공하는지 확인 후 Rev 갱신"),
-    "void_with_joints":    ("warn", "VOID 도면에 조인트가 남아 있음", "대체 도면 확인 후 조인트 정리"),
-    "missing_package":     ("info", "Package 미지정", "Package가 필요한 범위인지 확인"),
+    "missing_system":      ("error", "Missing System", "Enter the System in Joint Master"),
+    "missing_sub_area":    ("error", "Missing Sub Area", "Enter the Sub Area in Joint Master"),
+    "missing_mat":         ("error", "Missing Material", "Enter the Material (affects the PWHT rule and Material breakdowns)"),
+    "missing_size":        ("error", "Missing or zero Size", "Enter size_inch (affects the Bore class and D/I)"),
+    "mat_format":          ("error", "Invalid Material format", "Must be CS, SS, ALLOY (P22) or ALLOY (P91), with the space"),
+    "gm1_not_ss":          ("error", "GM1 line but Material is not SS", "GM1 lines must be SS"),
+    "pwht_rule":           ("error", "PWHT rule violation", "CS, SS and P22 must be N; P91 must be Y"),
+    "bore_rule":           ("error", "Wrong Bore class", "size_inch <= 2 is Small, otherwise Large"),
+    "date_order":          ("error", "Inspection date earlier than weld date", "Correct the dates"),
+    "result_without_date": ("error", "Result entered without an inspection date", "Enter the inspection date"),
+    "nde_without_weld":    ("error", "Inspection recorded without a weld date", "Enter the weld date or check the inspection record"),
+    "weld_future":         ("error", "Weld date is in the future", "Check for a date typo"),
+    "welded_no_welder":    ("warn", "Welded but no welder entered", "Enter the welder"),
+    "sf_invalid":          ("warn", "S/F is not S or F", "Use capital S or F (a lowercase s is counted as Shop in the totals)"),
+    "iso_multi_rev":       ("warn", "Several Revs within one ISO", "Use the same Rev for the whole ISO"),
+    "iso_multi_system":    ("warn", "Several Systems within one ISO", "An ISO should belong to a single System"),
+    "iso_multi_sub_area":  ("info", "Several Sub Areas within one ISO", "Can be normal when a line crosses areas - just confirm it is intended"),
+    "iso_system_mismatch": ("warn", "System differs between Joint and Support", "Align the System in both places (a System change must be made in all 3 tables)"),
+    "package_orphan":      ("warn", "Package not in Test Package Register", "Register the package or check the Package spelling"),
+    "missing_in_drawing":  ("warn", "ISO not found in Drawing DB", "Check whether the drawing has been uploaded"),
+    "rev_mismatch":        ("warn", "Joint Rev differs from Drawing DB Rev", "Check whether work is on a superseded drawing, then update the Rev"),
+    "void_with_joints":    ("warn", "Joints remain on a VOID drawing", "Find the replacement drawing and clean up the joints"),
+    "missing_package":     ("info", "No Package assigned", "Confirm whether this scope needs a Package"),
 }
 
 
@@ -122,10 +122,10 @@ class Analyzer:
         if "GM1" in _s(r.get("line_no")).upper() and mat != "SS": f("gm1_not_ss", f"mat='{mat}', line_no={_s(r.get('line_no'))}")
         need, pwht = self._required_pwht(mat), _s(r.get("pwht"))
         if (need == "N" and pwht == "Y") or (need == "Y" and pwht != "Y"):
-            f("pwht_rule", f"mat='{mat}' → PWHT는 {need}여야 하는데 '{pwht or '빈 값'}'")
+            f("pwht_rule", f"mat='{mat}' -> PWHT must be {need}, found '{pwht or 'empty'}'")
         if size > 0:
             want = "Small" if size <= 2 else "Large"
-            if _s(r.get("bore")) != want: f("bore_rule", f"size_inch={size:g} → {want}여야 하는데 '{_s(r.get('bore')) or '빈 값'}'")
+            if _s(r.get("bore")) != want: f("bore_rule", f"size_inch={size:g} -> must be {want}, found '{_s(r.get('bore')) or 'empty'}'")
         if sf not in ("S", "F"): f("sf_invalid", f"sf='{sf}'")
         if not pkg: f("missing_package", "")
         if weld:
@@ -134,10 +134,10 @@ class Analyzer:
         any_nde = False
         for p in _NDE:
             d, res = _s(r.get(p + "_date"))[:10], _s(r.get(p + "_result"))
-            if res and not d: f("result_without_date", f"{p.upper()} 결과 {res}")
+            if res and not d: f("result_without_date", f"{p.upper()} result {res}")
             if d or res: any_nde = True
-            if d and weld and d < weld: f("date_order", f"{p.upper()} {d} < 용접 {weld}")
-        if any_nde and not weld: f("nde_without_weld", "검사 기록은 있는데 용접일 없음")
+            if d and weld and d < weld: f("date_order", f"{p.upper()} {d} < weld {weld}")
+        if any_nde and not weld: f("nde_without_weld", "Inspection recorded but no weld date")
 
     # ── Support 한 행 ─────────────────────────────────────────────────
     def add_support(self, r):
@@ -166,15 +166,15 @@ class Analyzer:
             if len(subs) > 1: self._flag("iso_multi_sub_area", iso, " / ".join(subs))
             sup_sys = self._sup_systems.get(iso)
             if sup_sys and systems and not (sup_sys & set(systems)):
-                self._flag("iso_system_mismatch", iso, f"Joint {'/'.join(systems)} ↔ Support {'/'.join(sorted(sup_sys))}")
+                self._flag("iso_system_mismatch", iso, f"Joint {'/'.join(systems)} <-> Support {'/'.join(sorted(sup_sys))}")
             if drawing is not None and iso:
                 rev = drawing.get(iso)
                 if rev is None:
-                    self._flag("missing_in_drawing", iso, f"조인트 {a['n']}건")
+                    self._flag("missing_in_drawing", iso, f"{a['n']} joints")
                 elif rev.upper() == "VOID":
-                    self._flag("void_with_joints", iso, f"조인트 {a['n']}건 (용접 {a['welded']}건)")
+                    self._flag("void_with_joints", iso, f"{a['n']} joints ({a['welded']} welded)")
                 elif revs and set(revs) != {rev}:
-                    self._flag("rev_mismatch", iso, f"Joint {'/'.join(revs) or '빈 값'} ↔ Drawing {rev}")
+                    self._flag("rev_mismatch", iso, f"Joint {'/'.join(revs) or 'empty'} <-> Drawing {rev}")
             n, w = a["n"], a["welded"]
             if w == 0: status = "NOT_STARTED"
             elif w < n: status = "WELDING"
@@ -196,7 +196,7 @@ class Analyzer:
         if testpkg_numbers is not None:
             for pkg, cnt in sorted(self.packages.items()):
                 if pkg not in testpkg_numbers:
-                    self._flag("package_orphan", "", f"{pkg} (조인트 {cnt}건)")
+                    self._flag("package_orphan", "", f"{pkg} ({cnt} joints)")
 
         order = {"error": 0, "warn": 1, "info": 2}
         checks = [{"key": k, "severity": CHECKS[k][0], "title": CHECKS[k][1], "hint": CHECKS[k][2],

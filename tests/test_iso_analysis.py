@@ -1,4 +1,5 @@
 # ISO 집계·데이터 품질 검사(iso_analysis.py)를 합성 행으로 확인하는 테스트
+import re
 from datetime import date
 
 import pytest
@@ -149,3 +150,28 @@ def test_checks_sorted_by_severity():
     order = {"error": 0, "warn": 1, "info": 2}
     sev = [order[c["severity"]] for c in analyze([make()])["quality"]["checks"]]
     assert sev == sorted(sev)
+
+
+# ── 화면 문구는 영어 ──────────────────────────────────────────────────
+HANGUL = re.compile(r"[가-힣]")
+
+
+def test_check_titles_and_hints_are_english():
+    """해외 현장 사용자가 보는 화면이라 검사 제목·안내는 영어여야 한다(코드 주석만 한글)."""
+    assert [k for k, (_, title, hint) in IA.CHECKS.items() if HANGUL.search(title + hint)] == []
+
+
+def test_every_detail_message_is_english():
+    rows = [
+        make(id=1, system="", sub_area="", mat="CS", pwht="Y", size_inch=2, bore="Large", sf="s", line_no="GM1", package=None,
+             date_completed="2026-11-20", welder="", vt_date="2026-09-01", rt_result="PASS", rt_date=None),
+        make(id=2, iso_drawing="ISO-2", date_completed=None, pt_date="2026-10-01", rev="C01A", system="HP", package="PKG-X"),
+        make(id=3, iso_drawing="ISO-2", rev="C01B", system="DW"),
+        make(id=4, iso_drawing="ISO-3"), make(id=5, iso_drawing="ISO-4"),
+    ]
+    res = analyze(rows, supports=[{"iso_drawing": "ISO-2", "system": "ATM", "completed": True}],
+                  testpkg_numbers={"PKG-1"}, drawing={"ISO-2": "C01", "ISO-3": "VOID"})
+    fired = [c for c in res["quality"]["checks"] if c["count"]]
+    assert len(fired) >= 15                                                    # 대부분의 검사가 실제로 문구를 만들었는지
+    texts = [s["detail"] for c in fired for s in c["samples"]]
+    assert texts and [t for t in texts if HANGUL.search(t)] == []

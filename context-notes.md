@@ -270,3 +270,8 @@
 - 위 "Pace" 항목(최근 28일 속도, 목표일 대비 필요 속도)은 **삭제했다**. 이유: 플랜트 공사는 System별 작업이 꾸준하지 않아(몰아서 하고 쉬는 패턴) 최근 4주 평균 기반 예측이 의미가 없다. 같은 이유로 비슷한 "평균 속도 → 완료일" 계산은 다시 제안하지 말 것.
 - 제거 범위: index.html 패널, dashboard.js 호출 3곳, iso_tools.js Pace 구간, `/api/pace-forecast`(이제 404), `iso_analysis`의 속도 집계, 관련 pytest. ISO Status·Data Quality와 스캔·캐시 구조는 그대로(스캔이 조인트마다 하던 속도 누적만 줄어 약간 가벼워짐).
 - 기존 EP 보고서의 "Required pace / Recent 4-wk avg"(dashboard.js)는 원래 있던 별도 기능이라 건드리지 않았다.
+
+## 2026-11-08 정정 — 화면 문구는 영어
+- 해외 발전소에서 직접 쓰는 프로그램이라 화면에 보이는 문구는 전부 영어여야 한다. Data Quality의 검사 제목·안내·상세 문구를 한글로 만든 것을 영어로 바꿨다(`iso_analysis.CHECKS`, `_flag` 상세 문구). 기존 화면(index.html·dashboard.js)은 이미 전부 영어였고, `app.py`의 한글 오류 문구 1건("joint_master에 phase/package 데이터 없음", Support 동기화 토스트로 노출됨)도 영어로 고쳤다. 코드 주석은 한글 유지.
+- 재발 방지: `tests/test_iso_analysis.py`가 검사 제목·힌트와 모든 상세 문구에 한글이 없는지 확인한다(검사 15개 이상을 실제로 발동시켜서). 변형 시험으로 한글을 넣으면 실패함을 확인.
+- 영어 문구에서 `↔`는 `<->`, `≤`는 `<=`로 바꿨다(엑셀·인쇄·폰트에서 깨질 일이 없는 ASCII).
