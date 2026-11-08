@@ -194,3 +194,21 @@ Plan: 컬럼 제한(9df5ba9)에 이어 나머지 "즉시" 항목을 적용한다
 - [x] .github/workflows/tests.yml — 푸시마다 pytest (가짜 DB라 시크릿 불필요), requirements-dev.txt
 - [x] 검증: .env 없이도 72건 통과 / esc 하나를 일부러 빼면 테스트 실패 확인 / 로컬 서버 재시작 후 JM·Support·NDE·Test Pkg·RT·Welder·Overview·EP 렌더링과 콘솔 에러 0 확인 / 실서버에서 3회 호출 시 1회만 갱신
 - [ ] 로그인 후 실제 저장(JM·Support·Test Pkg)과 특수문자 값 표시는 사용자가 직접 확인 (운영 DB 연결 + 로그인 정보 규칙)
+
+---
+
+# Checklist — ISO 중심 기능(추천 2번) + 구조 개선(추천 3번) (2026-11-08)
+
+Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 규칙 위반·불일치를 찾는 "Data Quality" 탭, Overview의 System별 진행 속도·완료 예측 표를 만든다. 새 코드는 처음부터 분리된 모듈(iso_analysis.py, cache_util.py, static/js/iso_tools.js)로 쓰고 pytest를 붙인다.
+
+범위 밖(사용자 결정·권한 필요 또는 검증 불가)
+- Render에 DRAWING_SUPABASE_* 환경변수 설정(보안), 유료 인스턴스(비용), 시험 이후 공정 추가(범위 결정)
+- 집계 SQL(RPC) 이전: DDL을 앱 키로 실행할 수 없고 여기서 검증도 못 함 → 이번에는 페이지 단위 1회 스캔+캐시로 처리
+- 기존 app.py·dashboard.js 전체 분리와 기존 캐시 15개 이관: 테스트가 없는 구간이라 회귀 위험이 큼 → 새 코드만 분리
+
+- [x] iso_analysis.py — ISO 집계, 데이터 품질 검사, 속도·예측 (순수 함수)
+- [x] cache_util.py — TTLCache(낡은 값 먼저 보여 주기·single-flight·범위별 무효화)
+- [x] app.py — 병렬 스캔 + /api/iso-status, /api/data-quality(로그인), /api/pace-forecast, 저장 시 무효화, keep-alive 예열
+- [x] 화면 — ISO Status 탭, Data Quality 탭, Overview Pace & Forecast 표(목표일 입력 시 필요 속도·격차)
+- [x] pytest — 127건(집계·검사 24개 항목·속도 예측·캐시·엔드포인트·이스케이프)
+- [x] 실데이터 검증 — 운영과 같은 supabase 2.31 환경에서 21.6초·+50MB·오류 0, 합계가 대시보드 KPI와 일치, 화면 3곳 확인

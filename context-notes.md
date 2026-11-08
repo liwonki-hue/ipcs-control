@@ -254,3 +254,14 @@
 - 새 문자열 칸을 템플릿에 넣을 때: `${esc(r.field||"")}`. test_no_unescaped_db_strings_in_templates가 `${r.<알려진 필드>}`가 날것으로 들어가면 실패시킨다(새 필드는 이 테스트의 fields 목록에 추가).
 - refresh-db-cache: 로그인 없이 부르는 주소라 반복 호출이 120초짜리 MV 갱신+전체 재빌드를 겹치게 할 수 있었다. 최소 간격 300초(keep-alive는 12분 간격). 건너뛴 응답은 200 — keep-alive 워크플로가 실패로 오인하면 안 된다. 갱신이 실패하면 `_refresh_last`를 되돌려 워크플로의 즉시 재시도(`--retry 3 --retry-delay 5`)가 건너뛰어지지 않게 했다. 토큰 검증은 GitHub Secret·환경변수가 필요한 인증 변경이라 이번에 하지 않음(사용자 결정 대기).
 - pytest: tests/는 git 추적(scratch/는 gitignore). 앱은 임포트 시 DB에 접속하지 않아 환경변수 없이 돈다. 가짜 DB는 tests/conftest.py. 실행 `python -m pytest tests -q`. 옛 scratch/test_cache_clear_*.py는 삭제된 `_jm_iso_stats_cache`를 참조해 이미 깨져 있음(손대지 않음).
+
+## 2026-11-08 ISO Status · Data Quality · Pace & Forecast, 캐시 유틸
+- 구조: 새 코드는 처음부터 분리 — `iso_analysis.py`(순수 집계), `cache_util.py`(캐시), `static/js/iso_tools.js`(화면), `tests/`. app.py에는 스캔 함수와 얇은 라우트만 둔다. **iso_analysis·cache_util은 app을 임포트하지 않는다** — `python app.py`로 실행하면 모듈 이름이 `__main__`이라 `import app`이 앱을 한 번 더 만들어 상태가 둘로 갈라진다. 규칙 함수(`_joint_accepted`, `_required_pwht`)는 매개변수로 받는다.
+- 스캔: joint_master를 id 순서 2,000행씩 3페이지 병렬(`_SCAN_WORKERS`)로 읽어 한 행씩 집계(행을 쌓지 않음), Support·Test Package Register·Drawing DB를 곁들임. 운영과 같은 supabase 2.31 환경에서 21.6초, 메모리 +50MB. 순차는 40초, 로컬 구버전(2.4.5)은 HTTP/2 공유 때문에 병렬 중 WinError 10035가 나지만 운영은 HTTP/1.1이라 무관(재시도로 결과는 동일).
+- 오래 걸리는 집계라 요청이 기다리지 않게 `TTLCache`는 낡은 값을 바로 주고 뒤에서 한 번만 다시 만든다(min_gap 60초). 저장(scope=joint/support)은 `invalidate`만 하고, keep-alive(12분)가 미리 데워서 첫 화면이 안 기다린다. 서버를 막 켠 직후 첫 호출만 약 25초 걸린다. 만드는 도중 저장이 있었으면 결과는 저장하되 신선하지 않은 것으로 표시.
+- 합계 검증: ISO 3,973개, 조인트 51,645, DI 163,304.5, 완료 DI 101,160.5 — 기존 대시보드 KPI와 일치.
+- ISO 상태: 용접 0건=Not started, 일부=Welding, 전부 용접+`_joint_accepted` 미충족 있음=Welded·inspection pending, 전부 합격=Accepted. `fab_done_erect_open`은 Shop 전부 용접 + Field 미완.
+- 데이터 품질: 오류 12·경고 9·정보 2개 검사. Data Quality만 로그인 필요(조인트 단위 목록). 실데이터 첫 결과 — sf 빈 값 21건(Fab/Erect 어디에도 안 잡힘), Joint↔Support System 불일치 7 ISO, Rev가 Drawing DB와 다른 4 ISO, 날짜 순서 1, 용접사 없음 1, 한 ISO에 System 2개 1(CDS/DW). `iso_multi_sub_area`(177 ISO)는 배관이 여러 구역을 지나면 정상이라 정보 수준으로 낮춤. Drawing DB 검사는 DRAWING_SUPABASE_* 환경변수가 있어야 돈다 — 없으면(Render 현재) 건너뛰고 화면에 이유를 표시.
+- Pace: 최근 28일 용접 DI ÷ 4주. 목표일은 화면 입력(브라우저에만 저장)으로 필요 속도·격차 계산. 104주 넘으면 "> 2 years".
+- 범위 밖으로 남긴 것: 집계 SQL(RPC) 이전(DDL 실행·검증 불가 — 이번엔 스캔+캐시), 기존 app.py/dashboard.js 전체 분리와 기존 15개 캐시 이관(테스트 없는 구간이라 회귀 위험), 시험 이후 공정(test_package_master에 line_check_date·punch_a_clear_date·reinstatement_date 칸은 이미 있음), 유료 인스턴스, Render에 DRAWING 환경변수.
+- 알게 된 것: `compress_response`는 `application/json`이면 정적 파일에도 gzip을 시도해 2KB 넘는 정적 JSON은 500이 난다(앱에 정적 JSON이 없어 실사용 영향 없음).
