@@ -2907,7 +2907,7 @@ def api_ep_support_summary():
         rows, off = [], 0
         while True:
             r = (sb.table("support_master")
-                   .select("system,sub_area,area,date_completed")
+                   .select("system,sub_area,area,date_completed,package")
                    .eq("phase", "EP")
                    .order("id").range(off, off + 9999).execute())
             rows.extend(r.data or [])
@@ -2923,14 +2923,24 @@ def api_ep_support_summary():
             area_map.setdefault(sa, {"sub_area": sa, "area": ar, "total_di": 0, "completed_di": 0})
             area_map[sa]["total_di"] += 1; area_map[sa]["completed_di"] += comp
             if sa and ar: subarea_map[sa] = ar
-        # EP로 등록된 Test Package(test_package_master.phase = 'EP') 집계 — phase 열이 아직 없으면 0으로 처리
+        # EP Test Package = EP 조인트·서포트가 실제로 쓰는 Package (test_package_master.phase 값에 의존하지 않는다)
+        ep_pkgs = {r["package"] for r in rows if r.get("package")}
         tp_total = tp_comp = 0
         try:
-            tp = sb.table("test_package_master").select("completed").eq("phase", "EP").execute().data or []
-            tp_total = len(tp)
-            tp_comp = sum(1 for r in tp if r.get("completed"))
+            j_off = 0
+            while True:
+                jr = (sb.table("joint_master").select("package").eq("phase", "EP").not_.is_("package", "null")
+                        .order("id").range(j_off, j_off + 1999).execute().data or [])
+                ep_pkgs.update(r["package"] for r in jr if r.get("package"))
+                if len(jr) < 2000:
+                    break
+                j_off += 2000
+            tp = sb.table("test_package_master").select("test_pkg_no,completed").execute().data or []
+            done = {r["test_pkg_no"] for r in tp if r.get("completed")}
+            tp_total = len(ep_pkgs)
+            tp_comp = len(ep_pkgs & done)
         except Exception as e:
-            print(f"[ep-support-summary] test package phase unavailable: {e}")
+            print(f"[ep-support-summary] test package unavailable: {e}")
         result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
                   "testpkg_total": tp_total, "testpkg_comp": tp_comp}
         with _lock:
