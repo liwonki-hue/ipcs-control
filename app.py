@@ -1833,6 +1833,31 @@ def _sort_joints_numeric(rows, fetch_iso_rows, has_before=True, has_after=True):
         out += block
     return out
 
+# 본 조회에 앞뒤로 더 받는 여유 행 수. 같은 ISO의 행은 DB 정렬에서 연속이라, 페이지 양 끝 ISO의 나머지 행이 이 안에 들어오면
+# 그 ISO를 다시 받는 DB 왕복(약 0.5초)이 필요 없다. 실데이터에서 ISO는 평균 13·최대 52개 조인트라 40이면 99.6%가 재조회 없이 끝난다.
+# 더 큰 ISO는 기존처럼 DB에서 받으므로 결과는 달라지지 않는다.
+_NUMERIC_WINDOW_MARGIN = 40
+
+
+def _iso_rows_from_window(window, lo, total, fetch_iso_rows):
+    """본 조회 윈도우(window, 데이터셋의 lo번째 행부터)에서 ISO 전체 행을 돌려주는 함수를 만든다.
+    그 ISO의 행이 윈도우 안에서 앞쪽 끝(앞에 다른 행이 있거나 윈도우가 데이터셋 처음)과 뒤쪽 끝(뒤에 다른 행이 있거나 윈도우가
+    데이터셋 끝)이 모두 보일 때만 윈도우의 행을 쓰고, 아니면 fetch_iso_rows로 DB에서 받는다."""
+    index = {}
+    for i, r in enumerate(window):
+        index.setdefault(r.get("iso_drawing"), []).append(i)
+
+    def resolve(iso):
+        idx = index.get(iso)
+        if idx:
+            starts_inside = idx[0] > 0 or lo == 0
+            ends_inside = idx[-1] < len(window) - 1 or (total is not None and lo + len(window) >= total)
+            if starts_inside and ends_inside:
+                return [window[i] for i in idx]
+        return fetch_iso_rows(iso)
+    return resolve
+
+
 @app.route("/api/joints", methods=["GET"])
 def api_joints_get():
     try:
@@ -1876,9 +1901,13 @@ def api_joints_get():
             q = build_query()
             q = q.is_("iso_drawing", "null") if iso_drawing is None else q.eq("iso_drawing", iso_drawing)
             return q.execute().data
-        res = _exec_page(build_query("exact").range(offset, offset + limit - 1))
-        has_after = res.count is None or offset + len(res.data) < res.count
-        return jsonify({"data": _sort_joints_numeric(res.data, fetch_iso_rows, offset > 0, has_after), "count": res.count})
+        lo = max(0, offset - _NUMERIC_WINDOW_MARGIN)
+        res = _exec_page(build_query("exact").range(lo, offset + limit - 1 + _NUMERIC_WINDOW_MARGIN))
+        window = res.data
+        page = window[offset - lo: offset - lo + limit]
+        has_after = res.count is None or offset + len(page) < res.count
+        resolve = _iso_rows_from_window(window, lo, res.count, fetch_iso_rows)
+        return jsonify({"data": _sort_joints_numeric(page, resolve, offset > 0, has_after), "count": res.count})
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 
