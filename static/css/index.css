@@ -390,6 +390,9 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 .rg2-10 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
 .rg3    { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
 .rg3-12 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.rg-ov-bottom { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr); gap:10px; }
+/* 두 표를 나란히 놓으려면 약 1,450px가 필요하다 — 그보다 좁으면 위아래로 쌓는다(가로 스크롤바는 숨겨져 있어 잘려 보이기 때문) */
+@media (max-width:1650px) { .rg-ov-bottom { grid-template-columns:minmax(0,1fr); } }
 .rg-dr-top { display:grid; grid-template-columns:minmax(0,2.3fr) minmax(0,1fr); gap:14px; }
 .rg-ep-main { display:grid; grid-template-columns:minmax(230px,1fr) minmax(0,4.4fr); gap:10px; }
 .ep-gauge-col { display:flex; flex-direction:column; gap:6px; min-width:0; }
@@ -420,7 +423,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
   .nav-btn  { font-size:11px; padding:8px 10px; }
   .kpi-row  { gap:6px; padding:8px 12px; }
   .kpi-value { font-size:18px; }
-  .rg-12, .rg2, .rg2-10, .rg-ep-top, .rg-ep-main, .rg-dr-top { grid-template-columns:minmax(0,1fr); }
+  .rg-12, .rg2, .rg2-10, .rg-ep-top, .rg-ep-main, .rg-dr-top, .rg-ov-bottom { grid-template-columns:minmax(0,1fr); }
   .rg3, .rg3-12 { grid-template-columns:minmax(0,1fr); }
   .rg7      { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .grid-2   { grid-template-columns:minmax(0,1fr); }

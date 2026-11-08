@@ -233,7 +233,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById("page-overview")?.classList.remove("hidden");
         document.getElementById("kpiRow") && (document.getElementById("kpiRow").style.display = "flex");
         renderKPI(data.kpi, data.weekly);
-        renderOverview(data.kpi, data.weekly, data.units, data.systems);
+        renderOverview(data.kpi, data.weekly, data.units, data.systems, data.subareas);
     } catch(e) {
         _loadError = true;
         console.error("[BOP] Init error:", e);
@@ -551,10 +551,10 @@ function renderKPI(d, wkData) {
 // ================================================================================
 async function loadOverview() {
     const data = await getDashData();
-    renderOverview(data.kpi, data.weekly, data.units, data.systems);
+    renderOverview(data.kpi, data.weekly, data.units, data.systems, data.subareas);
 }
 
-async function renderOverview(kpi, wkData, units, systems) {
+async function renderOverview(kpi, wkData, units, systems, subareas) {
     try {
         const d = kpi;
         const _mkStats = (rows) => rows.map(([l,v]) =>
@@ -612,72 +612,54 @@ async function renderOverview(kpi, wkData, units, systems) {
             ]);
         }
 
-        // ── By System: single merged-header table ──────────────────────
-        const sysList = (systems || []).slice().sort((a, b) => (b.completed_di||0) - (a.completed_di||0));
+        // ── By System / By Sub Area — Early Power와 같은 형식(Piping·Support·Test Package별 Total/Done/Balance/%) ──
+        // Test Package는 Area로 나눌 수 없어 By System에만 넣는다. TOTAL은 항목이 많아도 보이도록 맨 위에 둔다.
+        const td = "padding:3px 4px;font-size:11px;text-align:center";
+        const grp = (tot, done, sep, always) => {
+            const bl = sep ? ";border-left:1px solid var(--border)" : "";
+            if (!(tot > 0) && !always) return `<td style="${td}${bl}">—</td><td style="${td}">—</td><td style="${td}">—</td><td style="${td}">—</td>`;
+            const rem = Math.max(0, tot - done), p = tot > 0 ? done / tot * 100 : null;
+            return `<td style="${td}${bl}">${fmtNum(tot,0)}</td>
+                <td style="${td};color:var(--green)">${fmtNum(done,0)}</td>
+                <td style="${td};color:${rem>0?"var(--orange)":"var(--green)"}">${fmtNum(rem,0)}</td>
+                <td style="${td};color:${p==null?"var(--text-dim)":pctColor(p)}">${p==null?"—":p.toFixed(2)+"%"}</td>`;
+        };
+        const totRowStyle = "background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700";
         const sysBody = document.getElementById("sysBreakdownBody");
         if (sysBody) {
+            const sysList = (systems || []).slice().sort((a, b) => (b.completed_di||0) - (a.completed_di||0));
             if (!sysList.length) {
                 sysBody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:16px">No system data</td></tr>`;
             } else {
-                // TOTAL — 계통이 많아 표가 길어도 보이도록 맨 위에 둔다
-                const T = sysList.reduce((a, s) => {
-                    a.pipPlan += s.total_di || s.plan_di || 0; a.pipDone += s.completed_di || 0;
-                    a.supTot  += s.support_total || 0;         a.supDone += s.support_comp || 0;
-                    a.tstTot  += s.testpkg_total || 0;         a.tstDone += s.testpkg_comp || 0;
-                    return a;
-                }, {pipPlan: 0, pipDone: 0, supTot: 0, supDone: 0, tstTot: 0, tstDone: 0});
-                const pctT = (c, t) => t > 0 ? c / t * 100 : 0;
-                const tPip = pctT(T.pipDone, T.pipPlan), tSup = pctT(T.supDone, T.supTot), tTst = pctT(T.tstDone, T.tstTot);
-                const tTot = parseFloat((d.unified_readiness || (tPip * 0.7 + tSup * 0.2 + tTst * 0.1)).toFixed(2));
-                const _d = v => v > 0 ? fmtNum(v, 0) : "—", _p = v => v > 0 ? v.toFixed(2) + "%" : "—";
-                const totalRow = `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700">
-                        <td style="text-align:center;color:var(--accent)">TOTAL</td>
-                        <td style="text-align:center">${fmtNum(T.pipPlan,0)}</td>
-                        <td style="text-align:center">${_d(T.supTot)}</td>
-                        <td style="text-align:center">${_d(T.tstTot)}</td>
-                        <td style="text-align:center;color:var(--green)">${fmtNum(T.pipDone,0)}</td>
-                        <td style="text-align:center;color:var(--green)">${_d(T.supDone)}</td>
-                        <td style="text-align:center;color:var(--green)">${_d(T.tstDone)}</td>
-                        <td style="text-align:center;color:var(--orange)">${fmtNum(Math.max(0, T.pipPlan - T.pipDone),0)}</td>
-                        <td style="text-align:center;color:var(--orange)">${_d(Math.max(0, T.supTot - T.supDone))}</td>
-                        <td style="text-align:center;color:var(--orange)">${_d(Math.max(0, T.tstTot - T.tstDone))}</td>
-                        <td style="text-align:center;color:${pctColor(tPip)}">${tPip.toFixed(2)}%</td>
-                        <td style="text-align:center;color:${pctColor(tSup)}">${_p(tSup)}</td>
-                        <td style="text-align:center;color:${pctColor(tTst)}">${_p(tTst)}</td>
-                        <td style="text-align:center;color:${pctColor(tTot)}">${tTot.toFixed(2)}%</td>
-                    </tr>`;
-                sysBody.innerHTML = totalRow + sysList.map(s => {
-                    const pipPlan = s.total_di || s.plan_di || 0;
-                    const pipDone = s.completed_di || 0;
-                    const pipRem  = Math.max(0, pipPlan - pipDone);
-                    const pipPct  = s.progress_pct || 0;
-                    const supTot  = s.support_total || 0;
-                    const supDone = s.support_comp  || 0;
-                    const supRem  = Math.max(0, supTot - supDone);
-                    const supPct  = s.support_pct   || 0;
-                    const tstTot  = s.testpkg_total || 0;
-                    const tstDone = s.testpkg_comp  || 0;
-                    const tstRem  = Math.max(0, tstTot - tstDone);
-                    const tstPct  = s.testpkg_pct   || 0;
-                    const totPct  = parseFloat((s.unified_readiness || (pipPct*0.7 + supPct*0.2 + tstPct*0.1)).toFixed(2));
-                    const _dash   = v => v > 0 ? v : "—";
-                    return `<tr>
-                        <td style="text-align:center">${s.system||"—"}</td>
-                        <td style="text-align:center">${fmtNum(pipPlan,0)}</td>
-                        <td style="text-align:center">${_dash(supTot)}</td>
-                        <td style="text-align:center">${_dash(tstTot)}</td>
-                        <td style="text-align:center;color:var(--green)">${fmtNum(pipDone,0)}</td>
-                        <td style="text-align:center;color:var(--green)">${_dash(supDone)}</td>
-                        <td style="text-align:center;color:var(--green)">${_dash(tstDone)}</td>
-                        <td style="text-align:center;color:var(--orange)">${fmtNum(pipRem,0)}</td>
-                        <td style="text-align:center;color:var(--orange)">${_dash(supRem)}</td>
-                        <td style="text-align:center;color:var(--orange)">${_dash(tstRem)}</td>
-                        <td style="text-align:center;color:${pctColor(pipPct)}">${pipPct.toFixed(2)}%</td>
-                        <td style="text-align:center;color:${pctColor(supPct)}">${supPct > 0 ? supPct.toFixed(2)+"%" : "—"}</td>
-                        <td style="text-align:center;color:${pctColor(tstPct)}">${tstPct > 0 ? tstPct.toFixed(2)+"%" : "—"}</td>
-                        <td style="text-align:center;font-weight:700;color:${pctColor(totPct)}">${totPct.toFixed(2)}%</td>
-                    </tr>`;
+                const T = {pt: 0, pd: 0, st: 0, sd: 0, tt: 0, td: 0};
+                const rows = sysList.map(s => {
+                    const pt = s.total_di || s.plan_di || 0, pd = s.completed_di || 0;
+                    const st = s.support_total || 0, sd = s.support_comp || 0;
+                    const tt = s.testpkg_total || 0, tdn = s.testpkg_comp || 0;
+                    T.pt += pt; T.pd += pd; T.st += st; T.sd += sd; T.tt += tt; T.td += tdn;
+                    const tot = parseFloat((s.unified_readiness || ((s.progress_pct||0)*0.7 + (s.support_pct||0)*0.2 + (s.testpkg_pct||0)*0.1)).toFixed(2));
+                    return `<tr><td style="${td}">${s.system||"—"}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}${grp(tt, tdn, true)}
+                        <td style="${td};font-weight:700;color:${pctColor(tot)}">${tot.toFixed(2)}%</td></tr>`;
                 }).join("");
+                const pPip = T.pt > 0 ? T.pd / T.pt * 100 : 0, pSup = T.st > 0 ? T.sd / T.st * 100 : 0, pTst = T.tt > 0 ? T.td / T.tt * 100 : 0;
+                const tTot = parseFloat((d.unified_readiness || (pPip * 0.7 + pSup * 0.2 + pTst * 0.1)).toFixed(2));
+                sysBody.innerHTML = `<tr style="${totRowStyle}"><td style="${td};color:var(--accent)">TOTAL</td>${grp(T.pt, T.pd, false, true)}${grp(T.st, T.sd, true)}${grp(T.tt, T.td, true)}
+                    <td style="${td};color:${pctColor(tTot)}">${tTot.toFixed(2)}%</td></tr>` + rows;
+            }
+        }
+        const subBody = document.getElementById("subBreakdownBody");
+        if (subBody) {
+            const subList = (subareas || []).slice().filter(r => r.sub_area).sort((a, b) => (b.completed_di||0) - (a.completed_di||0));
+            if (!subList.length) {
+                subBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:16px">No sub area data</td></tr>`;
+            } else {
+                const T = {pt: 0, pd: 0, st: 0, sd: 0};
+                const rows = subList.map(r => {
+                    const pt = r.total_di || 0, pd = r.completed_di || 0, st = r.support_total || 0, sd = r.support_comp || 0;
+                    T.pt += pt; T.pd += pd; T.st += st; T.sd += sd;
+                    return `<tr><td style="${td};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.sub_area}</td>${grp(pt, pd, false, true)}${grp(st, sd, true)}</tr>`;
+                }).join("");
+                subBody.innerHTML = `<tr style="${totRowStyle}"><td style="${td};color:var(--accent)">TOTAL</td>${grp(T.pt, T.pd, false, true)}${grp(T.st, T.sd, true)}</tr>` + rows;
             }
         }
 
