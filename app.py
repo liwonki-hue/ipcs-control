@@ -3455,6 +3455,9 @@ def api_testpkg_sync():
         return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
+DAILY_REPORT_DAYS = 4      # Daily Report 표에 보여줄 최근 작업일 수 — Daily Summary와 By Material 표 높이를 맞추기 위해 4일
+
+
 def _compute_daily_report():
     """Daily report 데이터 순수 계산 — 캐시 없음, Supabase 직접 조회"""
     dates_res = _sb_exec(lambda sb: sb.table("joint_master")
@@ -3462,7 +3465,7 @@ def _compute_daily_report():
         .not_.is_("date_completed", "null")
         .gt("di", 0)
         .order("date_completed", desc=True)
-        .limit(2000).execute())  # 최근 5개 작업일을 찾기 위한 날짜만 조회. 500건이면 하루 125건 넘는 날이 이어지면 4일만 나올 수 있다
+        .limit(2000).execute())  # 최근 작업일(DAILY_REPORT_DAYS)을 찾기 위한 날짜만 조회. 건수가 부족하면 표시되는 날이 줄 수 있다
     all_dates = dates_res.data or []
     del dates_res
 
@@ -3474,8 +3477,8 @@ def _compute_daily_report():
     if not distinct:
         return {"daily": [], "last_date": "", "systems": [], "subareas": [], "materials": [], "breakdowns": {}}
 
-    last_5 = distinct[-5:]
-    range_start, range_end = last_5[0], last_5[-1]
+    last_days = distinct[-DAILY_REPORT_DAYS:]
+    range_start, range_end = last_days[0], last_days[-1]
 
     joints = []
     _q = get_sb().table("joint_master") \
@@ -3494,7 +3497,7 @@ def _compute_daily_report():
     daily: dict = {}
     for j in joints:
         dc = str(j.get("date_completed") or "")[:10]
-        if dc not in last_5:
+        if dc not in last_days:
             continue
         di    = float(j.get("di") or 0)
         sf    = (j.get("sf") or "").upper().strip()
@@ -3522,7 +3525,7 @@ def _compute_daily_report():
     supp_bd: dict = {}      # 날짜 → {"sys"/"sub": {라벨: {"special": n, "typical": n}}} — 계통·Sub Area별 Support 실적
     for s in supp_rows:
         dc = str(s.get("date_completed") or "")[:10]
-        if dc not in last_5:
+        if dc not in last_days:
             continue
         kind = "special" if (s.get("type") or "").strip().upper() == "SPECIAL" else "typical"
         if dc not in supp_daily:
@@ -3545,8 +3548,8 @@ def _compute_daily_report():
         for dc, v in sorted(daily.items())
     ]
 
-    last_date = last_5[-1]
-    breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_5}
+    last_date = last_days[-1]
+    breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_days}
     for j in joints:
         dc = str(j.get("date_completed") or "")[:10]
         if dc not in breakdowns:
@@ -3573,7 +3576,7 @@ def _compute_daily_report():
                 breakdowns[dc][mk].setdefault(label, {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0})
 
     for always_mat in ("ALLOY (P91)", "ALLOY (P22)", "ALLOY (P11)"):
-        for dc in last_5:
+        for dc in last_days:
             if always_mat not in breakdowns[dc]["mat"]:
                 breakdowns[dc]["mat"][always_mat] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
 
@@ -3591,7 +3594,7 @@ def _compute_daily_report():
         )
 
     breakdowns_out = {}
-    for dc in last_5:
+    for dc in last_days:
         bd = breakdowns[dc]
         breakdowns_out[dc] = {
             "systems":   _to_list(bd["sys"], "system", supp_bd.get(dc, {}).get("sys")),
@@ -3612,7 +3615,7 @@ def _compute_daily_report():
 
 @app.route("/api/daily-report")
 def api_daily_report():
-    """Daily 실적 — 최근 5 작업일 날짜×용접사 집계 + 날짜별 시스템/자재/서브에어리어 breakdown"""
+    """Daily 실적 — 최근 4 작업일 날짜×용접사 집계 + 날짜별 시스템/자재/서브에어리어 breakdown"""
     with _lock:
         _dr_cached = _daily_report_cache.get("data")
         _dr_age    = time.time() - _daily_report_cache.get("time", 0)
