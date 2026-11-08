@@ -388,6 +388,10 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 .rg2-10 { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; }
 .rg3    { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
 .rg3-12 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.rg-ep-main { display:grid; grid-template-columns:minmax(230px,1fr) minmax(0,4.4fr); gap:10px; }
+.ep-gauge-col { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.ep-gauge-col > .panel { flex:1; display:flex; flex-direction:column; margin:0; }
+.ep-gauge-col > .panel .gauge-wrap { flex:1; align-items:center; margin:0; }
 .rg-ep-top { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:10px; }
 .rg7    { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; }
 
@@ -413,7 +417,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
   .nav-btn  { font-size:11px; padding:8px 10px; }
   .kpi-row  { gap:6px; padding:8px 12px; }
   .kpi-value { font-size:18px; }
-  .rg-12, .rg2, .rg2-10, .rg-ep-top { grid-template-columns:minmax(0,1fr); }
+  .rg-12, .rg2, .rg2-10, .rg-ep-top, .rg-ep-main { grid-template-columns:minmax(0,1fr); }
   .rg3, .rg3-12 { grid-template-columns:minmax(0,1fr); }
   .rg7      { grid-template-columns:repeat(3,minmax(0,1fr)); }
   .grid-2   { grid-template-columns:minmax(0,1fr); }

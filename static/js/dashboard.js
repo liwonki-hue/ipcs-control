@@ -1120,7 +1120,23 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                         plugins:{...chartOpts("").plugins,
                             legend:{display:true,position:'top',labels:{color:'#7a95b8',boxWidth:10,padding:8,font:{size:10}}},
                             tooltip:{...chartOpts("").plugins?.tooltip, callbacks:{label:(ctx)=>`${ctx.dataset.label}: ${fmtNum(ctx.parsed.y,0)}`}}},
-                        animation:{duration:400} }
+                        animation:{duration:400} },
+                    // 12/22(W39) Early Power Milestone — 세로 점선과 라벨
+                    plugins: [{
+                        id: "epMilestone",
+                        afterDatasetsDraw(chart) {
+                            const x = chart.scales.x, area = chart.chartArea, i = wkView.length - 1;
+                            if (!x || i < 0) return;
+                            const px = x.getPixelForValue(i), c = chart.ctx;
+                            c.save();
+                            c.strokeStyle = "#a855f7"; c.fillStyle = "#a855f7"; c.lineWidth = 1.5; c.setLineDash([5, 4]);
+                            c.beginPath(); c.moveTo(px, area.top + 12); c.lineTo(px, area.bottom); c.stroke(); c.setLineDash([]);
+                            c.beginPath(); c.moveTo(px, area.top + 2); c.lineTo(px + 5, area.top + 8); c.lineTo(px, area.top + 14); c.lineTo(px - 5, area.top + 8); c.closePath(); c.fill();
+                            c.font = "bold 10px 'DM Mono', monospace"; c.textAlign = "right"; c.textBaseline = "middle";
+                            c.fillText("EP MILESTONE · 12/22", px - 9, area.top + 8);
+                            c.restore();
+                        }
+                    }]
                 });
 
                 // 마지막 작업주 기준 EP Plan/Actual/Diff 공정률 표시
