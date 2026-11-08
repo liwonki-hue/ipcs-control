@@ -360,3 +360,8 @@
 
 ## 2026-11-09 화면 제목 변경
 - 상단 헤더 제목 `TRUKISTAN CCGT PIPING DASHBOARD` → `TRUKISTAN CCGT BOP PIPING DASHBOARD`(templates/index.html 한 곳). 사이드바 로고 아래 `CCGT PIPING PROGRESS`, 브라우저 탭 제목 `BOP Piping Progress Dashboard`, 매뉴얼의 프로젝트명은 별개 문구라 그대로 둠. 1696·1280px에서 한 줄·잘림 없음 확인.
+
+## 2026-11-09 ISO Status 네비게이터 배치를 다른 탭과 동일하게
+- 원인: `Total N rows`를 영역 왼쪽 끝에 고정하는 CSS(`position:absolute; left:0`)가 `#jm-count, #sm-count, #nde-count, #tp-count`에만 걸려 있었고 제가 만든 `#iso-count`·`#dq-count`는 빠져 있어, 개수와 번호가 함께 가운데에 붙어 보였다. 두 id를 같은 규칙에 추가. 개수가 절대 위치라 번호가 숨겨질 때(한 페이지) 영역 높이가 줄어 글자가 삐져나오므로 compact 규칙에 `min-height: 36px` 추가(다섯 탭 공통).
+- 검증: Joint Master와 ISO Status의 개수 왼쪽 오프셋 0px·글꼴 11px/600·번호 중앙 오프셋 0px·영역 높이 36px 동일, 한 페이지(번호 숨김)일 때도 개수가 영역 안, Data Quality도 동일.
+- **알려진 불일치(범위 밖)**: Test Pkg Register의 `#tm-count`는 원래부터 이 규칙에 없어 개수가 번호와 함께 가운데에 붙어 있다. 필요하면 `#tm-count`를 같은 규칙에 추가하면 된다.
