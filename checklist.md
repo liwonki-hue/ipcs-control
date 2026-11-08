@@ -267,3 +267,13 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 3. 테스트 — pytest 186건(`/api/joints` 윈도우 28개, 캐시 확장 7개, 보조 집계 20개 신규). 실데이터 비교: `/api/joints` 42개 요청 차이 0건, 보조 집계 4종 응답이 개선 전과 동일. 운영 조건 최악 겹침(10개 동시) 전부 200·메모리 최고 120MB, 저장 12초 뒤 네 캐시 재신선. 화면(Overview·Early Power·Weekly·Welder) 확인
 - [x] 4. commit
 - [ ] 5. push 후 CI(Tests)·Render 배포 확인
+
+---
+
+# Checklist — finish (2026-11-09, joint_no_num 컬럼으로 `/api/joints` 숫자 정렬)
+
+- [x] 1. 임시 코드 제거 — 추가된 줄에 debug print·console.log·TODO 0건
+- [x] 2. 검토 — pyflakes 0건, 맨몸 `except:` 0곳, JS 문법 정상
+- [x] 3. 테스트 — pytest 192건(로컬, `.env` 없는 운영 환경 모두). 실데이터 42개 요청이 원래 기준과 차이 0건, 중앙값 0.99→0.48초. DB 컬럼 51,645행 전부 규칙과 일치. 화면(Joint Master 1~3페이지·NDE) 확인
+- [x] 4. commit — `6d83eb5` + 이 기록
+- [ ] 5. push 후 CI(Tests)·Render 배포 확인
