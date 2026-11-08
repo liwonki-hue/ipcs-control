@@ -1142,7 +1142,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
                             tooltip:{...chartOpts("").plugins?.tooltip, callbacks:{label:(ctx)=>`${ctx.dataset.label}: ${fmtNum(ctx.parsed.y,0)}`}}},
                         animation:{duration:400} },
                     // 12/22(W39) Early Power Milestone 표시
-                    plugins: [epMilestonePlugin(() => wkView.length - 1)]
+                    plugins: [epMilestonePlugin(() => wkView.length - 1, "EP")]
                 });
 
                 // 마지막 작업주 기준 EP Plan/Actual/Diff 공정률 표시
