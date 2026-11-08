@@ -619,7 +619,34 @@ async function renderOverview(kpi, wkData, units, systems) {
             if (!sysList.length) {
                 sysBody.innerHTML = `<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:16px">No system data</td></tr>`;
             } else {
-                sysBody.innerHTML = sysList.map(s => {
+                // TOTAL — 계통이 많아 표가 길어도 보이도록 맨 위에 둔다
+                const T = sysList.reduce((a, s) => {
+                    a.pipPlan += s.total_di || s.plan_di || 0; a.pipDone += s.completed_di || 0;
+                    a.supTot  += s.support_total || 0;         a.supDone += s.support_comp || 0;
+                    a.tstTot  += s.testpkg_total || 0;         a.tstDone += s.testpkg_comp || 0;
+                    return a;
+                }, {pipPlan: 0, pipDone: 0, supTot: 0, supDone: 0, tstTot: 0, tstDone: 0});
+                const pctT = (c, t) => t > 0 ? c / t * 100 : 0;
+                const tPip = pctT(T.pipDone, T.pipPlan), tSup = pctT(T.supDone, T.supTot), tTst = pctT(T.tstDone, T.tstTot);
+                const tTot = parseFloat((d.unified_readiness || (tPip * 0.7 + tSup * 0.2 + tTst * 0.1)).toFixed(2));
+                const _d = v => v > 0 ? fmtNum(v, 0) : "—", _p = v => v > 0 ? v.toFixed(2) + "%" : "—";
+                const totalRow = `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700">
+                        <td style="text-align:center;color:var(--accent)">TOTAL</td>
+                        <td style="text-align:center">${fmtNum(T.pipPlan,0)}</td>
+                        <td style="text-align:center">${_d(T.supTot)}</td>
+                        <td style="text-align:center">${_d(T.tstTot)}</td>
+                        <td style="text-align:center;color:var(--green)">${fmtNum(T.pipDone,0)}</td>
+                        <td style="text-align:center;color:var(--green)">${_d(T.supDone)}</td>
+                        <td style="text-align:center;color:var(--green)">${_d(T.tstDone)}</td>
+                        <td style="text-align:center;color:var(--orange)">${fmtNum(Math.max(0, T.pipPlan - T.pipDone),0)}</td>
+                        <td style="text-align:center;color:var(--orange)">${_d(Math.max(0, T.supTot - T.supDone))}</td>
+                        <td style="text-align:center;color:var(--orange)">${_d(Math.max(0, T.tstTot - T.tstDone))}</td>
+                        <td style="text-align:center;color:${pctColor(tPip)}">${tPip.toFixed(2)}%</td>
+                        <td style="text-align:center;color:${pctColor(tSup)}">${_p(tSup)}</td>
+                        <td style="text-align:center;color:${pctColor(tTst)}">${_p(tTst)}</td>
+                        <td style="text-align:center;color:${pctColor(tTot)}">${tTot.toFixed(2)}%</td>
+                    </tr>`;
+                sysBody.innerHTML = totalRow + sysList.map(s => {
                     const pipPlan = s.total_di || s.plan_di || 0;
                     const pipDone = s.completed_di || 0;
                     const pipRem  = Math.max(0, pipPlan - pipDone);
