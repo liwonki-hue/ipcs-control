@@ -1843,6 +1843,21 @@ def _sort_joints_numeric(rows, fetch_iso_rows, has_before=True, has_after=True):
 # 더 큰 ISO는 기존처럼 DB에서 받으므로 결과는 달라지지 않는다.
 _NUMERIC_WINDOW_MARGIN = 40
 
+# DB에 joint_no_num(조인트 번호의 숫자 부분, Reports/joint_no_num_20261109.sql) 컬럼이 있으면 DB가 직접 숫자순으로 정렬해 주므로
+# 목록은 조회 한 번으로 끝난다. 없으면(아직 SQL을 실행하지 않은 환경) 아래 윈도우 방식으로 자동 전환한다.
+# None=아직 모름, True=있음, False=없음(_JNO_NUM_RECHECK_SEC가 지나면 다시 확인한다).
+_jno_num_state = None
+_jno_num_checked = 0.0
+_JNO_NUM_RECHECK_SEC = 600
+
+
+def _jno_num_available():
+    return _jno_num_state is not False or time.time() - _jno_num_checked > _JNO_NUM_RECHECK_SEC
+
+
+def _is_missing_jno_num(e):
+    return isinstance(e, APIError) and "joint_no_num" in (str(getattr(e, "message", "")) + str(e))
+
 
 def _iso_rows_from_window(window, lo, total, fetch_iso_rows):
     """본 조회 윈도우(window, 데이터셋의 lo번째 행부터)에서 ISO 전체 행을 돌려주는 함수를 만든다.
@@ -1882,7 +1897,7 @@ def api_joints_get():
         mat     = request.args.get("mat",      "")
         size    = request.args.get("size",     "")
         pwht    = request.args.get("pwht",     "")
-        def build_query(count=None):
+        def build_query(count=None, by_num=False):
             q = sb.table("joint_master").select("*", count=count)
             if unit:    q = q.eq("unit",        unit)
             if system:  q = q.eq("system",      system)
@@ -1901,11 +1916,24 @@ def api_joints_get():
                 q = q.or_("inspection.in.(PT,MT,RT),pt_date.not.is.null,mt_date.not.is.null,rt_date.not.is.null,pwht_date.not.is.null")
             if status == "completed": q = q.not_.is_("date_completed", "null")
             if status == "pending":   q = q.is_("date_completed",      "null")
+            if by_num:    # DB가 숫자순으로 정렬한다(1,2,...,10,11)
+                return q.order("iso_drawing").order("joint_no_num").order("joint_no").order("id")
             return q.order("iso_drawing").order("joint_no").order("id")
         def fetch_iso_rows(iso_drawing):
             q = build_query()
             q = q.is_("iso_drawing", "null") if iso_drawing is None else q.eq("iso_drawing", iso_drawing)
             return q.execute().data
+        global _jno_num_state, _jno_num_checked
+        if _jno_num_available():
+            try:
+                res = _exec_page(build_query("exact", by_num=True).range(offset, offset + limit - 1))
+                _jno_num_state = True
+                return jsonify({"data": res.data, "count": res.count})
+            except APIError as e:
+                if not _is_missing_jno_num(e):
+                    raise
+                _jno_num_state, _jno_num_checked = False, time.time()
+                print("[joints] joint_no_num column not found - falling back to the window method")
         lo = max(0, offset - _NUMERIC_WINDOW_MARGIN)
         res = _exec_page(build_query("exact").range(lo, offset + limit - 1 + _NUMERIC_WINDOW_MARGIN))
         window = res.data
