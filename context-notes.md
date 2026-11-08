@@ -275,3 +275,8 @@
 - 해외 발전소에서 직접 쓰는 프로그램이라 화면에 보이는 문구는 전부 영어여야 한다. Data Quality의 검사 제목·안내·상세 문구를 한글로 만든 것을 영어로 바꿨다(`iso_analysis.CHECKS`, `_flag` 상세 문구). 기존 화면(index.html·dashboard.js)은 이미 전부 영어였고, `app.py`의 한글 오류 문구 1건("joint_master에 phase/package 데이터 없음", Support 동기화 토스트로 노출됨)도 영어로 고쳤다. 코드 주석은 한글 유지.
 - 재발 방지: `tests/test_iso_analysis.py`가 검사 제목·힌트와 모든 상세 문구에 한글이 없는지 확인한다(검사 15개 이상을 실제로 발동시켜서). 변형 시험으로 한글을 넣으면 실패함을 확인.
 - 영어 문구에서 `↔`는 `<->`, `≤`는 `<=`로 바꿨다(엑셀·인쇄·폰트에서 깨질 일이 없는 ASCII).
+
+## 2026-11-08 데이터 정정 — ISO CCP-W-B142-PI-140-CH-006-2 System을 DW로 통일
+- 요청: ISO Status에서 이 ISO가 System `(multi)`(CDS 21건 + DW 1건)로 보여, 사용자가 System을 DW로 입력하라고 지시.
+- 조치: joint_master 22건(CDS 21건 → DW)과 support_master 6건(CDS → DW)을 DW로 변경(System은 세 곳에 걸쳐 있어 Support도 함께). Package가 비어 있어 test_package_master 변경은 없음. `updated_by`는 `system (manual)`. 롤백용 백업 `Reports/system_DW_CCP-W-B142-PI-140-CH-006-2_backup_20261108_230506.json`(변경 전 id·system). 변경 후 재조회로 전부 DW 확인, 대시보드·ISO 캐시 재생성 후 이 ISO가 DW로 표시되고 `(multi)` ISO는 0개.
+- 참고(사용자에게 알린 것): 같은 Line No(`1"-CH-B1-42/006-FM1-NR`)의 다른 ISO는 CDS 34건·DW 1건이었고 이전 DW→CDS 재분류와 방향이 반대라, 되돌릴 일이 생기면 위 백업으로 한다.
