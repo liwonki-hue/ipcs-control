@@ -725,7 +725,7 @@ async function renderOverview(kpi, wkData, units, systems) {
                 },
                 plugins:{...chartOpts("").plugins,legend:{display:false}}, animation:{duration:600} },
             // EP Milestone(12/22)이 속한 주를 표시 — 날짜가 없으면 EP 목표 주차(W39)로 대신한다
-            plugins: [epMilestonePlugin(() => { const k = wkData.findIndex(w => w.week_start && w.week_end && w.week_start <= EP_TARGET_DATE && EP_TARGET_DATE <= w.week_end); return k >= 0 ? k : wkData.findIndex(w => w.week_no === EP_TARGET_WK); })]
+            plugins: [epMilestonePlugin(() => { const k = wkData.findIndex(w => w.week_start && w.week_end && w.week_start <= EP_TARGET_DATE && EP_TARGET_DATE <= w.week_end); return k >= 0 ? k : wkData.findIndex(w => w.week_no === EP_TARGET_WK); }, "EP-12/22")]
         });
 
         // 마지막 작업주 기준 Plan/Actual/Diff 공정률 표시
@@ -843,8 +843,8 @@ function orderEpAreaRows(rows, nameOf) {
 const EP_TARGET_WK = 39;
 const EP_TARGET_DATE = "2026-12-22";
 
-// S-Curve의 EP Milestone(12/22) 표시 — 해당 주 위치에 보라색 세로 점선과 마름모. idxFn은 그 주의 x 인덱스를 돌려준다(없으면 -1)
-function epMilestonePlugin(idxFn) {
+// S-Curve의 EP Milestone(12/22) 표시 — 해당 주 위치에 보라색 세로 점선과 마름모(label이 있으면 마름모 위에 글자). idxFn은 그 주의 x 인덱스를 돌려준다(없으면 -1)
+function epMilestonePlugin(idxFn, label) {
     return {
         id: "epMilestone",
         afterDatasetsDraw(chart) {
@@ -855,6 +855,7 @@ function epMilestonePlugin(idxFn) {
             c.strokeStyle = "#a855f7"; c.fillStyle = "#a855f7"; c.lineWidth = 1.5; c.setLineDash([5, 4]);
             c.beginPath(); c.moveTo(px, area.top + 12); c.lineTo(px, area.bottom); c.stroke(); c.setLineDash([]);
             c.beginPath(); c.moveTo(px, area.top + 2); c.lineTo(px + 5, area.top + 8); c.lineTo(px, area.top + 14); c.lineTo(px - 5, area.top + 8); c.closePath(); c.fill();
+            if (label) { c.font = "bold 10px 'DM Mono', monospace"; c.textAlign = "center"; c.textBaseline = "bottom"; c.fillText(label, px, area.top - 1); }
             c.restore();
         }
     };
