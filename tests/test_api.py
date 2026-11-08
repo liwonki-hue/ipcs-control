@@ -117,6 +117,7 @@ class _NoThread:
 def refresh_env(monkeypatch):
     monkeypatch.setattr(A, "_refresh_last", 0.0)
     monkeypatch.setattr(A.threading, "Thread", _NoThread)                       # 재빌드·Rev 동기화 스레드를 띄우지 않는다
+    monkeypatch.setattr(A._joint_analysis_cache, "refresh_async", lambda build: True)   # ISO 분석 스캔도 시작하지 않는다
     monkeypatch.setattr(A, "_building", False)
     return monkeypatch
 
@@ -173,6 +174,60 @@ def test_no_unescaped_db_strings_in_templates():
     assert bare == []
 
 
+def test_no_unescaped_db_strings_in_iso_tools():
+    """iso_tools.js의 템플릿에서 ISO·Package·System·상세 문구 같은 문자열 값은 반드시 esc()를 거친다."""
+    js = (ROOT / "static" / "js" / "iso_tools.js").read_text(encoding="utf-8")
+    fields = "iso|system|sub_area|package|rev|detail|title|hint|last_weld|joint_no"
+    # 값을 그대로 출력하는 형태(`${r.f}`, `${r.f||"x"}`)만 본다. 조건식(`${s.iso ? ... : ""}`)은 값을 출력하지 않으므로 제외.
+    bare = re.findall(r"\$\{\s*(?:r|s|c)\.(?:%s)(?:\s*\|\|\s*(?:\"[^\"]*\"|'[^']*'))*\s*\}" % fields, js)
+    assert bare == []
+    assert "esc(" in js
+
+
 def test_no_string_arguments_in_inline_handlers():
     """onclick="fn('${값}')"는 HTML 이스케이프로 막을 수 없다(브라우저가 엔티티를 먼저 되돌린다). 데이터 속성으로 넘긴다."""
     assert re.findall(r"""on[a-z]+="[^"]*'\$\{(?!r\.date\})[^}]*\}'""", JS) == []
+
+
+# ── ISO 현황·데이터 품질·속도 엔드포인트 ──────────────────────────────
+FAKE_ANALYSIS = {"built_at": "2026-11-08 12:00", "today": "2026-11-08", "joints": 2,
+                 "isos": [{"iso": "ISO-1", "status": "WELDING"}],
+                 "quality": {"checks": [], "drawing_available": False, "drawing_error": "Drawing DB not configured", "testpkg_checked": True},
+                 "pace": {"window_days": 28, "overall": {"name": "ALL"}, "by_system": [], "by_sub_area": []}}
+
+
+@pytest.fixture
+def fake_analysis(monkeypatch):
+    monkeypatch.setattr(A, "_get_joint_analysis", lambda: FAKE_ANALYSIS)
+
+
+def test_data_quality_requires_login(anon_client, fake_analysis):
+    assert anon_client.get("/api/data-quality").status_code == 401
+
+
+def test_analysis_endpoints_payloads(client, anon_client, fake_analysis):
+    r = anon_client.get("/api/iso-status")                                      # 모니터링 화면이라 다른 조회 API처럼 로그인 없이 본다
+    assert r.status_code == 200 and r.get_json()["isos"][0]["iso"] == "ISO-1" and "age_sec" in r.get_json()
+    r = anon_client.get("/api/pace-forecast")
+    assert r.status_code == 200 and r.get_json()["overall"]["name"] == "ALL" and r.get_json()["window_days"] == 28
+    r = client.get("/api/data-quality")
+    assert r.status_code == 200 and r.get_json()["joints"] == 2 and r.get_json()["isos"] == 1
+
+
+def test_analysis_errors_do_not_leak_details(anon_client, monkeypatch):
+    def boom():
+        raise RuntimeError("secret-key-abc")
+    monkeypatch.setattr(A, "_get_joint_analysis", boom)
+    r = anon_client.get("/api/iso-status")
+    assert r.status_code == 500 and "secret-key-abc" not in r.get_data(as_text=True)
+
+
+@pytest.mark.parametrize("scope,invalidated", [("joint", True), ("support", True), ("all", True)])
+def test_saves_invalidate_the_analysis_cache(monkeypatch, scope, invalidated):
+    monkeypatch.setattr(A.threading, "Thread", _NoThread)                       # 재빌드 스레드를 띄우지 않는다
+    monkeypatch.setattr(A, "_building", False)
+    A._joint_analysis_cache.get_or_build(lambda: {"x": 1})
+    A._joint_analysis_cache.peek()
+    A._joint_analysis_cache._valid = True
+    A._run_cache_clear({scope})
+    assert A._joint_analysis_cache.peek()[1] is (not invalidated)

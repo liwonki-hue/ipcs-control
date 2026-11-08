@@ -22,6 +22,9 @@ from postgrest.base_request_builder import APIResponse as _PgAPIResponse
 from postgrest.exceptions import APIError
 from supabase import create_client
 
+import cache_util
+import iso_analysis
+
 # postgrest 2.x는 모든 조회 응답을 pydantic JSONAdapter.validate_json(재귀 Union 검증)으로 파싱해, 같은 응답을
 # json.loads보다 네이티브 메모리를 약 7배 쓴다(joint_master 10,000행: +245MB vs +37MB). JM Export 한 번이 RSS를
 # 60→320MB로 올려 두 요청이 겹치면 512MB를 넘었다(2026-09-29 OOM 17회). 결과 값은 같으므로 json.loads로 바꾼다.
@@ -1487,6 +1490,7 @@ def _run_cache_clear(scopes):
     everything = "all" in scopes
     joint = everything or "joint" in scopes
     support = everything or "support" in scopes
+    cache_util.clear_scopes(scopes)
     with _lock:
         # 모든 범위 공통: 대시보드 결과와 조인트·지원 양쪽에서 파생되는 캐시
         _cache.clear()
@@ -1759,6 +1763,7 @@ def api_refresh_db_cache():
             else:
                 rebuild_started = False
         threading.Thread(target=_sync_rev_from_drawing, daemon=True).start()
+        _joint_analysis_cache.refresh_async(_build_joint_analysis)   # ISO 현황·데이터 품질·속도 표를 미리 데워 첫 화면이 기다리지 않게 한다
         return jsonify({"ok": True, "message": "DB cache refreshed, Flask rebuild started" if rebuild_started else "DB cache refreshed, build already in progress",
                         "rev_sync_last": _rev_sync_last})
     except Exception as e:
@@ -3693,6 +3698,102 @@ def api_daily_report():
         if _dr_cached is not None:
             return jsonify(_dr_cached)
         return jsonify({"daily": [], "systems": [], "subareas": [], "materials": [], "last_date": "", "breakdowns": {}}), 500
+
+
+# ── ISO 현황 · 데이터 품질 · 진행 속도 (iso_analysis.py) ─────────────────────
+# 세 화면이 같은 스캔 결과를 쓴다: joint_master 전체를 id 순서로 2,000행씩 읽어 한 건씩 집계하고(전체를 메모리에 쌓지 않는다)
+# Support·Test Package Register·Drawing DB를 곁들인다. 스캔은 수십 초 걸려서 요청이 기다리지 않게 한다 — 낡은 결과를 바로 주고
+# 뒤에서 다시 만든다(cache_util.TTLCache). 저장(scope=joint/support)이 있으면 낡은 것으로 표시하고, keep-alive가 12분마다 미리 데워 둔다.
+_SCAN_PAGE = 2000
+_SCAN_WORKERS = 3   # 동시에 읽는 페이지 수 — 메모리에는 최대 이만큼의 페이지만 있다
+_joint_analysis_cache = cache_util.TTLCache("joint_analysis", ttl=300, scopes=("joint", "support"), min_gap=60)
+
+
+def _scan_table(table, columns, on_row):
+    def fetch(off):
+        return _sb_exec(lambda sb: sb.table(table).select(columns).order("id")
+                        .range(off, off + _SCAN_PAGE - 1).execute()).data or []
+    off = 0
+    with ThreadPoolExecutor(max_workers=_SCAN_WORKERS) as pool:
+        while True:
+            finished = False
+            for page in pool.map(fetch, [off + i * _SCAN_PAGE for i in range(_SCAN_WORKERS)]):
+                for r in page:
+                    on_row(r)
+                finished = finished or len(page) < _SCAN_PAGE
+                del page
+            if finished:
+                return
+            off += _SCAN_PAGE * _SCAN_WORKERS
+
+
+def _read_drawing_revisions():
+    """Drawing DB(dwg_latest)의 {도면번호: revision}. revision이 빈 도면은 비교 정보가 없으므로 뺀다."""
+    dwg, off = {}, 0
+    while True:
+        page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id")             .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
+        for d in page:
+            no, rv = (d.get("drawing_no") or "").strip(), (d.get("revision") or "").strip()
+            if no and rv:
+                dwg[no] = rv
+        if len(page) < DRAW_DB_PAGE:
+            return dwg
+        off += DRAW_DB_PAGE
+
+
+def _build_joint_analysis():
+    an = iso_analysis.Analyzer(_joint_accepted, _required_pwht, datetime.now(ALMT).date())
+    _scan_table("joint_master", iso_analysis.JOINT_COLUMNS, an.add_joint)
+    _scan_table("support_master", iso_analysis.SUPPORT_COLUMNS, an.add_support)
+    numbers = {(r.get("test_pkg_no") or "").strip() for r in
+               (_sb_exec(lambda sb: sb.table("test_package_master").select("test_pkg_no").execute()).data or [])}
+    drawing, drawing_error = None, "Drawing DB not configured"
+    if DRAWING_SUPABASE_URL and DRAWING_SUPABASE_KEY:
+        try:
+            drawing, drawing_error = _read_drawing_revisions(), None
+        except Exception as e:
+            drawing, drawing_error = None, type(e).__name__
+    result = an.result(testpkg_numbers=numbers, drawing=drawing, drawing_error=drawing_error)
+    result["built_at"] = datetime.now(ALMT).strftime("%Y-%m-%d %H:%M")
+    _malloc_trim()
+    return result
+
+
+def _get_joint_analysis():
+    return _joint_analysis_cache.get_or_build(_build_joint_analysis)
+
+
+def _analysis_meta():
+    _, fresh = _joint_analysis_cache.peek()
+    return {"age_sec": round(_joint_analysis_cache.age() or 0), "fresh": fresh}
+
+
+@app.route("/api/iso-status")
+def api_iso_status():
+    try:
+        res = _get_joint_analysis()
+        return jsonify({"built_at": res["built_at"], **_analysis_meta(), "joints": res["joints"], "isos": res["isos"]})
+    except Exception as e:
+        return jsonify({"error": _err_text(e)}), 500
+
+
+@app.route("/api/pace-forecast")
+def api_pace_forecast():
+    try:
+        res = _get_joint_analysis()
+        return jsonify({"built_at": res["built_at"], **_analysis_meta(), "today": res["today"], **res["pace"]})
+    except Exception as e:
+        return jsonify({"error": _err_text(e)}), 500
+
+
+@app.route("/api/data-quality")
+@login_required
+def api_data_quality():
+    try:
+        res = _get_joint_analysis()
+        return jsonify({"built_at": res["built_at"], **_analysis_meta(), "joints": res["joints"], "isos": len(res["isos"]), **res["quality"]})
+    except Exception as e:
+        return jsonify({"error": _err_text(e)}), 500
 
 
 @app.after_request
