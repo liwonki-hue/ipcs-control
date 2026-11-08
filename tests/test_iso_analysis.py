@@ -63,6 +63,17 @@ def test_multi_values_are_marked_and_flagged():
     assert check(res, "iso_multi_rev")["count"] == 1 and check(res, "iso_multi_system")["count"] == 1
 
 
+def test_multiple_sub_areas_are_shown_together():
+    res = analyze([make(id=1, sub_area="MB STR"), make(id=2, sub_area="PR #3"), make(id=3, sub_area="PR #3"), make(id=4, iso_drawing="ISO-2", sub_area="PR #4"),
+                   make(id=5, iso_drawing="ISO-3", sub_area="")])
+    by = {r["iso"]: r for r in res["isos"]}
+    assert by["ISO-1"]["sub_area"] == "MB STR / PR #3" and by["ISO-1"]["sub_areas"] == ["MB STR", "PR #3"]   # 정렬된 순서로 모두 표기
+    assert by["ISO-2"]["sub_area"] == "PR #4" and by["ISO-2"]["sub_areas"] == ["PR #4"]
+    assert by["ISO-3"]["sub_area"] == "" and by["ISO-3"]["sub_areas"] == []
+    assert "(multi)" not in str(by["ISO-1"]["sub_area"])
+    assert check(res, "iso_multi_sub_area")["count"] == 1                    # 데이터 품질의 정보 항목은 그대로
+
+
 def test_all_packages_of_an_iso_are_listed():
     res = analyze([make(id=1, package="PKG-B"), make(id=2, package="PKG-A"), make(id=3, package=None), make(id=4, iso_drawing="ISO-2", package="PKG-A"),
                    make(id=5, iso_drawing="ISO-3", package=None)])

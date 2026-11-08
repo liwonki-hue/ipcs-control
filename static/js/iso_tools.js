@@ -40,7 +40,7 @@ async function loadIsoStatus() {
         _iso.meta = d;
         if (note) note.textContent = _isoUpdatedText(d);
         _isoFillSelect("iso-system", "System", r => r.system);
-        _isoFillSelect("iso-subarea", "Sub Area", r => r.sub_area);
+        _isoFillSelect("iso-subarea", "Sub Area", r => r.sub_areas || []);   // 여러 Sub Area에 걸친 ISO는 각각의 값에 모두 나온다
         _isoFillPackages();
         _isoRenderSummary();
         isoRender(true);
@@ -55,7 +55,7 @@ function _isoFillSelect(id, label, pick) {
     const sel = document.getElementById(id);
     if (!sel) return;
     const cur = sel.value;
-    const vals = [...new Set(_iso.rows.map(pick).filter(Boolean))].sort();
+    const vals = [...new Set(_iso.rows.flatMap(r => [].concat(pick(r))).filter(Boolean))].sort();
     sel.innerHTML = `<option value="">${esc(label)}</option>` + vals.map(v => `<option value="${esc(v)}"${v === cur ? " selected" : ""}>${esc(v)}</option>`).join("");
 }
 
@@ -119,7 +119,7 @@ function isoRender(resetPage) {
     const pkg = document.getElementById("iso-package")?.value || "";
     const quick = _ISO_QUICK[document.getElementById("iso-quick")?.value || ""] || _ISO_QUICK[""];
     const { key, dir } = _iso.sort;
-    _iso.filtered = _iso.rows.filter(r => quick(r) && (!sys || r.system === sys) && (!sub || r.sub_area === sub) &&
+    _iso.filtered = _iso.rows.filter(r => quick(r) && (!sys || r.system === sys) && (!sub || (r.sub_areas || []).includes(sub)) &&
         (!pkg || (pkg === _ISO_NO_PACKAGE ? !(r.packages || []).length : (r.packages || []).includes(pkg))) &&
         (!q || r.iso.toLowerCase().includes(q) || (r.package || "").toLowerCase().includes(q)))
         .sort((a, b) => {
@@ -229,7 +229,7 @@ function _isoRowHtml(r) {
         <td style="text-align:center">${r.accepted}</td>
         <td style="text-align:center;${r.pending ? "color:#f59e0b;font-weight:700" : ""}">${r.pending}</td>
         <td style="text-align:center">${cell(r.sup_done, r.sup_n)}</td>
-        <td style="text-align:center;font-size:11px">${esc(r.last_weld || "—")}</td>
+        <td style="text-align:center;font-size:11px;white-space:nowrap">${esc(r.last_weld || "—")}</td>
         <td style="text-align:center;white-space:nowrap" title="${esc(_ISO_STATUS_TABLE[r.status] || r.status)}"><span style="color:${color};font-weight:700;font-size:11px">${esc(_ISO_STATUS_TABLE[r.status] || r.status)}</span>${r.fab_done_erect_open ? ' <span title="Fab done · Erect open" style="color:#7c3aed">●</span>' : ""}</td>
     </tr>`;
 }
