@@ -2927,33 +2927,41 @@ def api_ep_support_summary():
         ep_pkgs = {r["package"] for r in rows if r.get("package")}
         tp_total = tp_comp = 0
         tp_sys = {}
-        try:
-            j_off = 0
-            while True:
-                jr = (sb.table("joint_master").select("package").eq("phase", "EP").not_.is_("package", "null")
-                        .order("id").range(j_off, j_off + 1999).execute().data or [])
-                ep_pkgs.update(r["package"] for r in jr if r.get("package"))
-                if len(jr) < 2000:
-                    break
-                j_off += 2000
-            tp = sb.table("test_package_master").select("test_pkg_no,system,completed").execute().data or []
-            tp_map = {r["test_pkg_no"]: r for r in tp}
-            pkg_stats = _load_pkg_stats(sb)
-            tp_total = len(ep_pkgs)
-            tp_comp = sum(1 for p in ep_pkgs if tp_map.get(p, {}).get("completed"))
-            for p in sorted(ep_pkgs):
-                row = tp_map.get(p, {})
-                a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
-                a["total"] += 1
-                a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
-        except Exception as e:
-            print(f"[ep-support-summary] test package unavailable: {e}")
+        tp_ok = False
+        for _attempt in range(2):          # 연결이 잠깐 끊기면 한 번 더 시도 — 실패한 값은 캐시하지 않는다
+            try:
+                ep_pkgs_now = set(ep_pkgs)
+                tp_total = tp_comp = 0
+                tp_sys = {}
+                j_off = 0
+                while True:
+                    jr = (sb.table("joint_master").select("package").eq("phase", "EP").not_.is_("package", "null")
+                            .order("id").range(j_off, j_off + 1999).execute().data or [])
+                    ep_pkgs_now.update(r["package"] for r in jr if r.get("package"))
+                    if len(jr) < 2000:
+                        break
+                    j_off += 2000
+                tp = sb.table("test_package_master").select("test_pkg_no,system,completed").execute().data or []
+                tp_map = {r["test_pkg_no"]: r for r in tp}
+                pkg_stats = _load_pkg_stats(sb)
+                tp_total = len(ep_pkgs_now)
+                tp_comp = sum(1 for p in ep_pkgs_now if tp_map.get(p, {}).get("completed"))
+                for p in sorted(ep_pkgs_now):
+                    row = tp_map.get(p, {})
+                    a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
+                    a["total"] += 1
+                    a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
+                tp_ok = True
+                break
+            except Exception as e:
+                print(f"[ep-support-summary] test package unavailable (try {_attempt + 1}): {e}")
         result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
                   "testpkg_total": tp_total, "testpkg_comp": tp_comp,
                   "testpkg_sys": [{"system": k, **v} for k, v in sorted(tp_sys.items())]}
-        with _lock:
-            _ep_sup_cache["data"] = result
-            _ep_sup_cache["time"] = time.time()
+        if tp_ok:
+            with _lock:
+                _ep_sup_cache["data"] = result
+                _ep_sup_cache["time"] = time.time()
         return jsonify(result)
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
