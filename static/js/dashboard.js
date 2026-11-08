@@ -1582,68 +1582,8 @@ async function loadJointMaster() {
         jmData=res.data;
         document.getElementById("jm-count").textContent=`Total ${(res.count||0).toLocaleString()} rows`;
         _renderPageNums("jm-page-nav", jmCurrentPage, res.count||0, JM_PAGE_SIZE, "jmGoto");
-        renderJMTable(jmData); updateIsoBulkPanel(isoVal,jmData);
+        renderJMTable(jmData);
     } catch(e) { if(e.name==="AbortError")return; console.error("JM load failed",e); }
-}
-
-function updateIsoBulkPanel(isoVal,rows){
-    const panel=document.getElementById("jm-iso-bulk-panel"); if(!panel)return;
-    if(!isoVal||rows.length===0){panel.style.display="none";return;}
-    const isoRows=rows.filter(r=>r.iso_drawing===isoVal);
-    if(isoRows.length===0){panel.style.display="none";return;}
-    panel.style.display="flex";
-    const completedCount=isoRows.filter(r=>r.date_completed).length;
-    document.getElementById("jm-iso-info").textContent=`${isoVal}  ·  ${isoRows.length} joints  ·  ${completedCount} completed`;
-}
-
-// 조인트 여러 건의 date_completed를 요청 1회로 저장(조인트마다 PATCH를 보내면 서버 워커 1개에서 줄을 서 검색까지 막힌다)
-async function _bulkSetDate(ids, dateVal){
-    const res=await fetch(`${API}/api/joints/bulk-date`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids,date_completed:dateVal})});
-    const out=await res.json().catch(()=>({}));
-    if(!res.ok)throw new Error(out.error||`HTTP ${res.status}`);
-    if(out.updated!==ids.length)throw new Error(`only ${out.updated} of ${ids.length} joints were updated`);
-    return out.updated;
-}
-
-async function applyIsoBulkDate(){
-    const isoVal=document.getElementById("jm-iso")?.value?.trim();
-    const dateVal=_fullDateVal("jm-bulk-date");
-    if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
-    if(!dateVal){toast("Please select a date","error");return;}
-    {const _today=new Date().toISOString().slice(0,10);if(dateVal>_today){toast("Future dates are not allowed (today: "+_today+")","error");return;}}
-    const targets=jmData.filter(r=>r.iso_drawing===isoVal);
-    if(targets.length===0){toast("No joints found for this ISO","error");return;}
-    const btn=document.getElementById("jm-bulk-apply-btn");
-    if(btn){btn.disabled=true;btn.textContent="Saving...";}
-    try{
-        const saved=await _bulkSetDate(targets.map(r=>r.id), dateVal);
-        targets.forEach(r=>{
-            const el=document.getElementById(`date-${r.id}`);
-            if(el){el.value=dateVal.slice(2);el.dataset.fullDate=dateVal;el.classList.remove("date-empty");}
-            if(!r.inspection){r.inspection="VT";const ie=document.getElementById(`inspection-${r.id}`);if(ie)ie.value="VT";}
-        });
-        toast(`✓ ${saved} joints saved (${isoVal}) — KPI updating...`);
-        _autoRefreshKpi();
-        updateIsoBulkPanel(isoVal,jmData);
-    }catch(e){toast(`✗ Bulk save failed: ${e.message}`,"error");}
-    finally{if(btn){btn.disabled=false;btn.textContent="Apply to All";}}
-}
-
-async function clearIsoBulkDate(){
-    const isoVal=document.getElementById("jm-iso")?.value?.trim();
-    if(!isoVal){toast("Please enter ISO Drawing No. first","error");return;}
-    const targets=jmData.filter(r=>r.iso_drawing===isoVal);
-    if(targets.length===0){toast("No joints found for this ISO","error");return;}
-    if(!confirm(`${isoVal}\nDelete dates for all ${targets.length} joints?`))return;
-    try{
-        await _bulkSetDate(targets.map(r=>r.id), null);
-        targets.forEach(r=>{
-            const el=document.getElementById(`date-${r.id}`);if(el){el.value="";delete el.dataset.fullDate;el.classList.add("date-empty");}
-        });
-        toast(`✓ ${targets.length} joints cleared (${isoVal}) — KPI updating...`);
-        _autoRefreshKpi();
-        updateIsoBulkPanel(isoVal,jmData);
-    }catch(e){toast(`✗ Bulk clear failed: ${e.message}`,"error");}
 }
 
 function jmGoto(page){jmCurrentPage=Math.max(0,page);loadJointMaster();}
@@ -1952,9 +1892,6 @@ async function _refreshAfterSave() {
         if (_refreshDirty) { _refreshDirty = false; _refreshAfterSave(); }
     }
 }
-
-// 하위 호환 alias
-function _autoRefreshKpi() { _refreshAfterSave(); }
 
 // ================================================================================
 //  CHART HELPERS / PAGINATION

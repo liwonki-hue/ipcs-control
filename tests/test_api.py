@@ -229,3 +229,13 @@ def test_saves_invalidate_the_analysis_cache(monkeypatch, scope, invalidated):
     A._joint_analysis_cache._valid = True
     A._run_cache_clear({scope})
     assert A._joint_analysis_cache.peek()[1] is (not invalidated)
+
+
+def test_joint_bulk_date_api_is_removed(client):
+    assert client.post("/api/joints/bulk-date", json={"ids": [1], "date_completed": None}).status_code == 404
+
+
+def test_joint_master_has_no_bulk_update_panel():
+    html = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    assert "jm-iso-bulk-panel" not in html and "applyIsoBulkDate" not in html
+    assert "sm-bulk-date" in html                                              # Support Master의 패널은 그대로

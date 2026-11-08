@@ -274,14 +274,6 @@
             <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
           </div>
         </div>
-        <div id="jm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
-          <div style="font-size:12px;font-weight:700;color:var(--accent)">BULK UPDATE: <span id="jm-iso-info" style="color:#ffffff"></span></div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <input type="text" id="jm-bulk-date" class="date-empty" placeholder="YY-MM-DD" style="width:100px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:12px;background:var(--panel-solid);color:#ffffff;cursor:pointer;text-align:center" onclick="_pickDate(this)" readonly>
-            <button id="jm-bulk-apply-btn" class="btn-save-row" style="padding:8px 16px" onclick="applyIsoBulkDate()">Apply to All</button>
-            <button class="btn-clear-row" style="padding:8px 16px" onclick="clearIsoBulkDate()">Clear All</button>
-          </div>
-        </div>
         <div class="table-wrap">
           <table class="data-table" id="jmTable" style="width:100% !important; min-width:1310px !important; table-layout:fixed !important;">
             <thead>
@@ -870,7 +862,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=7.99"></script>
+<script defer src="/static/js/dashboard.js?v=8.00"></script>
 <script defer src="/static/js/iso_tools.js?v=3"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">

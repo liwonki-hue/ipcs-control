@@ -285,3 +285,9 @@
 - 문제: 표를 `max-height` 안쪽 스크롤 영역에 넣어(100행) 아래 행이 잘려 보였다. 다른 데이터 탭은 표 안쪽 스크롤이 없고 표 아래 `de-pagination`에 `_renderPageNums` 네비게이터를 둔다.
 - 수정: 안쪽 스크롤과 위쪽 ◀▶ 버튼을 없애고 Joint Master와 같은 `de-pagination`(`Total N ISO` + ‹ 1 2 3 … N ›)을 표 아래에 둠. 행 수는 `JM_PAGE_SIZE`(30)를 그대로 써서 다른 탭과 맞춘다. 필터·정렬을 바꾸면 1페이지로 돌아가고, 결과가 줄어 페이지가 넘치면 마지막 페이지로 당긴다.
 - 인쇄: 화면은 페이지 단위지만 Print 버튼(`isoPrint`)은 인쇄하는 동안만 필터된 전체 행을 펼치고 끝나면 되돌린다(Joint Master가 인쇄 때 전체를 읽어 오는 것과 같은 취지).
+
+## 2026-11-08 삭제 — Joint Master의 Bulk Update 패널과 `/api/joints/bulk-date`
+- 사용자 지시("Bulk Update 항목은 별도 필요 없음", 삭제 선택). 이 패널은 이번 세션이 만든 것이 아니라 2026-05-03부터 있던 기능이고, 9월 26일 JM 검색 지연 대응 때 서버 일괄 저장 API(`bulk-date`)가 붙었다. ISO Status 행에서 Joint Master로 넘어오면 검색창에 ISO가 채워져 이 패널이 자동으로 열려 눈에 띄었다.
+- 제거: index.html 패널, dashboard.js의 `updateIsoBulkPanel`·`_bulkSetDate`·`applyIsoBulkDate`·`clearIsoBulkDate`·`_autoRefreshKpi`(이 함수들만 쓰던 alias), app.py의 `/api/joints/bulk-date`와 `_BULK_DATE_*` 상수, `scratch/test_bulk_date.py`. 이제 용접일은 행마다 입력·저장(PATCH)한다.
+- 남긴 것: **Support Master의 같은 Bulk Update 패널**(`sm-iso-bulk-panel`, `applySmBulkDate`, `clearSmBulkDate`)은 요청 범위 밖이라 그대로 둠 — 필요 없으면 별도로 지시받아 지운다. 매뉴얼의 "Bulk Updates" 절은 Support Master 기준 문구로 고침.
+- 앞선 기록의 "bulk-date" 언급(09-26 일괄 저장, `_update_tp_status_cache` 호출 지점 등)은 당시 이력이며 지금은 존재하지 않는다.
