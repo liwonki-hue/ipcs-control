@@ -67,7 +67,7 @@ def test_multiple_sub_areas_are_shown_together():
     res = analyze([make(id=1, sub_area="MB STR"), make(id=2, sub_area="PR #3"), make(id=3, sub_area="PR #3"), make(id=4, iso_drawing="ISO-2", sub_area="PR #4"),
                    make(id=5, iso_drawing="ISO-3", sub_area="")])
     by = {r["iso"]: r for r in res["isos"]}
-    assert by["ISO-1"]["sub_area"] == "MB STR / PR #3" and by["ISO-1"]["sub_areas"] == ["MB STR", "PR #3"]   # 정렬된 순서로 모두 표기
+    assert by["ISO-1"]["sub_area"] == "MB STR/PR #3" and by["ISO-1"]["sub_areas"] == ["MB STR", "PR #3"]   # 정렬된 순서로 모두 표기(공백 없이 /로 이음)
     assert by["ISO-2"]["sub_area"] == "PR #4" and by["ISO-2"]["sub_areas"] == ["PR #4"]
     assert by["ISO-3"]["sub_area"] == "" and by["ISO-3"]["sub_areas"] == []
     assert "(multi)" not in str(by["ISO-1"]["sub_area"])

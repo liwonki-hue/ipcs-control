@@ -309,6 +309,6 @@
 - 검증: 필터 결과 수가 데이터에서 직접 센 값과 일치(AS-001 75, CCW-001 76, CCW-002 42, No Package 3,465), System+Package 동시 필터 정상, 1024·1280 폭에서도 필터 줄이 한 줄이고 문서 스크롤 0px.
 
 ## 2026-11-08 ISO Status — Sub Area가 여러 개면 모두 표기
-- 요청: Sub Area가 `(multi)`일 때 `PR #3 / MB STR`처럼 둘 다 표기. 서버가 `sub_area`를 정렬된 값의 ` / ` 연결 문자열로 보내고(177개 ISO), 필터용 목록 `sub_areas`도 함께 보낸다. **필터·드롭다운은 문자열이 아니라 `sub_areas` 목록을 쓴다** — 그래서 두 Sub Area에 걸친 ISO는 각 Sub Area 필터에 모두 나오고, 드롭다운에는 `A / B` 같은 합친 값이 없다(41개 기본값). System·Rev·Package는 여전히 여러 개면 `(multi)`(요청 범위 밖).
+- 요청: Sub Area가 `(multi)`일 때 `PR #3 / MB STR`처럼 둘 다 표기. 서버가 `sub_area`를 정렬된 값의 `/` 연결 문자열로 보내고(177개 ISO; 처음엔 ` / `였으나 폭이 부족하면 공백을 없애라는 지시로 `PR #3/PWPS` 형태로 바꿈), 필터용 목록 `sub_areas`도 함께 보낸다. **필터·드롭다운은 문자열이 아니라 `sub_areas` 목록을 쓴다** — 그래서 두 Sub Area에 걸친 ISO는 각 Sub Area 필터에 모두 나오고, 드롭다운에는 `A / B` 같은 합친 값이 없다(41개 기본값). System·Rev·Package는 여전히 여러 개면 `(multi)`(요청 범위 밖).
 - 따라서 정렬 키 `sub_area`는 합친 문자열 기준. Data Quality의 `iso_multi_sub_area`(정보 수준)는 그대로.
 - 곁다리 수정: 전역 CSS(`.data-table td { white-space: normal }`)가 ISO 표 셀을 줄바꿈 허용으로 덮어써서, 열이 좁아지면 Last Weld 날짜가 두 줄로 꺾여 행 높이가 들쭉날쭉했다. `#isoTable td { white-space: nowrap }`로 표 전체를 한 줄 고정하고 열 너비를 다시 나눴다(ISO 16%, Sys 5%, Sub Area 12%, Package 11%, Welded 8%, Last Weld 7%, Status 11%, 표 최소폭 1280px). 1696×830에서 기본/Sub Area/System 필터 4가지 경우 모두 잘린 셀 0개, 행 높이 23~24px 일정.
