@@ -2722,7 +2722,7 @@ def _update_tp_status_cache(ids):
         _clear_tp_status_cache()
 
 
-_TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,date_completed,welder,vt_date,vt_result,"
+_TP_JOINT_COLS = ("id,system,package,iso_drawing,joint_no,size_inch,date_completed,welder,vt_date,vt_result,"
                   "inspection,mt_date,mt_result,pt_date,pt_result,"
                   "rt_date,rt_result,rt_finding,rt_2_date,rt_2_result,pwht,pwht_date,pwht_result")
 # 완료 판정(_joint_accepted)에 쓰는 칸만. 전체 스캔은 이 칸 + id만 읽어 메모리를 줄인다.

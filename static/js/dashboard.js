@@ -3156,7 +3156,7 @@ async function loadTestPkgMaster() {
     const system = document.getElementById("tp-system")?.value  || "";
     const status = document.getElementById("tp-status")?.value  || "";
     const offset = tpCurrentPage * _tpFit.size;
-    _tableLoading("tpBody", 18);
+    _tableLoading("tpBody", 19);
     try {
         const tpSys = document.getElementById("tp-system");
         if (tpSys && tpSys.options.length <= 1) (metaData.systems||[]).forEach(s => tpSys.add(new Option(s,s)));
@@ -3204,7 +3204,7 @@ function _tpResultBadge(result) {
 function renderTPTable(rows) {
     const tbody = document.getElementById("tpBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="18" style="text-align:center;color:var(--text-dim);padding:20px">No data. Select a Package filter or click the Sync Phase/Pkg button.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="19" style="text-align:center;color:var(--text-dim);padding:20px">No data. Select a Package filter or click the Sync Phase/Pkg button.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -3225,6 +3225,7 @@ function renderTPTable(rows) {
           <td style="color:var(--indigo)">${esc(r.package||"")}</td>
           <td style="font-size:11px" title="${esc(r.iso_drawing||"")}">${esc(r.iso_drawing||"")}</td>
           <td style="text-align:center">${esc(r.joint_no||"")}</td>
+          <td style="text-align:center">${r.size_inch ?? "-"}</td>
           <td style="text-align:center;color:var(--accent)">${weldDate?weldDate.slice(2):"-"}</td>
           <td style="padding:2px;text-align:center">
             <select class="cell-input" id="tp-insp-${r.id}" style="width:100%;box-sizing:border-box;padding:3px 2px;text-align:center;text-align-last:center;font-size:11px;cursor:${vtLocked?'not-allowed':'pointer'}" ${vtLockAttrs}>
