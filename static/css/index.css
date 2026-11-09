@@ -503,5 +503,5 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* Daily Report의 By Material 표는 행 높이를 28px로 둔다(Daily Summary와 높이를 맞춘다) */
 #page-daily_report #drMaterialTable td { height: 28px; }
 
-/* EP 탭 System·Sub Area 표의 전체 높이를 360px 이상으로 둔다(행은 남는 높이만큼 늘어난다) */
-.ep-equal-tables > .panel table { min-height: 360px; }
+/* EP 탭 System·Sub Area 표의 전체 높이를 370px 이상으로 둔다(행은 남는 높이만큼 늘어난다) */
+.ep-equal-tables > .panel table { min-height: 370px; }
