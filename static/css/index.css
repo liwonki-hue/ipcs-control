@@ -477,6 +477,8 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 
 /* 행 높이를 Joint Master(입력칸 28px + 여백 = 약 36px)와 같게 맞춘다. 글이 줄바꿈되어 더 높아지는 행은 그대로 둔다 */
 .data-table td { height: 36px; }
+/* 머리글 행: 본문 행(36px)보다 낮게, 한 줄 머리글이 답답하지 않을 높이. 두 줄로 줄바꿈되는 머리글은 그대로 더 높아진다 */
+.data-table th { height: 30px; }
 
 /* ISO Status 표 여백: 전역 규칙은 화면 폭 1600px 이하에서 셀 좌우 여백을 4px로 줄이므로 고정한다. 오른쪽 정렬 숫자 열은 옆 열과 붙어 보이지 않게 오른쪽 여백을 더 준다 */
 #isoTable td, #isoTable th { padding-left: 8px; padding-right: 8px; }
