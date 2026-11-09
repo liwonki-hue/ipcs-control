@@ -277,3 +277,13 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 3. 테스트 — pytest 192건(로컬, `.env` 없는 운영 환경 모두). 실데이터 42개 요청이 원래 기준과 차이 0건, 중앙값 0.99→0.48초. DB 컬럼 51,645행 전부 규칙과 일치. 화면(Joint Master 1~3페이지·NDE) 확인
 - [x] 4. commit — `6d83eb5` + 이 기록
 - [ ] 5. push 후 CI(Tests)·Render 배포 확인
+
+---
+
+# Checklist — finish (2026-11-09, ISO Status·Test Pkg Joint Check 행 높이 통일)
+
+- [x] 1. 임시 코드 제거 — 추가된 줄에 debug 출력·TODO 0건
+- [x] 2. 검토 — pyflakes 0건, 맨몸 `except:` 0곳, JS 문법 정상, 쓰지 않게 된 `--iso-pad` 로직 제거
+- [x] 3. 테스트 — pytest 192건 통과. 화면에서 ISO Status 39px / Test Pkg Joint Check 39.6~40px / Joint Master 38.8~39.2px, 페이지 스크롤 없음
+- [x] 4. commit — `497ff12` + 이 기록
+- [ ] 5. push 후 CI(Tests) 확인
