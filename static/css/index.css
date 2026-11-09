@@ -497,5 +497,8 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #epSysTableBody, #epAreaTableBody, #sysBreakdownBody, #subBreakdownBody { line-height: 1.2; }
 .ep-equal-tables thead th, .rg-ov-bottom thead th { height: 22px; padding-top: 2px; padding-bottom: 2px; }
 
-/* Overall Productivity 탭 표 행 높이를 20px로 줄인다(전역 36px 대신) */
-#page-weekly .data-table td { height: 20px; padding-top: 1px !important; padding-bottom: 1px !important; line-height: 1.2; }
+/* Overall Productivity·Daily Report 탭 표 행 높이를 23px로 줄인다(전역 36px 대신) */
+#page-weekly .data-table td, #page-daily_report .data-table td { height: 23px; padding-top: 1px !important; padding-bottom: 1px !important; line-height: 1.2; }
+
+/* Daily Report의 By Material 표는 행 높이를 28px로 둔다(Daily Summary와 높이를 맞춘다) */
+#page-daily_report #drMaterialTable td { height: 28px; }

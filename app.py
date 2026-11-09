@@ -3524,7 +3524,7 @@ def api_testpkg_sync():
         return jsonify({"ok": False, "error": _err_text(e)}), 500
 
 
-DAILY_REPORT_DAYS = 4      # Daily Report 표에 보여줄 최근 작업일 수 — Daily Summary와 By Material 표 높이를 맞추기 위해 4일
+DAILY_REPORT_DAYS = 5      # Daily Report 표에 보여줄 최근 작업일 수 — Daily Summary와 By Material 표 높이를 맞추기 위해 5일
 
 
 def _compute_daily_report():
