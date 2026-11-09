@@ -471,9 +471,12 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* 주간 Breakdown 표: 날짜는 패널 제목에 표시하고 칸은 숨김(엑셀 내보내기용으로 DOM에는 유지) */
 .bd-date { display:none; }
 
-/* ISO Status: 표에 더 많은 높이를 준다(네비게이터 여백 축소) + 남는 높이를 행 여백으로 채운다(--iso-pad, iso_tools.js의 isoFit이 정함) */
+/* ISO Status: 표에 더 많은 높이를 준다(네비게이터 여백 축소) */
 #page-iso_status .de-pagination, #page-data_quality .de-pagination, #page-joint_master .de-pagination, #page-support_master .de-pagination, #page-nde_pwht .de-pagination, #page-testpkg_master .de-pagination, #page-test_master .de-pagination { padding: 6px 0; margin-top: 6px; min-height: 36px; }
-#isoTable td { white-space: nowrap; padding-top: calc(4px + var(--iso-pad, 0px)); padding-bottom: calc(4px + var(--iso-pad, 0px)); }   /* 전역 규칙이 td를 줄바꿈 허용으로 덮어써서 행 높이가 들쭉날쭉해지는 것을 막는다 */
+#isoTable td { white-space: nowrap; }   /* 전역 규칙이 td를 줄바꿈 허용으로 덮어써서 행 높이가 들쭉날쭉해지는 것을 막는다 */
+
+/* 행 높이를 Joint Master(입력칸 28px + 여백 = 약 39px)와 같게 맞춘다. 글이 줄바꿈되어 더 높아지는 행은 그대로 둔다 */
+#isoTable td, #tpTable td { height: 39px; }
 
 /* ISO Status 표 여백: 전역 규칙은 화면 폭 1600px 이하에서 셀 좌우 여백을 4px로 줄이므로 고정한다. 오른쪽 정렬 숫자 열은 옆 열과 붙어 보이지 않게 오른쪽 여백을 더 준다 */
 #isoTable td, #isoTable th { padding-left: 8px; padding-right: 8px; }

@@ -156,20 +156,8 @@ function isoFit() {
         if (scroller) scroller.scrollTop = 0;
         window.scrollTo(0, 0);
         const pager = page.querySelector(".de-pagination");
-        const table = document.getElementById("isoTable");
-        table.style.setProperty("--iso-pad", "0px");                     // 행 높이를 기본값으로 재기 위해 먼저 걷어 둔다
         const limit = () => window.innerHeight - _gapBelow(pager);        // 네비게이터 아래에 실제로 깔리는 여백만 남긴다(문서 스크롤이 생기지 않게)
         _fitRows(document.getElementById("iso-body"), pager, limit, () => _iso.size, v => { _iso.size = v; }, _isoDraw);
-        // 한 행 미만으로 남은 높이는 행의 위아래 여백으로 나눠 표가 아래까지 채워지게 한다(페이지가 꽉 찼을 때만)
-        const rows = document.getElementById("iso-body").rows.length;
-        if (rows && rows >= _iso.size) {
-            let pad = Math.min(6, Math.floor((limit() - pager.getBoundingClientRect().bottom) / rows / 2));
-            for (; pad > 0; pad--) {
-                table.style.setProperty("--iso-pad", pad + "px");
-                if (pager.getBoundingClientRect().bottom <= limit()) break;
-            }
-            if (pad <= 0) table.style.setProperty("--iso-pad", "0px");
-        }
     } finally { _iso.fitting = false; }
 }
 
