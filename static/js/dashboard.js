@@ -3499,7 +3499,7 @@ function renderTMTable(data) {
         const op = pw * 0.7 + sp * 0.3;
         const mU = (r.method||"").toUpperCase();
         const mdU = (r.media||"").toUpperCase();
-        const readinessCell = `<div style="padding:3px 8px">
+        const readinessCell = `<div style="padding:0 8px">
             <div style="font-size:11px;font-weight:400;color:#3b82f6;text-align:center;margin-bottom:4px;font-family:'DM Mono',monospace">${op.toFixed(1)}%</div>
             <div style="display:flex;gap:2px;margin:0 2px">
                 <div style="flex:7;height:3px;background:#e2e8f0;border-radius:2px;overflow:hidden" title="Piping welded ${pw.toFixed(1)}%">
