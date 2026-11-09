@@ -491,3 +491,8 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #jmTable thead th:last-child, #smTable thead th:last-child, #tmTable thead th:last-child,
 #ndeTable thead tr:first-child th:last-child { z-index: 3; background: #f8fafc; }
 #jmTable td:last-child, #smTable td:last-child, #ndeTable td:last-child, #tmTable td:last-child { z-index: 2; }
+
+/* EP 탭·Overview의 System·Sub Area 표는 행이 많아도 한 화면에 들어가게 전역 행 높이(36px)보다 낮게 둔다 */
+#epSysTableBody td, #epAreaTableBody td, #sysBreakdownBody td, #subBreakdownBody td { height: 17px; padding-top: 1px !important; padding-bottom: 1px !important; }
+#epSysTableBody, #epAreaTableBody, #sysBreakdownBody, #subBreakdownBody { line-height: 1.2; }
+.ep-equal-tables thead th, .rg-ov-bottom thead th { height: 22px; padding-top: 2px; padding-bottom: 2px; }
