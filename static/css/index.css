@@ -483,3 +483,11 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* ISO Status 표 여백: 전역 규칙은 화면 폭 1600px 이하에서 셀 좌우 여백을 4px로 줄이므로 고정한다. 오른쪽 정렬 숫자 열은 옆 열과 붙어 보이지 않게 오른쪽 여백을 더 준다 */
 #isoTable td, #isoTable th { padding-left: 8px; padding-right: 8px; }
 #isoTable .iso-num { text-align: right; padding-right: 16px; }
+
+/* 입력 표(Joint·Support·NDE·Test Pkg Joint Check)는 화면이 좁아 가로로 넘쳐도 Action 열(Save/Del)을 오른쪽에 붙여 항상 보이게 한다 */
+#jmTable td:last-child, #smTable td:last-child, #ndeTable td:last-child, #tmTable td:last-child,
+#jmTable thead th:last-child, #smTable thead th:last-child, #tmTable thead th:last-child,
+#ndeTable thead tr:first-child th:last-child { position: sticky; right: 0; background: var(--panel); box-shadow: -6px 0 6px -6px rgba(15,23,42,0.25); }
+#jmTable thead th:last-child, #smTable thead th:last-child, #tmTable thead th:last-child,
+#ndeTable thead tr:first-child th:last-child { z-index: 3; background: #f8fafc; }
+#jmTable td:last-child, #smTable td:last-child, #ndeTable td:last-child, #tmTable td:last-child { z-index: 2; }

@@ -3053,7 +3053,7 @@ function smGoto(page) { smCurrentPage = Math.max(0, page); loadSupportMaster(); 
 function renderSMTable(rows) {
     const tbody = document.getElementById("smBody");
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:var(--text-dim);padding:20px">No data.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:var(--text-dim);padding:20px">No data.</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -3063,7 +3063,6 @@ function renderSMTable(rows) {
           <td><input class="cell-input" id="sm-pkg-${r.id}" type="text" value="${esc(r.package||"")}" style="text-align:center"></td>
           <td>${esc(r.unit||"")}</td>
           <td>${esc(r.system||"")}</td>
-          <td>${esc(r.area||"")}</td>
           <td>${esc(r.sub_area||"")}</td>
           <td>${esc(r.support_drawing||"")}</td>
           <td style="text-align:center">${esc(r.type||"")}</td>

@@ -9,7 +9,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/css/index.css?v=7.29">
+<link rel="stylesheet" href="/static/css/index.css?v=7.30">
 </head>
 <body>
 
@@ -38,10 +38,10 @@
   <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Joint Check</button>
   <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Pkg Register</button>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=testpackage" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#9998;</span> Test Package PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
-  <div class="nav-section">Check</div>
-  <button class="nav-btn" data-page="data_quality" onclick="navigate('data_quality')"><span class="nav-icon">&#128270;</span> Data Quality</button>
   <div class="nav-section">Report</div>
   <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon">&#128203;</span> Daily Report</button>
+  <div class="nav-section">Check</div>
+  <button class="nav-btn" data-page="data_quality" onclick="navigate('data_quality')"><span class="nav-icon">&#128270;</span> Data Quality</button>
   <div class="nav-section">Link</div>
   <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128196;</span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128230;</span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
@@ -513,22 +513,21 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="smTable" style="width:100% !important; min-width:1470px !important; table-layout:fixed !important;">
+          <table class="data-table" id="smTable" style="width:100% !important; min-width:1115px !important; table-layout:fixed !important;">
             <thead>
               <tr>
-                <th style="width:90px">PHASE</th>
-                <th style="width:160px">PACKAGE</th>
+                <th style="width:75px">PHASE</th>
+                <th style="width:140px">PACKAGE</th>
                 <th style="width:40px">UNIT</th>
-                <th style="width:80px">SYSTEM</th>
-                <th style="width:80px">AREA</th>
-                <th style="width:100px">SUB AREA</th>
-                <th style="width:175px">SUPPORT DRAWING</th>
-                <th style="width:110px">TYPE</th>
+                <th style="width:60px">SYSTEM</th>
+                <th style="width:80px">SUB AREA</th>
+                <th style="width:130px">SUPPORT DRAWING</th>
+                <th style="width:80px">TYPE</th>
                 <th style="width:45px">REV</th>
-                <th style="width:200px">ISO DRAWING</th>
-                <th style="width:180px">LINE NO</th>
-                <th style="width:90px">WORK DATE</th>
-                <th style="width:120px">ACTION</th>
+                <th style="width:150px">ISO DRAWING</th>
+                <th style="width:135px">LINE NO</th>
+                <th style="width:85px">WORK DATE</th>
+                <th style="width:95px">ACTION</th>
               </tr>
             </thead>
             <tbody id="smBody"></tbody>
@@ -565,9 +564,9 @@
           </div>
         </div>
         <div class="table-wrap">
-          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1412px !important; table-layout:fixed !important;">
+          <table class="data-table" id="ndeTable" style="width:100% !important; min-width:1497px !important; table-layout:fixed !important;">
             <!-- fixed 표는 첫 줄 머리글 너비만 쓰는데 Finding은 둘째 줄에 있어 무시됐다 → colgroup으로 칸 너비 지정 -->
-            <colgroup><col style="width:235px"><col style="width:56px"><col style="width:70px"><col style="width:165px"><col style="width:46px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:140px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:61px"><col style="width:90px"></colgroup>
+            <colgroup><col style="width:235px"><col style="width:56px"><col style="width:70px"><col style="width:165px"><col style="width:46px"><col style="width:78px"><col style="width:61px"><col style="width:78px"><col style="width:61px"><col style="width:78px"><col style="width:61px"><col style="width:140px"><col style="width:78px"><col style="width:61px"><col style="width:78px"><col style="width:61px"><col style="width:90px"></colgroup>
             <thead>
               <tr>
                 <th rowspan="2" style="width:235px">ISO Drawing No</th>
@@ -863,7 +862,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=8.04"></script>
+<script defer src="/static/js/dashboard.js?v=8.05"></script>
 <script defer src="/static/js/iso_tools.js?v=25"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
