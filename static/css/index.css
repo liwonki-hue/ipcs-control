@@ -502,3 +502,6 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 
 /* Daily Report의 By Material 표는 행 높이를 28px로 둔다(Daily Summary와 높이를 맞춘다) */
 #page-daily_report #drMaterialTable td { height: 28px; }
+
+/* EP 탭 맨 아래 표와 화면 하단 사이에 여백 15px을 둔다 */
+#page-early_power { padding-bottom: 15px; }
