@@ -25,7 +25,7 @@ function applyAuthUI(role) {
   const authLabel = document.getElementById('authUserLabel');
   if (signInBtn) signInBtn.style.display = role ? 'none' : '';
   if (authBadge) authBadge.style.display = role ? 'flex' : 'none';
-  if (authLabel) authLabel.textContent = role ? ('👤 ' + role) : '';
+  if (authLabel) authLabel.textContent = role ? role : '';
 }
 
 async function checkAuthStatus() {
@@ -194,7 +194,7 @@ async function getDashData(forceRefresh=false) {
                 let body = {};
                 try { body = await res.json(); } catch(_) {}
                 const msg = body.message || "Cache build failed. Auto-retrying...";
-                _updateLoader(`⚠ ${msg} (${elapsed}s)`);
+                _updateLoader(`${msg} (${elapsed}s)`);
                 await new Promise(r => setTimeout(r, 15000));
                 continue;
             }
@@ -287,7 +287,7 @@ function showLoader(show, msg) {
         el.style.display = "flex";
         el.style.pointerEvents = "auto";
         el.innerHTML = `
-          <div style="color:#ff5252;font-size:18px;margin-bottom:10px">&#9888; Load Failed</div>
+          <div style="color:#ff5252;font-size:18px;margin-bottom:10px">Load Failed</div>
           <div style="color:#e0e6ef;font-size:13px;text-align:center;max-width:480px;line-height:1.6">${msg}</div>
           <button onclick="location.reload()" style="margin-top:20px;padding:10px 28px;background:#2563eb;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;letter-spacing:0.04em">&#8635; Retry</button>
           <div style="color:#4a6080;font-size:11px;margin-top:10px">Press F5 or use the button above to retry</div>
@@ -1169,7 +1169,7 @@ async function loadSystems() {
             const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
             
             const unified = Math.round((p1 * 0.7) + (p2 * 0.2) + (p3 * 0.1));
-            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="cursor:help">⚠️</span>` : "";
+            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="cursor:help;color:#d97706"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg></span>` : "";
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
@@ -1229,7 +1229,7 @@ async function loadSubArea() {
             const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
             const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
             const unified = Math.round((p1 * 0.7) + (p2 * 0.2) + (p3 * 0.1));
-            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="color:#ffcc00">⚠️</span>` : "";
+            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="color:#d97706"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg></span>` : "";
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
@@ -2809,7 +2809,7 @@ async function drillWelder(welderId) {
     if (!panel) return;
     panel.style.display = "block";
 
-    document.getElementById("drill-welder-name").textContent  = `👷 ${welderId}`;
+    document.getElementById("drill-welder-name").textContent  = welderId;
     document.getElementById("drill-joints").textContent       = wInfo.joints;
     document.getElementById("drill-total-di").textContent     = fmtNum(wInfo.total_di, 1);
     document.getElementById("drill-working-days").textContent = wInfo.working_days || "-";

@@ -9,44 +9,44 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/css/index.css?v=7.45">
+<link rel="stylesheet" href="/static/css/index.css?v=7.46">
 </head>
 <body>
 
 <nav class="sidebar">
   <div class="sidebar-logo">
-    <div class="logo-icon">&#9889;</div>
+    <div class="logo-icon"><svg class="logo-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></div>
     <div class="logo-title">BOP PIPING DASHBOARD</div>
     <div class="logo-sub">CCGT PIPING PROGRESS</div>
   </div>
   <div class="nav-section">Monitoring</div>
-  <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon">&#128200;</span> Overview</button>
-  <button class="nav-btn" data-page="early_power" onclick="navigate('early_power')"><span class="nav-icon">&#9889;</span> Early Power</button>
-  <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon">&#128197;</span> Overall Productivity</button>
-  <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon">&#9881;</span> Systems &amp; Sub Area</button>
-  <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon">&#128200;</span> Unit / Area</button>
-  <button class="nav-btn" data-page="iso_status" onclick="navigate('iso_status')"><span class="nav-icon">&#128209;</span> ISO Status</button>
+  <button class="nav-btn active" data-page="overview" onclick="navigate('overview')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M8 17V9"/><path d="M13 17V5"/><path d="M18 17v-6"/></svg></span> Overview</button>
+  <button class="nav-btn" data-page="early_power" onclick="navigate('early_power')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg></span> Early Power</button>
+  <button class="nav-btn" data-page="weekly" onclick="navigate('weekly')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span> Overall Productivity</button>
+  <button class="nav-btn" data-page="systems" onclick="navigate('systems')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 12 10 5 10-5"/><path d="m2 17 10 5 10-5"/></svg></span> Systems &amp; Sub Area</button>
+  <button class="nav-btn" data-page="unitarea" onclick="navigate('unitarea')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span> Unit / Area</button>
+  <button class="nav-btn" data-page="iso_status" onclick="navigate('iso_status')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg></span> ISO Status</button>
   <!-- 공사 순서: 시공(용접·서포트) → 품질(검사·PWHT·용접사) → 시험·인계(Test Package) -->
   <div class="nav-section">Construction</div>
-  <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon">&#128203;</span> Joint Master</button>
-  <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon">&#128295;</span> Support Master</button>
+  <button class="nav-btn" data-page="joint_master" onclick="navigate('joint_master')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg></span> Joint Master</button>
+  <button class="nav-btn" data-page="support_master" onclick="navigate('support_master')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z"/></svg></span> Support Master</button>
   <div class="nav-section">Quality</div>
-  <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon">&#128300;</span> NDE &amp; PWHT</button>
-  <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon">&#128269;</span> RT Quality Performance</button>
-  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon">&#128104;&#8205;&#128295;</span> Welder Performance</button>
+  <button class="nav-btn" data-page="nde_pwht" onclick="navigate('nde_pwht')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span> NDE &amp; PWHT</button>
+  <button class="nav-btn" data-page="rt_quality" onclick="navigate('rt_quality')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span> RT Quality Performance</button>
+  <button class="nav-btn" data-page="welder" onclick="navigate('welder')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span> Welder Performance</button>
   <div class="nav-section">Test &amp; Handover</div>
-  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon">&#127863;</span> Test Pkg Joint Check</button>
-  <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon">&#9989;</span> Test Pkg Register</button>
-  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=testpackage" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#9998;</span> Test Package PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <button class="nav-btn" data-page="testpkg_master" onclick="navigate('testpkg_master')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></svg></span> Test Pkg Joint Check</button>
+  <button class="nav-btn" data-page="test_master" onclick="navigate('test_master')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 17 2 2 4-4M3 7l2 2 4-4M13 6h8M13 12h8M13 18h8"/></svg></span> Test Pkg Register</button>
+  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com/?tab=testpackage" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.85 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg></span> Test Package PID <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <div class="nav-section">Report</div>
-  <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon">&#128203;</span> Daily Report</button>
+  <button class="nav-btn" data-page="daily_report" onclick="navigate('daily_report')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></svg></span> Daily Report</button>
   <div class="nav-section">Check</div>
-  <button class="nav-btn" data-page="data_quality" onclick="navigate('data_quality')"><span class="nav-icon">&#128270;</span> Data Quality</button>
+  <button class="nav-btn" data-page="data_quality" onclick="navigate('data_quality')"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg></span> Data Quality</button>
   <div class="nav-section">Link</div>
-  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128196;</span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
-  <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128230;</span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
-  <a class="nav-btn" href="https://ipcs-project.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128197;</span> Schedule <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
-  <a class="nav-btn" href="https://ccgt-pms.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon">&#128202;</span> PMS <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <a class="nav-btn" href="https://ipcs-drawing-v1.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg></span> Drawing <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <a class="nav-btn" href="https://ipcs-material.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.5 4.27 9 5.15M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="m3.3 7 8.7 5 8.7-5M12 22V12"/></svg></span> Material <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <a class="nav-btn" href="https://ipcs-project.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span> Schedule <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
+  <a class="nav-btn" href="https://ccgt-pms.onrender.com" target="_blank" rel="noopener" style="display:flex;align-items:center;text-decoration:none;"><span class="nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18"/><path d="M8 17V9"/><path d="M13 17V5"/><path d="M18 17v-6"/></svg></span> PMS <span style="margin-left:auto;font-size:9px;opacity:0.5;">&#8599;</span></a>
   <div class="nav-footer">
 <div class="nav-version">ICK-DPGU-PIPING v2.0</div>
   </div>
@@ -55,7 +55,7 @@
 <div class="main-area">
   <header class="top-header">
     <div>
-      <div class="header-title">&#9889; TRUKISTAN CCGT BOP PIPING DASHBOARD</div>
+      <div class="header-title">TRUKISTAN CCGT BOP PIPING DASHBOARD</div>
       <div class="header-sub">DOOSAN ENERBILITY &middot; LLP INTEGRA CONSTRUCTION KZ &middot; KAZAKHSTAN CCGT</div>
     </div>
     <div class="header-right">
@@ -83,7 +83,7 @@
 
   <div class="page-body">
     <div class="page hidden" id="page-overview">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div><div style="margin-left:auto;display:flex;gap:8px;align-items:center"><button id="signInBtn" onclick="openSignInModal()" style="padding:4px 12px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer">Sign In</button><span id="authUserBadge" style="display:none;font-size:11px;color:#94a3b8;align-items:center;gap:6px"><span id="authUserLabel"></span><button onclick="doLogout()" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid #475569;color:#94a3b8;border-radius:4px;cursor:pointer">Sign Out</button></span><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('overview')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overview</div><div style="margin-left:auto;display:flex;gap:8px;align-items:center"><button id="signInBtn" onclick="openSignInModal()" style="padding:4px 12px;font-size:11px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer">Sign In</button><span id="authUserBadge" style="display:none;font-size:11px;color:#94a3b8;align-items:center;gap:6px"><span id="authUserLabel"></span><button onclick="doLogout()" style="padding:2px 8px;font-size:10px;background:transparent;border:1px solid #475569;color:#94a3b8;border-radius:4px;cursor:pointer">Sign Out</button></span><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportSystemBreakdown()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('overview')">Print</button></div></div>
       <div class="grid-3">
         <div class="col">
           <div class="panel"><div class="panel-title">Overall Piping Progress</div><div class="gauge-wrap"><svg viewBox="0 0 200 120" class="gauge-svg"><path d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#e2e8f0" stroke-width="14" stroke-linecap="round"/><path id="gaugePath" d="M16,110 A84,84,0,0,1,184,110" fill="none" stroke="#f59e0b" stroke-width="14" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9"/><text id="gaugeText" x="100" y="92" text-anchor="middle" class="gauge-pct">0%</text><text x="100" y="110" text-anchor="middle" class="gauge-label">PIPING PROGRESS</text></svg></div><div class="stat-list" id="overviewStats"></div></div>
@@ -143,7 +143,7 @@
     </div>
 
     <div class="page hidden" id="page-early_power">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (GT #11 Only)<span style="font-size:12px;color:#ef4444;font-weight:700;margin-left:14px">Target Date: 2026-12-22</span></div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportEPExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('early_power')">&#128424; Print</button><button class="btn-de btn-de-report" style="padding:4px 10px;font-size:11px" onclick="epReport()">&#128196; Report</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Early Power (GT #11 Only)<span style="font-size:12px;color:#ef4444;font-weight:700;margin-left:14px">Target Date: 2026-12-22</span></div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportEPExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('early_power')">Print</button><button class="btn-de btn-de-report" style="padding:4px 10px;font-size:11px" onclick="epReport()">Report</button></div></div>
       <!-- Top row: Gauge + S-Curve -->
       <div class="rg-ep-main" style="margin-bottom:12px">
         <div class="ep-gauge-col">
@@ -191,13 +191,13 @@
     <div class="page hidden" id="page-systems">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Systems &amp; Sub Area</div></div>
       <div class="grid-2">
-        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">System Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('system')">&#11015; Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">&#128424; Print</button></div></div><div id="systemBars" class="scroll-list" style="max-height:600px"></div></div>
-        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">Sub Area Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('subarea')">&#11015; Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">&#128424; Print</button></div></div><div id="subareaBars" class="scroll-list" style="max-height:600px"></div></div>
+        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">System Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('system')">Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">Print</button></div></div><div id="systemBars" class="scroll-list" style="max-height:600px"></div></div>
+        <div class="panel"><div class="panel-title" style="display:flex;align-items:center;gap:10px">Sub Area Progress (Actual DI)<div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" onclick="exportSystemsExcel('subarea')">Export</button><button class="btn-de btn-de-print" onclick="printPage('systems')">Print</button></div></div><div id="subareaBars" class="scroll-list" style="max-height:600px"></div></div>
       </div>
     </div>
 
     <div class="page hidden" id="page-weekly">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overall Productivity</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWeeklyExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('weekly')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Overall Productivity</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWeeklyExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('weekly')">Print</button></div></div>
 
       <!-- Row 1: Daily Trend + Weekly Trend + Monthly Trend -->
       <div class="rg3">
@@ -245,7 +245,7 @@
     </div>
 
     <div class="page hidden" id="page-unitarea">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Unit / Area Progress</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportUnitAreaExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('unitarea')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Unit / Area Progress</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportUnitAreaExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('unitarea')">Print</button></div></div>
       <div class="panel" style="margin-bottom:14px"><div class="panel-title">Unit Progress %</div><div id="unitCards" class="grid-4" style="gap:14px"></div></div>
       <div class="panel" style="margin-bottom:14px"><div class="panel-title">Area Progress % (MB#1, MB#2, YARD, YD BLDG)</div><div id="areaCards" class="grid-4" style="gap:14px"></div></div>
       <div class="grid-2">
@@ -268,10 +268,10 @@
           <select id="jm-status" class="filter-sel" style="min-width:100px;"><option value="">Status</option><option value="completed">Completed</option><option value="pending">Not Completed</option></select>
           <select id="jm-inspection" class="filter-sel" style="min-width:100px;"><option value="">Inspection</option><option value="VT">VT</option><option value="MT">MT</option><option value="PT">PT</option><option value="RT">VT/RT</option></select>
           <select id="jm-pwht" class="filter-sel" style="min-width:80px;"><option value="">PWHT</option></select>
-          <button class="btn-primary" onclick="jmCurrentPage=0;loadJointMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="jmCurrentPage=0;loadJointMaster()" style="padding:6px 12px;">Search</button>
           <div style="display:flex; gap:6px; align-items:center; margin-left:auto;">
-            <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
-            <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
+            <button class="btn-de btn-de-export" onclick="exportJMExcel()" style="padding:5px 10px; font-size:11px;">Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('joint_master')" style="padding:5px 10px; font-size:11px;">Print</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -308,7 +308,7 @@
 
     
     <div class="page hidden" id="page-welder">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWelderExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('welder')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Welder Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportWelderExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('welder')">Print</button></div></div>
 
       <!-- KPI Cards -->
       <div class="panel" style="margin-bottom:10px">
@@ -395,7 +395,7 @@
 
     <!-- ═══════════ RT QUALITY PERFORMANCE ═══════════ -->
     <div class="page hidden" id="page-rt_quality">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">RT Quality Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportRTExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('rt_quality')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">RT Quality Performance</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportRTExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('rt_quality')">Print</button></div></div>
 
       <!-- KPI 카드 -->
       <div class="panel" style="margin-bottom:10px">
@@ -495,13 +495,13 @@
           <select id="sm-subarea" class="filter-sel" style="min-width:145px;"><option value="">Sub Area</option></select>
           <select id="sm-system" class="filter-sel" style="min-width:145px;"><option value="">System</option></select>
           <select id="sm-type" class="filter-sel" onchange="smCurrentPage=0;loadSupportMaster()" style="min-width:140px;"><option value="">Type</option><option value="Special">Special</option><option value="G">G</option><option value="W">W</option><option value="U">U</option><option value="GS">GS</option><option value="WS">WS</option><option value="US">US</option></select>
-          <button class="btn-primary" onclick="smCurrentPage=0;loadSupportMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="smCurrentPage=0;loadSupportMaster()" style="padding:6px 12px;">Search</button>
 
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
             <button class="btn-primary auth-write" style="background:#f59e0b; padding:5px 10px; font-size:11px;" onclick="syncSMPhasePackage()" title="Match Phase/Package from Joint Master by ISO Drawing">&#8635; Sync Phase/Pkg</button>
             <button class="btn-primary auth-admin" style="background:#7c3aed; padding:5px 10px; font-size:11px;" onclick="syncSMFromDrawing()" title="Update Type/Revision and add missing Support items based on Drawing DB">&#8635; Sync from Drawing</button>
-            <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
-            <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
+            <button class="btn-de btn-de-export" onclick="exportSMExcel()" style="padding:5px 10px; font-size:11px;">Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('support_master')" style="padding:5px 10px; font-size:11px;">Print</button>
           </div>
         </div>
         <div id="sm-iso-bulk-panel" style="display:none;margin-bottom:12px;padding:16px;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2);border-radius:12px;align-items:center;gap:15px">
@@ -556,11 +556,11 @@
             <option value="RT">VT/RT</option>
           </select>
           <input id="nde-welder" class="filter-sel" type="text" placeholder="Welder ID" oninput="ndeCurrentPage=0;debounced('nde',loadNdePwht)" style="width:120px;">
-          <button class="btn-primary" onclick="ndeCurrentPage=0;loadNdePwht()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="ndeCurrentPage=0;loadNdePwht()" style="padding:6px 12px;">Search</button>
           
           <div style="display:flex; gap:6px; align-items:center; margin-left: auto;">
-            <button class="btn-de btn-de-export" onclick="exportNDEExcel()" style="padding:5px 10px; font-size:11px;">&#11015; Export Excel</button>
-            <button class="btn-de btn-de-print" onclick="printPage('nde_pwht')" style="padding:5px 10px; font-size:11px;">&#128424; Print</button>
+            <button class="btn-de btn-de-export" onclick="exportNDEExcel()" style="padding:5px 10px; font-size:11px;">Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('nde_pwht')" style="padding:5px 10px; font-size:11px;">Print</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -621,10 +621,10 @@
             <option value="completed">Completed</option>
             <option value="pending">PENDING</option>
           </select>
-          <button class="btn-primary" onclick="tpCurrentPage=0;loadTestPkgMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="tpCurrentPage=0;loadTestPkgMaster()" style="padding:6px 12px;">Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
-            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
-            <button class="btn-de btn-de-print" onclick="printPage('testpkg_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
+            <button class="btn-de btn-de-export" onclick="exportTPExcel()" style="padding:5px 10px;font-size:11px;">Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('testpkg_master')" style="padding:5px 10px;font-size:11px;">Print</button>
           </div>
         </div>
         <div class="table-wrap" style="overflow-x:auto">
@@ -675,11 +675,11 @@
             <option value="pass">PASS</option>
             <option value="pending">Pending</option>
           </select>
-          <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">&#128269; Search</button>
+          <button class="btn-primary" onclick="tmCurrentPage=0;loadTestMaster()" style="padding:6px 12px;">Search</button>
           <div style="display:flex;gap:6px;align-items:center;margin-left:auto;">
             <button class="btn-primary auth-write" style="background:#f59e0b;padding:6px 12px;" onclick="syncTestMaster()" title="Auto-register package list from Pkg Master">&#8635; Sync from Pkg</button>
-            <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">&#11015; Export Excel</button>
-            <button class="btn-de btn-de-print" onclick="printPage('test_master')" style="padding:5px 10px;font-size:11px;">&#128424; Print</button>
+            <button class="btn-de btn-de-export" onclick="exportTMExcel()" style="padding:5px 10px;font-size:11px;">Export Excel</button>
+            <button class="btn-de btn-de-print" onclick="printPage('test_master')" style="padding:5px 10px;font-size:11px;">Print</button>
           </div>
         </div>
         <div class="table-wrap" style="overflow-x:auto">
@@ -716,8 +716,8 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">ISO Status</div>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <span id="iso-updated" style="font-size:11px;color:var(--text-dim)"></span>
-          <button class="btn-de btn-de-export" onclick="exportIsoStatus()" style="padding:5px 10px;font-size:11px">&#11015; Export Excel</button>
-          <button class="btn-de btn-de-print" onclick="isoPrint()" style="padding:5px 10px;font-size:11px">&#128424; Print</button>
+          <button class="btn-de btn-de-export" onclick="exportIsoStatus()" style="padding:5px 10px;font-size:11px">Export Excel</button>
+          <button class="btn-de btn-de-print" onclick="isoPrint()" style="padding:5px 10px;font-size:11px">Print</button>
         </div>
       </div>
       <div class="panel">
@@ -769,7 +769,7 @@
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Data Quality</div>
         <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
           <span id="dq-updated" style="font-size:11px;color:var(--text-dim)"></span>
-          <button class="btn-de btn-de-print" onclick="printPage('data_quality')" style="padding:5px 10px;font-size:11px">&#128424; Print</button>
+          <button class="btn-de btn-de-print" onclick="printPage('data_quality')" style="padding:5px 10px;font-size:11px">Print</button>
         </div>
       </div>
       <div class="panel">
@@ -781,7 +781,7 @@
 
     <!-- ═══════════ DAILY REPORT ═══════════ -->
     <div class="page hidden" id="page-daily_report">
-      <div class="page-header"><div class="page-bar"></div><div class="page-title">Daily Report</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportDailyReportExcel()">&#11015; Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('daily_report')">&#128424; Print</button></div></div>
+      <div class="page-header"><div class="page-bar"></div><div class="page-title">Daily Report</div><div style="margin-left:auto;display:flex;gap:8px"><button class="btn-de btn-de-export" style="padding:4px 10px;font-size:11px" onclick="exportDailyReportExcel()">Export Excel</button><button class="btn-de btn-de-print" style="padding:4px 10px;font-size:11px" onclick="printPage('daily_report')">Print</button></div></div>
 
       <!-- Row 1: Daily Summary (left) + By Material (right) -->
       <div class="rg-dr-top" style="margin-bottom:14px;align-items:stretch">
@@ -863,7 +863,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=8.07"></script>
+<script defer src="/static/js/dashboard.js?v=8.08"></script>
 <script defer src="/static/js/iso_tools.js?v=25"></script>
 <!-- Sign In Modal -->
 <div id="signInModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center">
