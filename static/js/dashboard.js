@@ -4027,8 +4027,9 @@ function renderDrBreakdown(date) {
     const mkRows = arr => arr.map((r, i) => {
         const sp = r.supp_special || 0, ty = r.supp_typical || 0;
         const first = i === 0 || arr[i - 1].sub_area !== r.sub_area;
+        const span = first ? arr.filter(x => x.sub_area === r.sub_area).length : 0;
         return `<tr${first && i ? ' style="border-top:1px solid var(--border2)"' : ""}>
-        <td style="color:var(--accent)">${first ? esc(r.sub_area || "") : ""}</td>
+        ${first ? `<td rowspan="${span}" style="color:var(--accent);vertical-align:middle;background:var(--panel)">${esc(r.sub_area || "")}</td>` : ""}
         <td style="color:var(--accent)">${esc(r.system || "")}</td>
         <td>${fmtNum(r.fab_di || 0, 1)}</td>
         <td>${fmtNum(r.erect_di || 0, 1)}</td>
