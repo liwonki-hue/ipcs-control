@@ -3637,7 +3637,7 @@ def _compute_daily_report():
         ]:
             if label not in bd[mk]:
                 bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
-            if mk == "ss":
+            if mk in ("ss", "sub"):
                 bd[mk][label].setdefault("welders", set()).update(
                     w.strip() for w in (j.get("welder") or "").split("/") if w.strip())
             bd[mk][label]["completed_di"] += di
@@ -3667,12 +3667,12 @@ def _compute_daily_report():
             key=lambda x: x[key_field]
         )
 
-    def _ss_list(mapping, supp):       # Sub Area 기준 → 그 안의 System별 행
+    def _ss_list(mapping, supp, sub_map):       # Sub Area 기준 → 그 안의 System별 행. welders는 Sub Area 전체 투입 용접사 수
         return [{"sub_area": k[0], "system": k[1],
                  "fab_di": round(v["fab_di"], 1),
                  "erect_di": round(v["erect_di"], 1),
                  "completed_di": round(v["completed_di"], 1),
-                 "welders": len(v.get("welders", ())),
+                 "welders": len(sub_map.get(k[0], {}).get("welders", ())),
                  "supp_special": supp.get(k, {}).get("special", 0),
                  "supp_typical": supp.get(k, {}).get("typical", 0)}
                 for k, v in sorted(mapping.items())]
@@ -3681,7 +3681,7 @@ def _compute_daily_report():
     for dc in last_days:
         bd = breakdowns[dc]
         breakdowns_out[dc] = {
-            "sub_systems": _ss_list(bd["ss"], supp_bd.get(dc, {}).get("ss", {})),
+            "sub_systems": _ss_list(bd["ss"], supp_bd.get(dc, {}).get("ss", {}), bd["sub"]),
             "welder_total": len(daily.get(dc, {}).get("welders", ())),
             "systems":   _to_list(bd["sys"], "system", supp_bd.get(dc, {}).get("sys")),
             "subareas":  _to_list(bd["sub"], "sub_area", supp_bd.get(dc, {}).get("sub")),
