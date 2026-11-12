@@ -3999,13 +3999,12 @@ async function loadDailyReport() {
 function renderDrBreakdown(date) {
     const bd = _drBreakdowns[date];
     if (!bd) return;
-    const { systems = [], subareas = [], materials = [] } = bd;
+    const { sub_systems = [], materials = [] } = bd;
 
     const label = date ? `[${date}]` : "";
     const drEl = id => document.getElementById(id);
     if (drEl("drMaterialTitle")) drEl("drMaterialTitle").textContent = `${label} Breakdown — By Material`;
-    if (drEl("drSystemTitle"))   drEl("drSystemTitle").textContent   = `${label} Breakdown — By System`;
-    if (drEl("drSubareaTitle"))  drEl("drSubareaTitle").textContent  = `${label} Breakdown — By Sub Area`;
+    if (drEl("drSubSysTitle"))   drEl("drSubSysTitle").textContent   = `${label} Breakdown — By Sub Area / System`;
 
     // 자재 표는 Piping만 (Support에는 자재 구분이 없다)
     const mkMatRows = arr => arr.map(r => `<tr>
@@ -4024,11 +4023,13 @@ function renderDrBreakdown(date) {
         </tr>`;
     };
 
-    // 계통·Sub Area 표 — PIPING (Fab/Erect/Done) + SUPPORT (Special/Typical/Done)를 한 표로
-    const mkRows = (arr, nameKey) => arr.map(r => {
+    // Sub Area 기준 System별 표 — Sub Area 이름은 그룹 첫 줄에만 보이고, 그룹 사이에 구분선을 둔다
+    const mkRows = arr => arr.map((r, i) => {
         const sp = r.supp_special || 0, ty = r.supp_typical || 0;
-        return `<tr>
-        <td style="color:var(--accent)">${r[nameKey] || ""}</td>
+        const first = i === 0 || arr[i - 1].sub_area !== r.sub_area;
+        return `<tr${first && i ? ' style="border-top:1px solid var(--border2)"' : ""}>
+        <td style="color:var(--accent)">${first ? esc(r.sub_area || "") : ""}</td>
+        <td style="color:var(--accent)">${esc(r.system || "")}</td>
         <td>${fmtNum(r.fab_di || 0, 1)}</td>
         <td>${fmtNum(r.erect_di || 0, 1)}</td>
         <td style="color:var(--accent)">${fmtNum(r.completed_di || 0, 1)}</td>
@@ -4040,7 +4041,7 @@ function renderDrBreakdown(date) {
         const t = k => arr.reduce((s, r) => s + (r[k] || 0), 0);
         const sp = t("supp_special"), ty = t("supp_typical");
         return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
-            <td style="font-weight:700;color:var(--accent)">Total</td>
+            <td style="font-weight:700;color:var(--accent)">Total</td><td></td>
             <td style="font-weight:700">${fmtNum(t("fab_di"), 1)}</td>
             <td style="font-weight:700">${fmtNum(t("erect_di"), 1)}</td>
             <td style="font-weight:700;color:var(--accent)">${fmtNum(t("completed_di"), 1)}</td>
@@ -4050,14 +4051,11 @@ function renderDrBreakdown(date) {
         </tr>`;
     };
 
-    const sysBody = document.querySelector("#drSystemTable tbody");
-    if (sysBody) sysBody.innerHTML = mkRows(systems, "system") + mkTotal(systems);
+    const ssBody = document.querySelector("#drSubSysTable tbody");
+    if (ssBody) ssBody.innerHTML = mkRows(sub_systems) + mkTotal(sub_systems);
 
     const matBody = document.querySelector("#drMaterialTable tbody");
     if (matBody) matBody.innerHTML = mkMatRows(materials) + mkMatTotal(materials);
-
-    const subBody = document.querySelector("#drSubareaTable tbody");
-    if (subBody) subBody.innerHTML = mkRows(subareas, "sub_area") + mkTotal(subareas);
 }
 
 function selectDailyDate(date) {

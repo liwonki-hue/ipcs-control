@@ -3600,7 +3600,8 @@ def _compute_daily_report():
         if dc not in supp_daily:
             supp_daily[dc] = {"special": 0, "typical": 0}
         supp_daily[dc][kind] += 1
-        bd_s = supp_bd.setdefault(dc, {"sys": {}, "sub": {}})
+        bd_s = supp_bd.setdefault(dc, {"sys": {}, "sub": {}, "ss": {}})
+        bd_s["ss"].setdefault((s.get("sub_area") or "-", s.get("system") or "-"), {"special": 0, "typical": 0})[kind] += 1
         for label, mk in ((s.get("system") or "-", "sys"), (s.get("sub_area") or "-", "sub")):
             bd_s[mk].setdefault(label, {"special": 0, "typical": 0})[kind] += 1
     del supp_rows
@@ -3618,7 +3619,7 @@ def _compute_daily_report():
     ]
 
     last_date = last_days[-1]
-    breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}} for dc in last_days}
+    breakdowns: dict = {dc: {"sys": {}, "sub": {}, "mat": {}, "ss": {}} for dc in last_days}
     for j in joints:
         dc = str(j.get("date_completed") or "")[:10]
         if dc not in breakdowns:
@@ -3632,6 +3633,7 @@ def _compute_daily_report():
             (j.get("system") or "-",   "sys"),
             (j.get("sub_area") or "-", "sub"),
             (j.get("mat") or "-",      "mat"),
+            ((j.get("sub_area") or "-", j.get("system") or "-"), "ss"),
         ]:
             if label not in bd[mk]:
                 bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
@@ -3640,7 +3642,7 @@ def _compute_daily_report():
             elif is_erect: bd[mk][label]["erect_di"] += di
 
     for dc, bd_s in supp_bd.items():        # Joint 실적이 없는 날의 Support 항목도 표에 나오도록 라벨을 만든다
-        for mk in ("sys", "sub"):
+        for mk in ("sys", "sub", "ss"):
             for label in bd_s[mk]:
                 breakdowns[dc][mk].setdefault(label, {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0})
 
@@ -3662,10 +3664,20 @@ def _compute_daily_report():
             key=lambda x: x[key_field]
         )
 
+    def _ss_list(mapping, supp):       # Sub Area 기준 → 그 안의 System별 행
+        return [{"sub_area": k[0], "system": k[1],
+                 "fab_di": round(v["fab_di"], 1),
+                 "erect_di": round(v["erect_di"], 1),
+                 "completed_di": round(v["completed_di"], 1),
+                 "supp_special": supp.get(k, {}).get("special", 0),
+                 "supp_typical": supp.get(k, {}).get("typical", 0)}
+                for k, v in sorted(mapping.items())]
+
     breakdowns_out = {}
     for dc in last_days:
         bd = breakdowns[dc]
         breakdowns_out[dc] = {
+            "sub_systems": _ss_list(bd["ss"], supp_bd.get(dc, {}).get("ss", {})),
             "systems":   _to_list(bd["sys"], "system", supp_bd.get(dc, {}).get("sys")),
             "subareas":  _to_list(bd["sub"], "sub_area", supp_bd.get(dc, {}).get("sub")),
             "materials": _to_list(bd["mat"], "mat"),
