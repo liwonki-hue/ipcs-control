@@ -504,3 +504,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 
 /* EP 탭 맨 아래 표와 화면 하단 사이에 여백 15px을 둔다 */
 #page-early_power { padding-bottom: 15px; }
+
+/* Daily Report Sub Area / System 표 — 열 사이 세로 구분선 */
+#drSubSysTable th, #drSubSysTable td { border-right: 1px solid var(--border2); }
+#drSubSysTable th:last-child, #drSubSysTable td:last-child { border-right: none; }
