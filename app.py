@@ -3637,6 +3637,9 @@ def _compute_daily_report():
         ]:
             if label not in bd[mk]:
                 bd[mk][label] = {"fab_di": 0.0, "erect_di": 0.0, "completed_di": 0.0}
+            if mk == "ss":
+                bd[mk][label].setdefault("welders", set()).update(
+                    w.strip() for w in (j.get("welder") or "").split("/") if w.strip())
             bd[mk][label]["completed_di"] += di
             if is_fab:    bd[mk][label]["fab_di"]   += di
             elif is_erect: bd[mk][label]["erect_di"] += di
@@ -3669,6 +3672,7 @@ def _compute_daily_report():
                  "fab_di": round(v["fab_di"], 1),
                  "erect_di": round(v["erect_di"], 1),
                  "completed_di": round(v["completed_di"], 1),
+                 "welders": len(v.get("welders", ())),
                  "supp_special": supp.get(k, {}).get("special", 0),
                  "supp_typical": supp.get(k, {}).get("typical", 0)}
                 for k, v in sorted(mapping.items())]
@@ -3678,6 +3682,7 @@ def _compute_daily_report():
         bd = breakdowns[dc]
         breakdowns_out[dc] = {
             "sub_systems": _ss_list(bd["ss"], supp_bd.get(dc, {}).get("ss", {})),
+            "welder_total": len(daily.get(dc, {}).get("welders", ())),
             "systems":   _to_list(bd["sys"], "system", supp_bd.get(dc, {}).get("sys")),
             "subareas":  _to_list(bd["sub"], "sub_area", supp_bd.get(dc, {}).get("sub")),
             "materials": _to_list(bd["mat"], "mat"),

@@ -3999,7 +3999,7 @@ async function loadDailyReport() {
 function renderDrBreakdown(date) {
     const bd = _drBreakdowns[date];
     if (!bd) return;
-    const { sub_systems = [], materials = [] } = bd;
+    const { sub_systems = [], materials = [], welder_total = 0 } = bd;
 
     const label = date ? `[${date}]` : "";
     const drEl = id => document.getElementById(id);
@@ -4030,6 +4030,7 @@ function renderDrBreakdown(date) {
         const span = first ? arr.filter(x => x.sub_area === r.sub_area).length : 0;
         return `<tr${first && i ? ' style="border-top:1px solid var(--border2)"' : ""}>
         ${first ? `<td rowspan="${span}" style="color:var(--accent);vertical-align:middle;background:var(--panel)">${esc(r.sub_area || "")}</td>` : ""}
+        <td>${r.welders || 0}</td>
         <td style="color:var(--accent)">${esc(r.system || "")}</td>
         <td>${fmtNum(r.fab_di || 0, 1)}</td>
         <td>${fmtNum(r.erect_di || 0, 1)}</td>
@@ -4038,11 +4039,11 @@ function renderDrBreakdown(date) {
         <td style="color:#22d3a1">${ty}</td>
         <td style="color:#22d3a1">${sp + ty}</td>
     </tr>`; }).join("");
-    const mkTotal = arr => {
+    const mkTotal = (arr, welderTotal = "") => {
         const t = k => arr.reduce((s, r) => s + (r[k] || 0), 0);
         const sp = t("supp_special"), ty = t("supp_typical");
         return `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border)">
-            <td style="font-weight:700;color:var(--accent)">Total</td><td></td>
+            <td style="font-weight:700;color:var(--accent)">Total</td><td style="font-weight:700">${welderTotal}</td><td></td>
             <td style="font-weight:700">${fmtNum(t("fab_di"), 1)}</td>
             <td style="font-weight:700">${fmtNum(t("erect_di"), 1)}</td>
             <td style="font-weight:700;color:var(--accent)">${fmtNum(t("completed_di"), 1)}</td>
@@ -4053,7 +4054,7 @@ function renderDrBreakdown(date) {
     };
 
     const ssBody = document.querySelector("#drSubSysTable tbody");
-    if (ssBody) ssBody.innerHTML = mkRows(sub_systems) + mkTotal(sub_systems);
+    if (ssBody) ssBody.innerHTML = mkRows(sub_systems) + mkTotal(sub_systems, welder_total);
 
     const matBody = document.querySelector("#drMaterialTable tbody");
     if (matBody) matBody.innerHTML = mkMatRows(materials) + mkMatTotal(materials);
