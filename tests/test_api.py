@@ -200,8 +200,8 @@ def fake_analysis(monkeypatch):
     monkeypatch.setattr(A, "_get_joint_analysis", lambda: FAKE_ANALYSIS)
 
 
-def test_data_quality_requires_login(anon_client, fake_analysis):
-    assert anon_client.get("/api/data-quality").status_code == 401
+def test_data_quality_is_public(anon_client, fake_analysis):                    # 조회 전용 화면이라 ISO Status처럼 로그인 없이 본다 (2026-11-17)
+    assert anon_client.get("/api/data-quality").status_code == 200
 
 
 def test_analysis_endpoints_payloads(client, anon_client, fake_analysis):
