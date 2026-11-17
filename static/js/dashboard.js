@@ -1939,32 +1939,6 @@ function _gapBelow(el) {
     return gap;
 }
 
-// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status·Data Quality(전부 받아 두고 자르는 표)가 쓴다.
-// 실제로 그려진 표를 재서 맞춘다: 넘치면 넘친 만큼 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌린다.
-function _fitRows(body, pager, limit, size, setSize, draw) {
-    for (let i = 0; i < 4; i++) {
-        const shown = body.rows.length;
-        if (!shown) break;
-        const rowH = body.getBoundingClientRect().height / shown;
-        const free = limit() - pager.getBoundingClientRect().bottom;
-        if (free < 0) {                                              // 넘침: 넘친 만큼 행을 줄인다
-            setSize(Math.max(5, size() + Math.floor(free / rowH)));
-            draw();
-            continue;
-        }
-        const grow = Math.floor(free / rowH);
-        if (grow <= 0 || shown < size()) break;                      // 여유가 한 행도 안 되거나, 보여 줄 행이 더 없다
-        const prev = size();
-        setSize(Math.min(200, prev + grow));
-        draw();
-        while (size() > prev && pager.getBoundingClientRect().bottom > limit()) {   // 행 높이가 조금씩 달라 넘치면 들어갈 때까지 한 행씩 줄인다
-            setSize(size() - 1);
-            draw();
-        }
-        break;
-    }
-}
-
 // ── 서버가 페이지 단위로 내려주는 표(Joint Master·Support Master·NDE·Test Pkg 두 탭)의 한 페이지 행 수 맞춤 ────────────
 // 한 번 그린 표를 재서 네비게이터가 화면 안에 들어오는 행 수를 구하고, 지금과 다르면 그 행 수로 다시 조회한다(서버가 limit 단위로 주므로).
 // 늘렸더니 넘치면 넘친 만큼만 줄이고 그 값을 상한(cap)으로 기억해, 두 값 사이를 오가지 않게 한다. 행 수는 st.size에 남아 다음 조회부터 바로 쓴다.
