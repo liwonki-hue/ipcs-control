@@ -3798,6 +3798,7 @@ def api_iso_status():
 
 
 @app.route("/api/data-quality")
+@login_required
 def api_data_quality():
     try:
         res = _get_joint_analysis()
