@@ -3793,33 +3793,11 @@ def _scan_table(table, columns, on_row):
             off += _SCAN_PAGE * _SCAN_WORKERS
 
 
-def _read_drawing_revisions():
-    """Drawing DB(dwg_latest)의 {도면번호: revision}. revision이 빈 도면은 비교 정보가 없으므로 뺀다."""
-    dwg, off = {}, 0
-    while True:
-        page = get_draw_sb().table("dwg_latest").select("drawing_no,revision").order("id")             .range(off, off + DRAW_DB_PAGE - 1).execute().data or []
-        for d in page:
-            no, rv = (d.get("drawing_no") or "").strip(), (d.get("revision") or "").strip()
-            if no and rv:
-                dwg[no] = rv
-        if len(page) < DRAW_DB_PAGE:
-            return dwg
-        off += DRAW_DB_PAGE
-
-
 def _build_joint_analysis():
     an = iso_analysis.Analyzer(_joint_accepted, _required_pwht, datetime.now(ALMT).date())
     _scan_table("joint_master", iso_analysis.JOINT_COLUMNS, lambda r: None if r.get("system") == SB_SYSTEM else an.add_joint(r))   # Steam Blowing(임시 배관)은 ISO 현황에서 뺀다
     _scan_table("support_master", iso_analysis.SUPPORT_COLUMNS, an.add_support)
-    numbers = {(r.get("test_pkg_no") or "").strip() for r in
-               (_sb_exec(lambda sb: sb.table("test_package_master").select("test_pkg_no").execute()).data or [])}
-    drawing, drawing_error = None, "Drawing DB not configured"
-    if DRAWING_SUPABASE_URL and DRAWING_SUPABASE_KEY:
-        try:
-            drawing, drawing_error = _read_drawing_revisions(), None
-        except Exception as e:
-            drawing, drawing_error = None, type(e).__name__
-    result = an.result(testpkg_numbers=numbers, drawing=drawing, drawing_error=drawing_error)
+    result = an.result()   # Data Quality 화면을 없앴으므로 Drawing DB·Test Package 대조는 더 읽지 않는다
     result["built_at"] = datetime.now(ALMT).strftime("%Y-%m-%d %H:%M")
     _malloc_trim()
     return result
