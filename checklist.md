@@ -307,8 +307,8 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] Joint Master 목록·저장은 SB 포함 유지(편집해야 하므로)
 
 ## D. Permanent 집계에서 SB 제외 (DB 함수·뷰) — 사용자가 SQL Editor에서 실행
-- [ ] `mv_dashboard_v17`, `get_dashboard_summary_v17`, `get_dashboard_aggregates_control_v2`, `get_ep_aggregates`, `get_welder_stats_v4` 정의 확인 후 SB 제외 SQL 작성
+- [ ] `mv_dashboard_v17`·`get_dashboard_summary_v17`·`get_dashboard_aggregates_control_v2`·`get_ep_aggregates`·`get_welder_stats_v4` — 사용자에게 정의 조회문(Reports/SB_definitions_query_20261119.sql) 실행을 요청해 받는 중. `get_jm_kpi_v1`은 SQL 작성 완료(Reports/SB_exclude_get_jm_kpi_20261119.sql, 사용자 실행 대기)
 - [ ] 실행 후 KPI가 SB 등록 전 값으로 돌아오는지 확인(Total DI 163,288.5 기준)
 
 ## E. 검증
-- [ ] pytest · 로컬 전 탭 · 커밋
+- [x] pytest 195건 · SB 탭 로컬 확인 · 커밋 (D단계 SQL 적용 후 KPI 재확인 남음)

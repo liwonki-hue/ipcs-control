@@ -144,29 +144,29 @@ SELECT json_build_object(
     'by_system', (
         SELECT COALESCE(json_agg(json_build_object('k', system, 'v', sum_di)), '[]'::json)
         FROM (SELECT COALESCE(system,'') AS system, SUM(di) AS sum_di
-              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              FROM construction.joint_master WHERE date_completed IS NOT NULL AND system IS DISTINCT FROM 'SB'
               GROUP BY system) s
     ),
     'by_unit', (
         SELECT COALESCE(json_agg(json_build_object('k', unit, 'v', sum_di)), '[]'::json)
         FROM (SELECT COALESCE(unit,'') AS unit, SUM(di) AS sum_di
-              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              FROM construction.joint_master WHERE date_completed IS NOT NULL AND system IS DISTINCT FROM 'SB'
               GROUP BY unit) u
     ),
     'by_area', (
         SELECT COALESCE(json_agg(json_build_object('k', area, 'v', sum_di)), '[]'::json)
         FROM (SELECT COALESCE(area,'') AS area, SUM(di) AS sum_di
-              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              FROM construction.joint_master WHERE date_completed IS NOT NULL AND system IS DISTINCT FROM 'SB'
               GROUP BY area) a
     ),
     'by_sub_area', (
         SELECT COALESCE(json_agg(json_build_object('k', sub_area, 'v', sum_di)), '[]'::json)
         FROM (SELECT COALESCE(sub_area,'') AS sub_area, SUM(di) AS sum_di
-              FROM construction.joint_master WHERE date_completed IS NOT NULL
+              FROM construction.joint_master WHERE date_completed IS NOT NULL AND system IS DISTINCT FROM 'SB'
               GROUP BY sub_area) sa
     )
 )
-FROM construction.joint_master;
+FROM construction.joint_master WHERE system IS DISTINCT FROM 'SB';
 $$;
 
 -- 6. Joint Master 드롭다운 distinct 값 — 21회 개별 RPC 호출 → 단일 RPC 호출
