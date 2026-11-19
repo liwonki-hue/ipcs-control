@@ -287,3 +287,28 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 3. 테스트 — pytest 192건 통과. 화면에서 ISO Status 39px / Test Pkg Joint Check 39.6~40px / Joint Master 38.8~39.2px, 페이지 스크롤 없음
 - [x] 4. commit — `497ff12` + 이 기록
 - [ ] 5. push 후 CI(Tests) 확인
+
+---
+
+# Checklist — Steam Blowing(SB) 임시 배관 분리 (2026-11-19)
+
+목표: SB(System=SB, 임시 배관)를 Permanent 배관과 분리 관리. 1) SB 전용 탭(EP와 같은 형태, KPI는 SB만) 2) 나머지 탭은 Permanent 기준 3) Data Quality 탭 삭제
+
+## A. Data Quality 탭 삭제
+- [x] 사이드바·페이지·JS·API(`/api/data-quality`)·테스트 제거 (ISO Status는 유지)
+
+## B. SB 전용 탭
+- [ ] `/api/sb-summary` — SB 조인트만 집계(KPI·Unit·서비스별·주간 완료)
+- [ ] 사이드바 메뉴 + 페이지(KPI 행 + 게이지 + 주간 차트 + 표) + 렌더 JS
+- [ ] 캐시 무효화 연결(joint 변경 시)
+
+## C. Permanent 집계에서 SB 제외 (Python)
+- [ ] 직접 집계하는 쿼리에 SB 제외 적용(Overview 보조·Daily·Weekly·Welder·ISO Status 등)
+- [ ] Joint Master 목록·저장은 SB 포함 유지(편집해야 하므로)
+
+## D. Permanent 집계에서 SB 제외 (DB 함수·뷰) — 사용자가 SQL Editor에서 실행
+- [ ] `mv_dashboard_v17`, `get_dashboard_summary_v17`, `get_dashboard_aggregates_control_v2`, `get_ep_aggregates`, `get_welder_stats_v4` 정의 확인 후 SB 제외 SQL 작성
+- [ ] 실행 후 KPI가 SB 등록 전 값으로 돌아오는지 확인(Total DI 163,288.5 기준)
+
+## E. 검증
+- [ ] pytest · 로컬 전 탭 · 커밋

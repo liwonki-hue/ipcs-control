@@ -332,7 +332,7 @@ function navigate(page) {
         // --- PAGE SPECIFIC UI ADJUSTMENTS ---
         
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
-        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report", "iso_status", "data_quality"];
+        const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report", "iso_status"];
         const epKpiRow = document.getElementById("epKpiRow");
         if (kpiRow) {
             kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "flex";
@@ -350,7 +350,6 @@ function navigate(page) {
         case "weekly":      loadWeekly();       break;
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;
         case "iso_status":  loadIsoStatus();    break;
-        case "data_quality": loadDataQuality(); break;
         case "joint_master":
             if ((document.getElementById("jm-mat")?.options?.length||0) <= 1) {
                 _loadJMFilterSel("jm-mat",  "mat",       "Material");
@@ -1939,7 +1938,7 @@ function _gapBelow(el) {
     return gap;
 }
 
-// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status·Data Quality(전부 받아 두고 자르는 표)가 쓴다.
+// 표 아래 네비게이터가 한도(limit) 안에 들어오는 최대 행 수를 찾는다. ISO Status(전부 받아 두고 자르는 표)가 쓴다.
 // 실제로 그려진 표를 재서 맞춘다: 넘치면 넘친 만큼 줄이고, 여유가 한 행 이상이면 늘리되 넘치면 한 행씩 되돌린다.
 function _fitRows(body, pager, limit, size, setSize, draw) {
     for (let i = 0; i < 4; i++) {

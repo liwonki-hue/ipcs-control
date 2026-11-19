@@ -1,4 +1,4 @@
-// ISO Status · Data Quality 화면 (ISO Drawing 단위 현황, 데이터 점검)
+// ISO Status 화면 (ISO Drawing 단위 현황)
 // dashboard.js 다음에 로드된다. apiFetch · esc · fmtNum · toast · navigate · printPage · downloadWithPicker · ensureXlsx를 쓴다.
 
 const _ISO_STATUS_LABEL = { NOT_STARTED: "Not started", WELDING: "Welding", WELDED: "Welded · inspection pending", ACCEPTED: "Accepted" };
@@ -165,7 +165,7 @@ function isoFit() {
 let _isoResizeTimer = null;
 window.addEventListener("resize", () => {
     clearTimeout(_isoResizeTimer);
-    _isoResizeTimer = setTimeout(() => { isoFit(); dqFit(); }, 150);
+    _isoResizeTimer = setTimeout(() => { isoFit(); }, 150);
 });
 
 function _isoRowHtml(r) {
@@ -210,104 +210,4 @@ async function exportIsoStatus() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "ISO Status");
     if (await downloadWithPicker(wb, "ISO_Status_Export.xlsx")) toast("✓ ISO status exported");
-}
-
-// ── Data Quality ──────────────────────────────────────────────────────
-const _DQ_SEV = { error: ["#ef4444", "Error"], warn: ["#f59e0b", "Warning"], info: ["#94a3b8", "Info"] };
-let _dq = { checks: [], open: null, page: 0, size: 10 };
-
-async function loadDataQuality() {
-    const host = document.getElementById("dq-cards");
-    if (!_dq.checks.length) host.innerHTML = `<div style="padding:18px;color:var(--text-dim)">Loading… (the first load can take about 30 seconds)</div>`;
-    try {
-        const d = await apiFetch("/api/data-quality", { noCache: true });
-        _dq = { checks: d.checks || [], open: _dq.open, page: _dq.page, size: _dq.size, meta: d };
-        document.getElementById("dq-updated").textContent = _isoUpdatedText(d);
-        renderDataQuality();
-    } catch (e) {
-        document.getElementById("dq-updated").textContent = "";
-        document.getElementById("dq-summary").innerHTML = "";
-        document.getElementById("dq-detail").innerHTML = "";
-        _isoLoadError(e, "dq-cards");
-    }
-}
-
-function renderDataQuality() {
-    const d = _dq.meta, failing = _dq.checks.filter(c => c.count > 0);
-    const errs = failing.filter(c => c.severity === "error").length, warns = failing.filter(c => c.severity === "warn").length;
-    const drawing = d.drawing_available ? "Drawing DB connected" : `Drawing DB checks skipped (${esc(d.drawing_error || "unavailable")})`;
-    document.getElementById("dq-summary").innerHTML =
-        `<b>${(d.joints || 0).toLocaleString()}</b> joints · <b>${(d.isos || 0).toLocaleString()}</b> ISO · ` +
-        `<span style="color:${errs ? "#ef4444" : "#059669"};font-weight:700">${errs} error check${errs === 1 ? "" : "s"} failing</span> · ` +
-        `<span style="color:${warns ? "#f59e0b" : "#059669"};font-weight:700">${warns} warning${warns === 1 ? "" : "s"}</span> · ${drawing}`;
-    document.getElementById("dq-cards").innerHTML =
-        (failing.length ? failing.map(c => {
-            const [color, label] = _DQ_SEV[c.severity];
-            return `<button onclick="dqShow('${esc(c.key)}')" style="text-align:left;cursor:pointer;background:var(--panel);border:1px solid var(--border);border-left:4px solid ${color};border-radius:8px;padding:10px 12px;${_dq.open === c.key ? "outline:2px solid " + color : ""}">
-                <div style="display:flex;justify-content:space-between;gap:8px"><span style="font-weight:700;font-size:13px">${esc(c.title)}</span><span style="font-family:'DM Mono',monospace;font-weight:700;color:${color}">${c.count.toLocaleString()}</span></div>
-                <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${esc(label)} · ${esc(c.hint)}</div></button>`;
-        }).join("") : `<div style="padding:12px;color:#059669;font-weight:700">✓ No problems found.</div>`);
-    const detail = document.getElementById("dq-detail");
-    if (!failing.some(c => c.key === _dq.open)) _dq.open = failing.length ? failing[0].key : null;   // 문제가 있는 첫 항목(가장 심각한 것)을 기본으로 연다
-    detail.style.display = _dq.open ? "" : "none";
-    if (_dq.open) _dqRenderDetail();
-}
-
-// 카드를 누르면 그 검사의 목록을 연다
-function dqShow(key) {
-    if (!_dq.checks.some(x => x.key === key)) return;
-    _dq.open = key;
-    _dq.page = 0;
-    renderDataQuality();
-}
-
-function _dqRenderDetail() {
-    const c = _dq.checks.find(x => x.key === _dq.open);
-    if (!c) return;
-    document.getElementById("dq-detail").innerHTML = `<div class="panel-title">${esc(c.title)} <span style="font-size:11px;font-weight:400;opacity:.6">— ${c.count.toLocaleString()} found${c.samples.length < c.count ? `, listing the first ${c.samples.length.toLocaleString()}` : ""}</span>
-        <button class="btn-de btn-de-export" onclick="exportDataQuality('${esc(c.key)}')" style="float:right;padding:3px 10px;font-size:11px">⬇ Export</button></div>
-        <div class="table-wrap"><table class="data-table" style="width:100%;table-layout:fixed"><colgroup><col style="width:42%"><col style="width:10%"><col style="width:48%"></colgroup>
-        <thead><tr><th>ISO No</th><th>Joint</th><th>Detail</th></tr></thead><tbody id="dq-body"></tbody></table></div>
-        <div class="de-pagination"><div id="dq-count">0 rows</div><div id="dq-page-nav" style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"></div></div>`;
-    _dqDraw();
-    dqFit();
-}
-
-// 한 줄 행으로 현재 페이지를 그린다(긴 값은 말줄임표 + 툴팁)
-function _dqDraw() {
-    const c = _dq.checks.find(x => x.key === _dq.open);
-    if (!c || !document.getElementById("dq-body")) return;
-    const total = c.samples.length, pages = Math.max(1, Math.ceil(total / _dq.size));
-    _dq.page = Math.min(_dq.page, pages - 1);
-    const cut = "white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
-    document.getElementById("dq-body").innerHTML = c.samples.slice(_dq.page * _dq.size, (_dq.page + 1) * _dq.size).map(s => `<tr data-iso="${esc(s.iso)}" ${s.iso ? 'onclick="isoOpenInJM(this.dataset.iso)" style="cursor:pointer" title="Open in Joint Master"' : ""}>
-        <td style="font-size:11px;${cut}" title="${esc(s.iso)}">${esc(s.iso || "—")}</td><td style="text-align:center;white-space:nowrap">${esc(s.joint_no ?? "")}</td><td style="font-size:12px;${cut}" title="${esc(s.detail)}">${esc(s.detail)}</td></tr>`).join("");
-    document.getElementById("dq-count").textContent = `Total ${total.toLocaleString()} row${total === 1 ? "" : "s"}`;
-    _renderPageNums("dq-page-nav", _dq.page, total, _dq.size, "dqGoto");
-}
-
-function dqGoto(page) {
-    _dq.page = Math.max(0, page);
-    _dqDraw();
-}
-
-// 목록이 스크롤 없이 화면 안에 보이도록 한 페이지 행 수를 정한다(ISO Status와 같은 방식)
-function dqFit() {
-    const page = document.getElementById("page-data_quality");
-    const body = document.getElementById("dq-body");
-    const pager = page && page.querySelector("#dq-detail .de-pagination");
-    if (!page || page.classList.contains("hidden") || !body || !pager || !body.rows.length) return;
-    const scroller = document.querySelector(".page-body");
-    if (scroller) scroller.scrollTop = 0;
-    window.scrollTo(0, 0);
-    _fitRows(body, pager, () => window.innerHeight - _gapBelow(pager), () => _dq.size, v => { _dq.size = v; }, _dqDraw);
-}
-
-async function exportDataQuality(key) {
-    const c = _dq.checks.find(x => x.key === key);
-    if (!c || !c.samples.length) { toast("No data to export", "error"); return; }
-    await ensureXlsx();
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(c.samples.map(s => ({ "ISO No": s.iso, "Joint": s.joint_no, "Row ID": s.id, "Detail": s.detail }))), c.key.substring(0, 31));
-    if (await downloadWithPicker(wb, `Data_Quality_${c.key}.xlsx`)) toast("✓ Exported");
 }

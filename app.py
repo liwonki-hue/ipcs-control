@@ -3720,8 +3720,8 @@ def api_daily_report():
         return jsonify({"daily": [], "systems": [], "subareas": [], "materials": [], "last_date": "", "breakdowns": {}}), 500
 
 
-# ── ISO 현황 · 데이터 품질 (iso_analysis.py) ─────────────────────
-# 두 화면(ISO Status·Data Quality)이 같은 스캔 결과를 쓴다: joint_master 전체를 id 순서로 2,000행씩 읽어 한 건씩 집계하고(전체를 메모리에 쌓지 않는다)
+# ── ISO 현황 (iso_analysis.py) ─────────────────────
+# ISO Status 화면이 쓰는 스캔 결과다: joint_master 전체를 id 순서로 2,000행씩 읽어 한 건씩 집계하고(전체를 메모리에 쌓지 않는다)
 # Support·Test Package Register·Drawing DB를 곁들인다. 스캔은 수십 초 걸려서 요청이 기다리지 않게 한다 — 낡은 결과를 바로 주고
 # 뒤에서 다시 만든다(cache_util.TTLCache). 저장(scope=joint/support)이 있으면 낡은 것으로 표시하고, keep-alive가 12분마다 미리 데워 둔다.
 _SCAN_PAGE = 2000
@@ -3793,16 +3793,6 @@ def api_iso_status():
     try:
         res = _get_joint_analysis()
         return jsonify({"built_at": res["built_at"], **_analysis_meta(), "joints": res["joints"], "isos": res["isos"]})
-    except Exception as e:
-        return jsonify({"error": _err_text(e)}), 500
-
-
-@app.route("/api/data-quality")
-@login_required
-def api_data_quality():
-    try:
-        res = _get_joint_analysis()
-        return jsonify({"built_at": res["built_at"], **_analysis_meta(), "joints": res["joints"], "isos": len(res["isos"]), **res["quality"]})
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 

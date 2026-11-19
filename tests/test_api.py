@@ -200,16 +200,11 @@ def fake_analysis(monkeypatch):
     monkeypatch.setattr(A, "_get_joint_analysis", lambda: FAKE_ANALYSIS)
 
 
-def test_data_quality_requires_login(anon_client, fake_analysis):
-    assert anon_client.get("/api/data-quality").status_code == 401
-
-
 def test_analysis_endpoints_payloads(client, anon_client, fake_analysis):
     r = anon_client.get("/api/iso-status")                                      # 모니터링 화면이라 다른 조회 API처럼 로그인 없이 본다
     assert r.status_code == 200 and r.get_json()["isos"][0]["iso"] == "ISO-1" and "age_sec" in r.get_json()
     assert anon_client.get("/api/pace-forecast").status_code == 404                # 제거된 API
-    r = client.get("/api/data-quality")
-    assert r.status_code == 200 and r.get_json()["joints"] == 2 and r.get_json()["isos"] == 1
+    assert anon_client.get("/api/data-quality").status_code == 404                  # 제거된 API
 
 
 def test_analysis_errors_do_not_leak_details(anon_client, monkeypatch):

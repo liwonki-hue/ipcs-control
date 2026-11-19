@@ -410,3 +410,12 @@
 - `#isoTable td, #tpTable td { height: 39px }`로 최소 높이를 맞췄다(box-sizing이 border-box라 여백 포함). 줄바꿈으로 더 높아지는 행은 그대로 둔다.
 - ISO Status의 `--iso-pad`(남는 높이를 행 여백으로 채우던 로직)는 행마다 높이가 달라지게 해서 CSS·`isoFit`에서 제거했다. 한 행 미만의 남는 높이는 그대로 여백으로 둔다.
 - 사용자가 지정하지 않은 NDE & PWHT(34.8px)는 건드리지 않았다.
+
+---
+
+## 2026-11-19 Steam Blowing(SB) 분리 — 결정과 이유
+
+- SB 조인트 963건(System=SB, Phase NULL)은 joint_master에 그대로 둔다. 이유: 편집(용접사·완료일·검사)은 Joint Master 탭에서 하기 때문에 별도 테이블로 옮기면 편집 경로를 새로 만들어야 한다. 앱 키로는 DELETE가 막혀 있어 되돌리기도 어렵다.
+- 대신 "Permanent 집계에서 SB 제외"가 핵심이다. 직접 집계하는 Python은 `system != 'SB'`로 거르고, DB 함수·뷰(mv_dashboard_v17 등)는 정의가 저장소에 없어서 사용자가 SQL Editor에서 정의를 내려받아 주어야 안전하게 고칠 수 있다(추측으로 고치면 Overview가 깨질 수 있다).
+- SB 탭은 EP 탭의 형태(KPI 행 + 게이지 + 표)를 따른다. 단 SB는 System이 전부 SB라 System 표가 의미 없어서 Line No 끝의 서비스(AS/HS/LS)와 Unit으로 나눈다. S-Curve 계획선·시험 패키지는 SB에 해당 자료가 없어 넣지 않는다.
+- 2026-11-18 이전까지 Overview KPI는 SB 963건(DI 9,232)을 포함한 상태다. D단계 SQL이 적용되기 전까지는 그대로다.
