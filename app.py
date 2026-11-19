@@ -497,6 +497,7 @@ CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free 
 _daily_cache        = cache_util.TTLCache("daily_actuals", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/daily-actuals
 _wkbd_cache         = cache_util.TTLCache("weekly_breakdown", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)         # /api/weekly-last-breakdown
 _welder_daily_cache = cache_util.TTLCache("welder_daily", 900, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/welder-daily
+SB_SYSTEM = "SB"   # Steam Blowing — 임시 배관. Permanent 집계(Overview·Weekly·Daily·Welder 등)에서는 제외한다
 _sb_cache           = cache_util.TTLCache("sb_summary", CACHE_TTL, scopes=("joint",), min_gap=20, stale_when_dirty=False)   # /api/sb-summary
 _ep_sup_cache       = cache_util.TTLCache("ep_support", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/ep-support-summary
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
@@ -638,7 +639,7 @@ def _scan_kpi_override_data(weekly_schedule):
         c_di = c_fab = c_erect = 0.0; c_joints = 0
         off, bsz = 0, 10000
         while True:
-            r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area") \
+            r = sb.table("joint_master").select("di,sf,date_completed,system,unit,area,sub_area").neq("system", SB_SYSTEM) \
                   .not_.is_("date_completed", "null").order("id").range(off, off + bsz - 1).execute()
             rows = r.data or []; del r
             for row in rows:
@@ -888,7 +889,7 @@ def _build_secondary_caches_impl():
                 sub_area_cnt: dict = {}     # sub_area → {area: 건수} — Overview 정렬용 대표 Area
                 _soff = 0
                 while True:
-                    _sr = sb.table("joint_master").select("sub_area,area,di,date_completed").order("id").range(_soff, _soff + 9999).execute()
+                    _sr = sb.table("joint_master").select("sub_area,area,di,date_completed").neq("system", SB_SYSTEM).order("id").range(_soff, _soff + 9999).execute()
                     for r in (_sr.data or []):
                         sa = r.get("sub_area") or ""
                         if not sa:
@@ -1693,7 +1694,7 @@ def _build_daily_actuals():
     빠른 경로: 최근 14일치를 한 번에 받아 그 안에서 최근 5개 작업일을 고른다(DB 왕복 1회). 실적이 있는 날이 5일 미만이거나 행이 1만 건을 채우면
     (연휴, 대량 입력) 예전처럼 날짜를 먼저 찾고 그 범위를 다시 받는 2단계로 돌아간다."""
     cutoff = (datetime.now(ALMT).date() - timedelta(days=14)).isoformat()
-    rows = _sb_exec(lambda sb: sb.table("joint_master").select("date_completed,di,sf")
+    rows = _sb_exec(lambda sb: sb.table("joint_master").select("date_completed,di,sf").neq("system", SB_SYSTEM)
                     .not_.is_("date_completed", "null").gte("date_completed", cutoff)
                     .order("date_completed", desc=True).limit(10000).execute()).data or []
     dates = sorted({str(r["date_completed"])[:10] for r in rows if r.get("date_completed") and float(r.get("di") or 0) > 0})
@@ -1702,7 +1703,7 @@ def _build_daily_actuals():
     del rows
 
     dates_res = _sb_exec(lambda sb: sb.table("joint_master")
-        .select("date_completed")
+        .select("date_completed").neq("system", SB_SYSTEM)
         .not_.is_("date_completed", "null")
         .gt("di", 0)
         .order("date_completed", desc=True)
@@ -1714,7 +1715,7 @@ def _build_daily_actuals():
     last_5 = distinct_dates[-5:]
     range_start, range_end = last_5[0], last_5[-1]
     j_res = _sb_exec(lambda sb: sb.table("joint_master")
-        .select("date_completed,di,sf")
+        .select("date_completed,di,sf").neq("system", SB_SYSTEM)
         .gte("date_completed", range_start)
         .lte("date_completed", range_end)
         .not_.is_("date_completed", "null")
@@ -2119,7 +2120,7 @@ def api_joints_patch(jid):
 def _build_weekly_breakdown():
     # 1. 완료된 조인트의 마지막 날짜 + 주차 일정 전체(작은 표)를 동시에 받는다 — 둘은 서로 필요 없어 왕복이 하나로 합쳐진다
     with ThreadPoolExecutor(max_workers=2) as ex:
-        f_last = ex.submit(lambda: _sb_exec(lambda sb: sb.table("joint_master").select("date_completed")
+        f_last = ex.submit(lambda: _sb_exec(lambda sb: sb.table("joint_master").select("date_completed").neq("system", SB_SYSTEM)
                                             .not_.is_("date_completed", "null")
                                             .order("date_completed", desc=True).limit(1).execute()).data)
         f_weeks = ex.submit(lambda: _sb_exec(lambda sb: sb.table("week_schedule")
@@ -2142,7 +2143,7 @@ def _build_weekly_breakdown():
     sb = get_sb()
     joints = []
     _q = sb.table("joint_master") \
-           .select("system,sub_area,sf,size_inch,mat") \
+           .select("system,sub_area,sf,size_inch,mat").neq("system", SB_SYSTEM) \
            .gte("date_completed", ws_date) \
            .lte("date_completed", we_date) \
            .not_.is_("date_completed", "null")
@@ -2226,7 +2227,7 @@ def _welder_stats_fallback(date_from="", date_to="", system="", welder=""):
         return None
 
     q = (sb.table("joint_master")
-           .select("welder, date_completed, di, system")
+           .select("welder, date_completed, di, system").neq("system", SB_SYSTEM)
            .not_.is_("date_completed", "null")
            .not_.is_("welder", "null"))
     if date_from: q = q.gte("date_completed", date_from)
@@ -2398,7 +2399,7 @@ def api_welder_summary():
         """ranking 항목에 fab_di / erect_di 추가 (joint_master 직접 집계)."""
         try:
             sb2 = get_sb()
-            q = sb2.table("joint_master").select("welder,sf,di") \
+            q = sb2.table("joint_master").select("welder,sf,di").neq("system", SB_SYSTEM) \
                    .not_.is_("date_completed", "null") \
                    .not_.is_("welder", "null")
             if date_from: q = q.gte("date_completed", date_from)
@@ -2488,7 +2489,7 @@ def _build_welder_daily():
     # 120일치 완료 조인트는 1만 건(PostgREST 1회 최대 행 수)을 넘으므로 페이지를 나눠 모두 읽는다(한 번에 읽던 때는 14,402건 중 1만 건만
     # 집계돼 일별 용접사 실적이 누락됐다, 2026-09-27). 이제 페이지를 동시에 읽는다.
     rows = _fetch_all_pages(lambda sb: sb.table("joint_master")
-                            .select("date_completed, welder, di")
+                            .select("date_completed, welder, di").neq("system", SB_SYSTEM)
                             .gte("date_completed", cutoff)
                             .not_.is_("date_completed", "null")
                             .not_.is_("welder", "null"))
@@ -2535,7 +2536,7 @@ def api_welder_detail():
         daily, by_sys = defaultdict(float), defaultdict(float)
         off = 0
         while True:
-            page = sb.table("joint_master").select("date_completed,di,system,welder")                 .not_.is_("date_completed", "null").ilike("welder", f"%{welder}%")                 .order("id").range(off, off + 9999).execute().data or []
+            page = sb.table("joint_master").select("date_completed,di,system,welder").neq("system", SB_SYSTEM)                 .not_.is_("date_completed", "null").ilike("welder", f"%{welder}%")                 .order("id").range(off, off + 9999).execute().data or []
             for r in page:
                 parts = [w.strip() for w in (r.get("welder") or "").split("/") if w.strip()]
                 if welder not in parts:  # ilike 부분 일치(IWP-05 ⊂ IWP-052) 제외
@@ -2745,7 +2746,7 @@ def api_testpkg_joints():
         insp    = request.args.get("inspection", "").strip()
 
         def query(count=None, cols=_TP_JOINT_COLS):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
-            q = sb.table("joint_master").select(cols, count=count).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
+            q = sb.table("joint_master").select(cols, count=count).neq("system", SB_SYSTEM).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
             if pkg:    q = q.ilike("package",     f"%{pkg}%")
             if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
             if insp:   q = q.eq("inspection", insp)
@@ -2828,7 +2829,7 @@ def api_rt_quality():
         rows, offset_ = [], 0
         while True:
             res = (sb.table("joint_master")
-                     .select(cols)
+                     .select(cols).neq("system", SB_SYSTEM)
                      .not_.is_("rt_date", "null")
                      .order("rt_date").order("id")
                      .range(offset_, offset_ + 9999)
@@ -3023,8 +3024,7 @@ def api_ep_support_summary():
 
 
 # ── Steam Blowing(임시 배관) ───────────────────────────────────────────
-# System=SB 조인트만 집계한다. Permanent 배관 집계에는 들어가지 않는다(SB_SYSTEM 제외 규칙).
-SB_SYSTEM = "SB"
+# 아래 _build_sb_summary가 SB만 집계한다. 그 밖의 집계(Permanent 배관)는 SB_SYSTEM을 .neq("system", SB_SYSTEM)으로 제외한다.
 
 def _sb_service(line_no):
     """Line No에서 서비스 코드를 뽑는다. 예: 12"-HS-B1-26/101-DB1-PP → HS"""
@@ -3576,7 +3576,7 @@ DAILY_REPORT_DAYS = 5      # Daily Report 표에 보여줄 최근 작업일 수 
 def _compute_daily_report():
     """Daily report 데이터 순수 계산 — 캐시 없음, Supabase 직접 조회"""
     dates_res = _sb_exec(lambda sb: sb.table("joint_master")
-        .select("date_completed")
+        .select("date_completed").neq("system", SB_SYSTEM)
         .not_.is_("date_completed", "null")
         .gt("di", 0)
         .order("date_completed", desc=True)
@@ -3597,7 +3597,7 @@ def _compute_daily_report():
 
     joints = []
     _q = get_sb().table("joint_master") \
-        .select("date_completed,welder,di,sf,system,sub_area,mat,size_inch") \
+        .select("date_completed,welder,di,sf,system,sub_area,mat,size_inch").neq("system", SB_SYSTEM) \
         .gte("date_completed", range_start) \
         .lte("date_completed", range_end) \
         .not_.is_("date_completed", "null")
@@ -3809,7 +3809,7 @@ def _read_drawing_revisions():
 
 def _build_joint_analysis():
     an = iso_analysis.Analyzer(_joint_accepted, _required_pwht, datetime.now(ALMT).date())
-    _scan_table("joint_master", iso_analysis.JOINT_COLUMNS, an.add_joint)
+    _scan_table("joint_master", iso_analysis.JOINT_COLUMNS, lambda r: None if r.get("system") == SB_SYSTEM else an.add_joint(r))   # Steam Blowing(임시 배관)은 ISO 현황에서 뺀다
     _scan_table("support_master", iso_analysis.SUPPORT_COLUMNS, an.add_support)
     numbers = {(r.get("test_pkg_no") or "").strip() for r in
                (_sb_exec(lambda sb: sb.table("test_package_master").select("test_pkg_no").execute()).data or [])}

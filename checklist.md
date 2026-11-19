@@ -303,8 +303,8 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 캐시 무효화 연결(TTLCache scopes=joint)(joint 변경 시)
 
 ## C. Permanent 집계에서 SB 제외 (Python)
-- [ ] 직접 집계하는 쿼리에 SB 제외 적용(Overview 보조·Daily·Weekly·Welder·ISO Status 등)
-- [ ] Joint Master 목록·저장은 SB 포함 유지(편집해야 하므로)
+- [x] 직접 집계하는 쿼리 15곳 + ISO Status 스캔에 SB 제외 적용(로컬 검증: ISO 3,973·Joint 51,644)
+- [x] Joint Master 목록·저장은 SB 포함 유지(편집해야 하므로)
 
 ## D. Permanent 집계에서 SB 제외 (DB 함수·뷰) — 사용자가 SQL Editor에서 실행
 - [ ] `mv_dashboard_v17`, `get_dashboard_summary_v17`, `get_dashboard_aggregates_control_v2`, `get_ep_aggregates`, `get_welder_stats_v4` 정의 확인 후 SB 제외 SQL 작성
