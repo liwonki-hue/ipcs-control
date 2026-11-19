@@ -497,6 +497,7 @@ CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free 
 _daily_cache        = cache_util.TTLCache("daily_actuals", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/daily-actuals
 _wkbd_cache         = cache_util.TTLCache("weekly_breakdown", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)         # /api/weekly-last-breakdown
 _welder_daily_cache = cache_util.TTLCache("welder_daily", 900, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/welder-daily
+_sb_cache           = cache_util.TTLCache("sb_summary", CACHE_TTL, scopes=("joint",), min_gap=20, stale_when_dirty=False)   # /api/sb-summary
 _ep_sup_cache       = cache_util.TTLCache("ep_support", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/ep-support-summary
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
@@ -3017,6 +3018,51 @@ def api_ep_support_summary():
         return jsonify(_ep_sup_cache.get_or_build(_build_ep_support))
     except _PartialEpSummary as p:
         return jsonify(p.result)
+    except Exception as e:
+        return jsonify({"error": _err_text(e)}), 500
+
+
+# ── Steam Blowing(임시 배관) ───────────────────────────────────────────
+# System=SB 조인트만 집계한다. Permanent 배관 집계에는 들어가지 않는다(SB_SYSTEM 제외 규칙).
+SB_SYSTEM = "SB"
+
+def _sb_service(line_no):
+    """Line No에서 서비스 코드를 뽑는다. 예: 12"-HS-B1-26/101-DB1-PP → HS"""
+    m = re.match(r'^[^-]*-([A-Za-z]{2,3})-', line_no or "")
+    return m.group(1).upper() if m else "-"
+
+def _build_sb_summary():
+    rows = _fetch_all_pages(lambda sb: sb.table("joint_master").select("unit,line_no,iso_drawing,di,date_completed").eq("system", SB_SYSTEM))
+    def bucket():
+        return {"total_di": 0.0, "completed_di": 0.0, "joints": 0, "completed_joints": 0}
+    total, svc, unit, weeks, isos = bucket(), defaultdict(bucket), defaultdict(bucket), defaultdict(lambda: {"completed_di": 0.0, "joints": 0}), set()
+    for r in rows:
+        di = float(r.get("di") or 0)
+        done = bool(r.get("date_completed"))
+        isos.add(r.get("iso_drawing"))
+        for b in (total, svc[_sb_service(r.get("line_no"))], unit[r.get("unit") or "-"]):
+            b["total_di"] += di
+            b["joints"] += 1
+            if done:
+                b["completed_di"] += di
+                b["completed_joints"] += 1
+        if done:
+            d = datetime.strptime(str(r["date_completed"])[:10], "%Y-%m-%d").date()
+            w = weeks[(d - timedelta(days=d.weekday())).isoformat()]     # 그 주 월요일을 주의 이름으로 쓴다
+            w["completed_di"] += di
+            w["joints"] += 1
+    def fin(b):
+        return {**b, "total_di": round(b["total_di"], 1), "completed_di": round(b["completed_di"], 1)}
+    return {"kpi": {**fin(total), "isos": len(isos)},
+            "service": [{"name": k, **fin(v)} for k, v in sorted(svc.items())],
+            "unit": [{"name": k, **fin(v)} for k, v in sorted(unit.items())],
+            "weekly": [{"week_start": k, "completed_di": round(v["completed_di"], 1), "joints": v["joints"]} for k, v in sorted(weeks.items())]}
+
+
+@app.route("/api/sb-summary")
+def api_sb_summary():
+    try:
+        return jsonify(_sb_cache.get_or_build(_build_sb_summary))
     except Exception as e:
         return jsonify({"error": _err_text(e)}), 500
 

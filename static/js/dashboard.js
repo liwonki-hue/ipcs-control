@@ -334,11 +334,15 @@ function navigate(page) {
         // Hide KPI row for Data Input/Reports and EP page (EP has its own KPI row)
         const dataInputPages = ["joint_master", "support_master", "nde_pwht", "testpkg_master", "test_master", "welder", "rt_quality", "daily_report", "iso_status"];
         const epKpiRow = document.getElementById("epKpiRow");
+        const sbKpiRow = document.getElementById("sbKpiRow");
         if (kpiRow) {
-            kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power") ? "none" : "flex";
+            kpiRow.style.display = (dataInputPages.includes(page) || page === "early_power" || page === "steam_blowing") ? "none" : "flex";
         }
         if (epKpiRow) {
             epKpiRow.style.display = page === "early_power" ? "flex" : "none";
+        }
+        if (sbKpiRow) {
+            sbKpiRow.style.display = page === "steam_blowing" ? "flex" : "none";
         }
 
     }
@@ -346,6 +350,7 @@ function navigate(page) {
     switch(page) {
         case "overview":    loadOverview();     break;
         case "early_power": loadEarlyPower();   break;
+        case "steam_blowing": loadSteamBlowing(); break;
         case "systems":     loadSystems(); loadSubArea(); break;
         case "weekly":      loadWeekly();       break;
         case "unitarea":    requestAnimationFrame(() => loadUnitArea()); break;

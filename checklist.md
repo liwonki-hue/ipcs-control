@@ -298,9 +298,9 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 - [x] 사이드바·페이지·JS·API(`/api/data-quality`)·테스트 제거 (ISO Status는 유지)
 
 ## B. SB 전용 탭
-- [ ] `/api/sb-summary` — SB 조인트만 집계(KPI·Unit·서비스별·주간 완료)
-- [ ] 사이드바 메뉴 + 페이지(KPI 행 + 게이지 + 주간 차트 + 표) + 렌더 JS
-- [ ] 캐시 무효화 연결(joint 변경 시)
+- [x] `/api/sb-summary` — SB 조인트만 집계(KPI·Unit·서비스별·주간 완료)
+- [x] 사이드바 메뉴 + 페이지(KPI 행 + 게이지 + 주간 차트 + 표) + 렌더 JS
+- [x] 캐시 무효화 연결(TTLCache scopes=joint)(joint 변경 시)
 
 ## C. Permanent 집계에서 SB 제외 (Python)
 - [ ] 직접 집계하는 쿼리에 SB 제외 적용(Overview 보조·Daily·Weekly·Welder·ISO Status 등)
