@@ -538,6 +538,6 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 .tm-tab .tm-tab-sub { font-weight: 400; font-size: 10px; opacity: 0.75; margin-left: 4px; }
 .tm-tab:hover { border-color: var(--accent); color: var(--accent); }
 .tm-tab.active { background: var(--accent); border-color: var(--accent); color: #ffffff; }
-.tm-tab[data-kind="visual"].active { background: #0d9488; border-color: #0d9488; }
-.tm-tab[data-kind="visual"]:hover:not(.active) { border-color: #0d9488; color: #0d9488; }
+.tm-tab[data-kind="visual"].active { background: #7c3aed; border-color: #7c3aed; }
+.tm-tab[data-kind="visual"]:hover:not(.active) { border-color: #7c3aed; color: #7c3aed; }
 #tmTable.tm-visual th:nth-child(n+7):nth-child(-n+10), #tmTable.tm-visual td:nth-child(n+7):nth-child(-n+10) { display: none; }
