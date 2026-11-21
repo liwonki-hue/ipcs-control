@@ -811,9 +811,9 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
         {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
         {key: "in_progress", label: "In Progress",   color: "rgba(245,158,11,0.75)"},
         {key: "not_started", label: "Not Started",   color: "rgba(148,163,184,0.55)"},
-        // Visual(VT) Test — 완료는 Completed에 합치고, 완료 전 단계만 보라 계열 색과 VT 표기로 구분한다
-        {key: "v_ready",     label: "VT Ready",      color: "rgba(124,58,237,0.85)", vt: true},
-        {key: "v_pending",   label: "VT Pending",    color: "rgba(221,214,254,0.95)", vt: true},
+        // Visual(VT) Test — 완료는 Completed에 합치고, 완료 전 단계만 시안 계열 색과 VT 표기로 구분한다
+        {key: "v_ready",     label: "VT Ready",      color: "rgba(6,182,212,0.8)",   vt: true},
+        {key: "v_pending",   label: "VT Pending",    color: "rgba(165,243,252,0.85)", vt: true},
     ];
     const cnt = (n, k) => byName[n]?.[k] || 0;
     const total = n => byName[n]?.total || 0;
@@ -826,7 +826,7 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
             label: st.label, backgroundColor: st.color, borderWidth: 0, barPercentage: 0.8, categoryPercentage: 0.9,
             data: names.map(n => total(n) > 0 ? cnt(n, st.key) / total(n) * 100 : 0),
             datalabels: {display: ctx => cnt(names[ctx.dataIndex], st.key) > 0, formatter: (v, ctx) => (st.vt ? "VT " : "") + cnt(names[ctx.dataIndex], st.key),
-                         color: st.key === "v_ready" ? "#ffffff" : "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
+                         color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
         }))},
         options: {...opts, layout: {padding: {top: 4}},
             scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 0, maxRotation: 0}},
