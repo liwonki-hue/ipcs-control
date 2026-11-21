@@ -3389,13 +3389,13 @@ def _load_pkg_stats(sb):
 
 
 def _tp_add(agg, system, method, stage):
-    """System별 Test Package 단계 수. Visual(VT)은 압력 시험(Hydro·Pneumatic)과 따로 v_ 항목으로 센다:
-    v_completed(점검 완료) / v_ready(배관 100% + Support 설치 완료, 점검 대기) / v_pending(그 외)."""
+    """System별 Test Package 단계 수. 완료된 것은 시험 종류와 상관없이 completed로 센다.
+    Visual(VT)은 완료 전 단계만 압력 시험과 따로 센다: v_ready(배관 100% + Support 설치 완료, 점검 대기) / v_pending(그 외)."""
     a = agg.setdefault(system or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0,
-                                       "v_completed": 0, "v_ready": 0, "v_pending": 0})
+                                       "v_ready": 0, "v_pending": 0})
     a["total"] += 1
-    if (method or "").strip().upper() == "VISUAL":
-        a["v_completed" if stage == "completed" else "v_ready" if stage == "ready" else "v_pending"] += 1
+    if stage != "completed" and (method or "").strip().upper() == "VISUAL":
+        a["v_ready" if stage == "ready" else "v_pending"] += 1
     else:
         a[stage] += 1
 

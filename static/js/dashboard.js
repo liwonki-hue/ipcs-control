@@ -811,10 +811,9 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
         {key: "ready",       label: "Ready to Test", color: "rgba(37,99,235,0.7)"},
         {key: "in_progress", label: "In Progress",   color: "rgba(245,158,11,0.75)"},
         {key: "not_started", label: "Not Started",   color: "rgba(148,163,184,0.55)"},
-        // Visual(VT) Test — 압력 시험과 구분되도록 청록 계열 색, 숫자 앞에 VT를 붙인다
-        {key: "v_completed", label: "VT Completed",  color: "rgba(13,148,136,0.85)", vt: true},
-        {key: "v_ready",     label: "VT Ready",      color: "rgba(45,212,191,0.75)", vt: true},
-        {key: "v_pending",   label: "VT Pending",    color: "rgba(153,246,228,0.8)", vt: true},
+        // Visual(VT) Test — 완료는 Completed에 합치고, 완료 전 단계만 청록 계열 색과 VT 표기로 구분한다
+        {key: "v_ready",     label: "VT Ready",      color: "rgba(6,182,212,0.8)",   vt: true},
+        {key: "v_pending",   label: "VT Pending",    color: "rgba(165,243,252,0.85)", vt: true},
     ];
     const cnt = (n, k) => byName[n]?.[k] || 0;
     const total = n => byName[n]?.total || 0;
