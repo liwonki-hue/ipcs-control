@@ -3480,6 +3480,14 @@ function tmOnSystemChange() {
     loadTestMaster();
 }
 
+// Holding Time(분) 선택 목록. 이미 저장된 값이 목록에 없으면(예전 형식 등) 그 값도 선택지로 남긴다
+const _HOLD_MINUTES = ["10", "30", "60", "120", "240"];
+function _holdOpts(cur) {
+    const c = String(cur == null ? "" : cur).trim();
+    const list = c && !_HOLD_MINUTES.includes(c) ? [c, ..._HOLD_MINUTES] : _HOLD_MINUTES;
+    return list.map(v => `<option value="${esc(v)}"${v === c ? " selected" : ""} style="color:#000">${esc(v)}</option>`).join("");
+}
+
 function renderTMTable(data) {
     const tbody = document.getElementById("tmBody");
     if (!tbody) return;
@@ -3549,7 +3557,12 @@ function renderTMTable(data) {
                     <option value="DEMI. WATER"   ${mdU==="DEMI. WATER"  ?" selected":""} style="color:#000">DEMI. WATER</option>
                 </select>
             </td>
-            <td style="text-align:center"><input type="text" class="cell-input" id="tm-holding-${r.id}" value="${esc(r.holding_time||"")}" style="${cin}"></td>
+            <td style="text-align:center">
+                <select class="cell-input" id="tm-holding-${r.id}" style="${ssel}">
+                    <option value="" style="color:#000">-</option>
+                    ${_holdOpts(r.holding_time)}
+                </select>
+            </td>
             <td style="text-align:center"><input type="text" class="cell-input${dc?'':' date-empty'}" id="tm-date-${r.id}" value="${dc?dc.slice(2):''}" data-full-date="${dc}"
                 style="width:100%;text-align:center;background:#fff;cursor:pointer;color:#000"
                 onclick="_pickDate(this)" readonly></td>
@@ -3933,7 +3946,7 @@ async function exportTMExcel() {
         "Test Pressure":    r.test_pressure    || "",
         "Method":           r.method           || "",
         "Media":            r.media            || "",
-        "Holding Time":     r.holding_time     || "",
+        "Holding Time (min)": r.holding_time   || "",
         "Date":             r.date_completed ? r.date_completed.substring(0,10) : "",
         "Result":           r.completed ? "PASS" : (r.date_completed ? "FAIL" : ""),
         "Description":      r.description      || "",
