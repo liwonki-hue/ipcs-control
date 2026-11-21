@@ -508,3 +508,10 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* Daily Report Sub Area / System 표 — 열 사이 세로 구분선 */
 #drSubSysTable th, #drSubSysTable td { border-right: 1px solid var(--border2); }
 #drSubSysTable th:last-child, #drSubSysTable td:last-child { border-right: none; }
+
+/* Steam Blowing: KPI 카드 7개를 한 줄에 같은 폭으로 (첫 카드만 조금 넓게). 게이지 아래 목록은 촘촘하게 */
+#sbKpiRow .kpi-card { flex: 1 1 0; }
+#sbKpiRow .kpi-card:first-child { flex: 1.35 1 0; }
+#sbStats.stat-list .stat-row, #sbSupportStats.stat-list .stat-row { padding: 2px 0; }
+#sbStats.stat-list .stat-label, #sbSupportStats.stat-list .stat-label { font-size: 10px; }
+#sbStats.stat-list .stat-value, #sbSupportStats.stat-list .stat-value { font-size: 11px; }

@@ -35,36 +35,46 @@ function renderSteamBlowing(d) {
     const sch = d.schedule || {};
     const planPct = _sbPlanPct(sch);
 
+    const supRem = Math.max(0, sup.total - sup.completed);
+    const wP = Math.round(SB_WEIGHT.piping * 100), wS = Math.round(SB_WEIGHT.support * 100);
+
     // KPI 행 — SB Progress = Piping 80% + Support 20%
     set("sb-kpi-pct", `${overall.toFixed(2)}%`);
     const pctEl = document.getElementById("sb-kpi-pct"); if (pctEl) pctEl.style.color = pctColor(overall);
     const bar = document.getElementById("sb-kpi-bar");
     if (bar) { bar.style.width = `${Math.min(overall, 100)}%`; bar.style.background = pctColor(overall); }
-    set("sb-kpi-pct-sub", `PIPING ${pct.toFixed(2)}% · SUPPORT ${supPct.toFixed(2)}%`);
+    set("sb-kpi-pct-sub", `PIPING ${wP}% · SUPPORT ${wS}%`);
     set("sbSchedule", sch.start ? `Schedule ${sch.start} ~ ${sch.end}` : "");
     set("sb-kpi-total", `${pct.toFixed(2)}%`);
     const tEl = document.getElementById("sb-kpi-total"); if (tEl) tEl.style.color = pctColor(pct);
-    set("sb-kpi-total-sub", `${fmtNum(done, 0)} / ${fmtNum(total, 0)} DI · ${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints` + (planPct == null ? "" : ` · Plan ${planPct.toFixed(2)}%`));
-    set("sb-kpi-done", `${supPct.toFixed(2)}%`);
-    const sEl = document.getElementById("sb-kpi-done"); if (sEl) sEl.style.color = pctColor(supPct);
-    const supRem = Math.max(0, sup.total - sup.completed);
-    set("sb-kpi-done-sub", `Total ${fmtNum(sup.total, 0)} · Done ${fmtNum(sup.completed, 0)} · Remaining ${fmtNum(supRem, 0)} EA`);
+    set("sb-kpi-total-sub", `${fmtNum(done, 0)} / ${fmtNum(total, 0)} DI`);
     set("sb-kpi-rem", fmtNum(rem, 0));
     set("sb-kpi-rem-sub", total > 0 ? `${(100 - pct).toFixed(2)}% of piping DI` : "—");
+    set("sb-kpi-sup", `${supPct.toFixed(2)}%`);
+    const sEl = document.getElementById("sb-kpi-sup"); if (sEl) sEl.style.color = pctColor(supPct);
+    set("sb-kpi-sup-sub", `${fmtNum(sup.completed, 0)} / ${fmtNum(sup.total, 0)} EA`);
+    set("sb-kpi-suptotal", fmtNum(sup.total, 0));
+    set("sb-kpi-suptotal-sub", "EA");
+    set("sb-kpi-supdone", fmtNum(sup.completed, 0));
+    set("sb-kpi-supdone-sub", sup.total > 0 ? `${supPct.toFixed(2)}% of total` : "—");
+    set("sb-kpi-suprem", fmtNum(supRem, 0));
+    set("sb-kpi-suprem-sub", sup.total > 0 ? `${(100 - supPct).toFixed(2)}% of total` : "—");
 
-    // 게이지 — EP 탭과 같은 모양 (Piping, Support)
+    // 게이지 — EP 탭과 같은 모양 (Piping, Support). 두 게이지 아래 목록은 4줄로 맞춘다
     _sbGauge("sbGaugePath", "sbGaugeText", pct, color(pct));
     _sbGauge("sbSupportGaugePath", "sbSupportGaugeText", supPct, color(supPct));
     const rows = (el, list) => { const e = document.getElementById(el); if (e) e.innerHTML = list.map(([l, v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join(""); };
     rows("sbStats", [
-        ["SB Piping (D/I)", `${fmtNum(done, 0)} / ${fmtNum(total, 0)}`],
-        ...(planPct == null ? [] : [["Plan (today) / Diff", `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]])
+        ["Total DI", fmtNum(total, 0)],
+        ["Completed DI", fmtNum(done, 0)],
+        ["Remaining DI", fmtNum(rem, 0)],
+        ["Plan (today) / Diff", planPct == null ? "—" : `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]
     ]);
     rows("sbSupportStats", [
         ["Total Support (EA)", fmtNum(sup.total, 0)],
         ["Completed (EA)", fmtNum(sup.completed, 0)],
         ["Remaining (EA)", fmtNum(supRem, 0)],
-        ["Weight", `Piping ${SB_WEIGHT.piping * 100}% · Support ${SB_WEIGHT.support * 100}%`]
+        ["Weight", `Piping ${wP}% · Support ${wS}%`]
     ]);
 
     _sbDrawTable("sbServiceBody", d.service || []);
@@ -87,8 +97,8 @@ function _sbDrawTable(bodyId, rows) {
     const sum = rows.reduce((s, r) => ({ total_di: s.total_di + (r.total_di || 0), completed_di: s.completed_di + (r.completed_di || 0), joints: s.joints + (r.joints || 0) }),
         { total_di: 0, completed_di: 0, joints: 0 });
     el.innerHTML =
-        `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700"><td style="${td};text-align:left;color:var(--accent)">TOTAL</td>${cells(sum)}</tr>` +
-        rows.map(r => `<tr><td style="${td};text-align:left">${esc(r.name || "")}</td>${cells(r)}</tr>`).join("");
+        `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700"><td style="${td};color:var(--accent)">TOTAL</td>${cells(sum)}</tr>` +
+        rows.map(r => `<tr><td style="${td}">${esc(r.name || "")}</td>${cells(r)}</tr>`).join("");
 }
 
 // 일정 기간 안에서 오늘까지 계획 공정률(%) — 총 물량을 일정 기간에 균등 배분한다고 본다
