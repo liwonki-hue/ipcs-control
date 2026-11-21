@@ -2973,7 +2973,7 @@ def _build_ep_support():
         f_jp = ex.submit(lambda: _with_retry(lambda: _fetch_all_pages(lambda sb: sb.table("joint_master").select("package")
                                                                       .eq("phase", "EP").not_.is_("package", "null"))))
         f_tp = ex.submit(lambda: _with_retry(lambda: _sb_exec(lambda sb: sb.table("test_package_master")
-                                                              .select("test_pkg_no,system,completed").execute()).data or []))
+                                                              .select("test_pkg_no,system,completed,method").execute()).data or []))
         f_stats = ex.submit(lambda: _with_retry(lambda: _load_pkg_stats(get_sb())))
         rows = f_sup.result()
         tp_parts = []
@@ -3003,9 +3003,7 @@ def _build_ep_support():
         tp_comp = sum(1 for p in ep_pkgs_now if tp_map.get(p, {}).get("completed"))
         for p in sorted(ep_pkgs_now):
             row = tp_map.get(p, {})
-            a = tp_sys.setdefault(row.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
-            a["total"] += 1
-            a[_pkg_stage(row.get("completed"), pkg_stats.get(p, {}))] += 1
+            _tp_add(tp_sys, row.get("system"), row.get("method"), _pkg_stage(row.get("completed"), pkg_stats.get(p, {})))
     result = {"sys": list(sys_map.values()), "area": list(area_map.values()), "subarea_map": subarea_map,
               "testpkg_total": tp_total, "testpkg_comp": tp_comp,
               "testpkg_sys": [{"system": k, **v} for k, v in sorted(tp_sys.items())]}
@@ -3390,6 +3388,18 @@ def _load_pkg_stats(sb):
     return pkg_stats
 
 
+def _tp_add(agg, system, method, stage):
+    """System별 Test Package 단계 수. Visual(VT)은 압력 시험(Hydro·Pneumatic)과 따로 v_ 항목으로 센다:
+    v_completed(점검 완료) / v_ready(배관 100% + Support 설치 완료, 점검 대기) / v_pending(그 외)."""
+    a = agg.setdefault(system or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0,
+                                       "v_completed": 0, "v_ready": 0, "v_pending": 0})
+    a["total"] += 1
+    if (method or "").strip().upper() == "VISUAL":
+        a["v_completed" if stage == "completed" else "v_ready" if stage == "ready" else "v_pending"] += 1
+    else:
+        a[stage] += 1
+
+
 def _pkg_stage(completed, st):
     """Test Package 진행 단계 — completed(시험 완료) / ready(Piping 100% + Support 설치 완료) / in_progress / not_started"""
     pt, pc = st.get("piping_total", 0), st.get("piping_completed", 0)
@@ -3415,10 +3425,11 @@ def api_testpkg_get():
         pkg_no   = request.args.get("test_pkg_no", "").strip()
         status   = request.args.get("status",      "").strip()
         search   = request.args.get("q",           "").strip()
+        kind     = request.args.get("kind",        "").strip().lower()   # visual = Visual(VT) Test, pressure = 그 외(Hydro·Pneumatic 등)
         skip_readiness = request.args.get("skip_readiness", "0") == "1"
 
         # 필터없는 전체 목록(드롭다운용) 캐시 — 10분 TTL
-        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search])
+        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search, kind])
         if is_all_req and limit >= 1000:
             with _lock:
                 cached = _testpkg_all_cache.get("data")
@@ -3432,6 +3443,8 @@ def api_testpkg_get():
         if pkg_no:  q = q.eq("test_pkg_no", pkg_no)
         if status == "pass":    q = q.eq("completed", True)
         if status == "pending": q = q.eq("completed", False)
+        if kind == "visual":    q = q.eq("method", "VISUAL")
+        if kind == "pressure":  q = q.or_("method.is.null,method.neq.VISUAL")
         if search:
             like = f"%{search}%"
             q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
@@ -3474,11 +3487,9 @@ def api_testpkg_by_system():
         pkg_stats = _load_pkg_stats(sb)
         agg, off = {}, 0
         while True:
-            rows = sb.table("test_package_master").select("system,test_pkg_no,completed").order("id").range(off, off + 4999).execute().data or []
+            rows = sb.table("test_package_master").select("system,test_pkg_no,completed,method").order("id").range(off, off + 4999).execute().data or []
             for r in rows:
-                a = agg.setdefault(r.get("system") or "-", {"total": 0, "completed": 0, "ready": 0, "in_progress": 0, "not_started": 0})
-                a["total"] += 1
-                a[_pkg_stage(r.get("completed"), pkg_stats.get(r.get("test_pkg_no") or "", {}))] += 1
+                _tp_add(agg, r.get("system"), r.get("method"), _pkg_stage(r.get("completed"), pkg_stats.get(r.get("test_pkg_no") or "", {})))
             if len(rows) < 5000:
                 break
             off += 5000

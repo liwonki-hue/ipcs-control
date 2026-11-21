@@ -532,3 +532,12 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* SB 표: 행은 표 영역의 남는 높이를 나눠 갖는다 */
 #page-steam_blowing .data-table thead th { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(30px * var(--sb-s, 1)); }
 #sbServiceBody td, #sbUnitBody td { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(26px * var(--sb-s, 1)); padding-top: 2px !important; padding-bottom: 2px !important; }
+
+/* Test Package Register — Pressure / Visual 탭. Visual은 압력·매체·유지시간이 없는 점검이라 그 열을 숨긴다 */
+.tm-tab { background: var(--panel); border: 1px solid var(--border2); border-radius: 6px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: var(--text-dim); cursor: pointer; font-family: 'Barlow', sans-serif; transition: background-color 0.15s, color 0.15s, border-color 0.15s; }
+.tm-tab .tm-tab-sub { font-weight: 400; font-size: 10px; opacity: 0.75; margin-left: 4px; }
+.tm-tab:hover { border-color: var(--accent); color: var(--accent); }
+.tm-tab.active { background: var(--accent); border-color: var(--accent); color: #ffffff; }
+.tm-tab[data-kind="visual"].active { background: #0d9488; border-color: #0d9488; }
+.tm-tab[data-kind="visual"]:hover:not(.active) { border-color: #0d9488; color: #0d9488; }
+#tmTable.tm-visual th:nth-child(n+7):nth-child(-n+10), #tmTable.tm-visual td:nth-child(n+7):nth-child(-n+10) { display: none; }
