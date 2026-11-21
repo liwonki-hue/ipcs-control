@@ -24,7 +24,10 @@ function renderSteamBlowing(d) {
     const pctEl = document.getElementById("sb-kpi-pct"); if (pctEl) pctEl.style.color = pctColor(pct);
     const bar = document.getElementById("sb-kpi-bar");
     if (bar) { bar.style.width = `${Math.min(pct, 100)}%`; bar.style.background = pctColor(pct); }
-    set("sb-kpi-pct-sub", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints`);
+    const sch = d.schedule || {};
+    const planPct = _sbPlanPct(sch);
+    set("sb-kpi-pct-sub", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints` + (planPct == null ? "" : ` · Plan ${planPct.toFixed(2)}%`));
+    set("sbSchedule", sch.start ? `Schedule ${sch.start} ~ ${sch.end}` : "");
     set("sb-kpi-total", fmtNum(total, 0));
     set("sb-kpi-total-sub", `${(k.joints || 0).toLocaleString()} joints · ${(k.isos || 0).toLocaleString()} ISO`);
     set("sb-kpi-done", fmtNum(done, 0));
@@ -43,13 +46,14 @@ function renderSteamBlowing(d) {
         stats.innerHTML = [
             ["SB Piping (D/I)", `${fmtNum(done, 0)} / ${fmtNum(total, 0)}`],
             ["Joints", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()}`],
-            ["ISO Drawings", (k.isos || 0).toLocaleString()]
+            ["ISO Drawings", (k.isos || 0).toLocaleString()],
+            ...(planPct == null ? [] : [["Plan (today) / Diff", `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]])
         ].map(([l, v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
     }
 
     _sbDrawTable("sbServiceBody", d.service || []);
     _sbDrawTable("sbUnitBody", d.unit || []);
-    _sbDrawWeekly(d.weekly || []);
+    _sbDrawWeekly(d.weekly || [], sch, total);
 }
 
 // TOTAL 행을 맨 위에 두고 이름순 행을 아래에 둔다 (EP 표와 같은 방식)
@@ -71,26 +75,44 @@ function _sbDrawTable(bodyId, rows) {
         rows.map(r => `<tr><td style="${td};text-align:left">${esc(r.name || "")}</td>${cells(r)}</tr>`).join("");
 }
 
-// 주별 완료 DI(막대) + 누적(선). 완료된 조인트가 아직 없으면 안내 문구만 보여준다
-function _sbDrawWeekly(weekly) {
+// 일정 기간 안에서 오늘까지 계획 공정률(%) — 총 물량을 일정 기간에 균등 배분한다고 본다
+const _SB_DAY = 86400000;
+const _sbDate = s => new Date(s + "T00:00:00Z");
+const _sbIso = t => new Date(t).toISOString().slice(0, 10);
+function _sbPlanPct(sch, asOf) {
+    if (!sch || !sch.start) return null;
+    const s = _sbDate(sch.start).getTime(), e = _sbDate(sch.end).getTime();
+    const today = asOf ? _sbDate(asOf).getTime() : _sbDate(new Date().toISOString().slice(0, 10)).getTime();
+    return Math.max(0, Math.min(1, ((today - s) / _SB_DAY + 1) / ((e - s) / _SB_DAY + 1))) * 100;
+}
+
+// 주별 완료 DI(막대) + 누적 실적(선) + 계획(점선). x축은 일정 기간의 주(월요일 시작)이고, 일정 밖의 실적 주도 포함한다
+function _sbDrawWeekly(weekly, sch, totalDi) {
     const canvas = document.getElementById("sbWeeklyChart"), empty = document.getElementById("sbWeeklyEmpty");
     if (!canvas) return;
     if (charts["sbWeeklyChart"]) { charts["sbWeeklyChart"].destroy(); delete charts["sbWeeklyChart"]; }
-    const has = weekly.length > 0;
-    canvas.style.display = has ? "" : "none";
-    if (empty) empty.style.display = has ? "none" : "flex";
-    if (!has) return;
+    const hasSch = !!(sch && sch.start);
+    if (!hasSch && !weekly.length) { canvas.style.display = "none"; if (empty) empty.style.display = "flex"; return; }
+    canvas.style.display = ""; if (empty) empty.style.display = "none";
+    const mondayOf = t => { const dt = new Date(t); return dt.getTime() - ((dt.getUTCDay() + 6) % 7) * _SB_DAY; };
+    const first = Math.min(...[hasSch ? mondayOf(_sbDate(sch.start)) : Infinity, ...weekly.map(w => _sbDate(w.week_start).getTime())]);
+    const last = Math.max(...[hasSch ? mondayOf(_sbDate(sch.end)) : -Infinity, ...weekly.map(w => _sbDate(w.week_start).getTime())]);
+    const weeks = []; for (let t = first; t <= last; t += 7 * _SB_DAY) weeks.push(_sbIso(t));
+    const act = Object.fromEntries(weekly.map(w => [w.week_start, w.completed_di]));
+    const todayTs = _sbDate(new Date().toISOString().slice(0, 10)).getTime();
     let cum = 0;
-    const cumData = weekly.map(w => (cum += w.completed_di));
+    const cumData = weeks.map(w => { cum += act[w] || 0; return _sbDate(w).getTime() <= todayTs || act[w] ? cum : null; });   // 아직 오지 않은 주는 선을 끊는다
+    const planData = hasSch ? weeks.map(w => { const wEnd = _sbDate(w).getTime() + 6 * _SB_DAY; return Math.round(totalDi * (_sbPlanPct(sch, _sbIso(wEnd)) / 100)); }) : [];
     charts["sbWeeklyChart"] = new Chart(canvas.getContext("2d"), {
         type: "bar",
-        data: { labels: weekly.map(w => w.week_start.slice(5)), datasets: [
-            { label: "Cumulative", type: "line", yAxisID: "yL", data: cumData, borderColor: "#22d3a1", borderWidth: 2, fill: false, pointRadius: 3 },
-            { label: "Weekly DI", type: "bar", yAxisID: "yR", data: weekly.map(w => w.completed_di), backgroundColor: "rgba(37,99,235,0.55)", datalabels: { display: false } }
+        data: { labels: weeks.map(w => w.slice(5)), datasets: [
+            ...(hasSch ? [{ label: "Plan (cumulative)", type: "line", yAxisID: "yL", data: planData, borderColor: "rgba(255,82,82,0.6)", borderDash: [4, 4], borderWidth: 1.5, fill: false, pointRadius: 0 }] : []),
+            { label: "Actual (cumulative)", type: "line", yAxisID: "yL", data: cumData, borderColor: "#22d3a1", borderWidth: 2, fill: false, pointRadius: 3, spanGaps: false },
+            { label: "Weekly DI", type: "bar", yAxisID: "yR", data: weeks.map(w => act[w] || null), backgroundColor: "rgba(37,99,235,0.55)", datalabels: { display: false } }
         ]},
         options: { ...chartOpts(""),
             scales: {
-                x: { ...chartOpts("").scales.x },
+                x: { ...chartOpts("").scales.x, ticks: { ...chartOpts("").scales.x.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
                 yL: { type: "linear", position: "left", beginAtZero: true, ticks: { color: "#4a6080", font: { size: 9 } }, title: { display: true, text: "Cumulative DI", color: "#4a6080", font: { size: 9 } } },
                 yR: { type: "linear", position: "right", beginAtZero: true, grid: { display: false }, ticks: { color: "#5b8def", font: { size: 9 } }, title: { display: true, text: "Weekly DI", color: "#5b8def", font: { size: 9 } } }
             },

@@ -497,6 +497,7 @@ CACHE_TTL        = 1200       # 20 minutes — minimize DB calls on Render free 
 _daily_cache        = cache_util.TTLCache("daily_actuals", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/daily-actuals
 _wkbd_cache         = cache_util.TTLCache("weekly_breakdown", 300, scopes=("joint",), min_gap=20, stale_when_dirty=False)         # /api/weekly-last-breakdown
 _welder_daily_cache = cache_util.TTLCache("welder_daily", 900, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/welder-daily
+SB_SCHEDULE = ("2027-02-01", "2027-05-31")   # Steam Blowing 설치 일정(시작, 종료) — 2026-11-21 사용자 지정
 SB_SYSTEM = "SB"   # Steam Blowing — 임시 배관. Permanent 집계(Overview·Weekly·Daily·Welder 등)에서는 제외한다
 _sb_cache           = cache_util.TTLCache("sb_summary", CACHE_TTL, scopes=("joint",), min_gap=20, stale_when_dirty=False)   # /api/sb-summary
 _ep_sup_cache       = cache_util.TTLCache("ep_support", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/ep-support-summary
@@ -3053,7 +3054,8 @@ def _build_sb_summary():
             w["joints"] += 1
     def fin(b):
         return {**b, "total_di": round(b["total_di"], 1), "completed_di": round(b["completed_di"], 1)}
-    return {"kpi": {**fin(total), "isos": len(isos)},
+    return {"schedule": {"start": SB_SCHEDULE[0], "end": SB_SCHEDULE[1]},
+            "kpi": {**fin(total), "isos": len(isos)},
             "service": [{"name": k, **fin(v)} for k, v in sorted(svc.items())],
             "unit": [{"name": k, **fin(v)} for k, v in sorted(unit.items())],
             "weekly": [{"week_start": k, "completed_di": round(v["completed_di"], 1), "joints": v["joints"]} for k, v in sorted(weeks.items())]}

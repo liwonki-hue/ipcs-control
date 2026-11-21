@@ -26,6 +26,7 @@ def test_sb_summary_groups_by_service_unit_and_week(monkeypatch):
     assert {s["name"]: s["total_di"] for s in res["service"]} == {"HS": 24.0, "LS": 6.0}
     assert {u["name"]: u["completed_di"] for u in res["unit"]} == {"B1": 12.0, "B2": 6.0}
     assert res["weekly"] == [{"week_start": "2026-11-16", "completed_di": 18.0, "joints": 2}]
+    assert res["schedule"] == {"start": "2027-02-01", "end": "2027-05-31"}        # 설치 일정(사용자 지정)
 
 
 def test_sb_endpoint_is_public_and_returns_summary(anon_client, monkeypatch):
