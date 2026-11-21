@@ -509,15 +509,26 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #drSubSysTable th, #drSubSysTable td { border-right: 1px solid var(--border2); }
 #drSubSysTable th:last-child, #drSubSysTable td:last-child { border-right: none; }
 
-/* Steam Blowing: KPI 카드 7개를 한 줄에 같은 폭으로 (첫 카드만 조금 넓게). 게이지 아래 목록은 촘촘하게 */
-#sbKpiRow .kpi-card { flex: 1 1 0; }
+/* Steam Blowing — 화면 크기에 비례해 커진다. --sb-s는 1366x768 기준 배율(JS가 창 크기로 정한다, 최소 1).
+   KPI·글자·게이지·열 폭이 같은 배율로 커지고, 세로는 JS가 남는 높이를 게이지 줄과 표 줄에 나눠 준다 */
+#sbKpiRow .kpi-card { flex: 1 1 0; padding: calc(12px * var(--sb-s, 1)) calc(14px * var(--sb-s, 1)); }
 #sbKpiRow .kpi-card:first-child { flex: 1.35 1 0; }
-/* 게이지 패널: 게이지를 크게 하고, 아래 목록이 남는 높이를 나눠 채워 여백이 남지 않게 한다 */
-#page-steam_blowing .gauge-wrap { flex: 0 0 auto; padding: 6px 0 22px !important; margin: 0; }
-#page-steam_blowing .gauge-svg { width: 160px !important; }
+#sbKpiRow .kpi-label { font-size: calc(9px * var(--sb-s, 1)); margin-bottom: calc(3px * var(--sb-s, 1)); }
+#sbKpiRow .kpi-value { font-size: calc(26px * var(--sb-s, 1)); }
+#sbKpiRow .kpi-sub { font-size: calc(11px * var(--sb-s, 1)); margin-top: calc(4px * var(--sb-s, 1)); }
+#sbKpiRow .kpi-bar-wrap { margin-top: calc(6px * var(--sb-s, 1)); }
+#page-steam_blowing .panel { padding: calc(10px * var(--sb-s, 1)); margin-bottom: 0; }
+#page-steam_blowing .panel-title { font-size: calc(11px * var(--sb-s, 1)); margin-bottom: calc(8px * var(--sb-s, 1)); }
+#page-steam_blowing .panel-title::before { height: calc(14px * var(--sb-s, 1)); }
+#sbRow2 { display: grid; grid-template-columns: calc(230px * var(--sb-s, 1)) calc(230px * var(--sb-s, 1)) minmax(0, 1fr); gap: calc(12px * var(--sb-s, 1)); margin-bottom: calc(12px * var(--sb-s, 1)); align-items: stretch; }
+#sbRow3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(12px * var(--sb-s, 1)); align-items: stretch; min-height: 190px; }
+/* 게이지 패널: 게이지 아래 목록이 남는 높이를 나눠 채워 여백이 남지 않게 한다 */
+#page-steam_blowing .gauge-wrap { flex: 0 0 auto; padding: calc(6px * var(--sb-s, 1)) 0 calc(22px * var(--sb-s, 1)) !important; margin: 0; }
+#page-steam_blowing .gauge-svg { width: calc(160px * var(--sb-s, 1)) !important; }
 #sbStats, #sbSupportStats { flex: 1; display: flex; flex-direction: column; margin-top: 0 !important; }
 #sbStats .stat-row, #sbSupportStats .stat-row { flex: 1; align-items: center; padding: 0; }
-#sbStats .stat-label, #sbSupportStats .stat-label { font-size: 11px; }
-#sbStats .stat-value, #sbSupportStats .stat-value { font-size: 12px; }
-/* SB 표: 전체 표의 행 최소 높이(36px)를 0.8배로 낮춘다. 표 영역이 남는 높이를 행에 나눠 준다 */
-#sbServiceBody td, #sbUnitBody td { height: 32px; }
+#sbStats .stat-label, #sbSupportStats .stat-label { font-size: calc(11px * var(--sb-s, 1)); }
+#sbStats .stat-value, #sbSupportStats .stat-value { font-size: calc(12px * var(--sb-s, 1)); }
+/* SB 표: 행은 표 영역의 남는 높이를 나눠 갖는다 */
+#page-steam_blowing .data-table thead th { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(30px * var(--sb-s, 1)); }
+#sbServiceBody td, #sbUnitBody td { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(26px * var(--sb-s, 1)); padding-top: 2px !important; padding-bottom: 2px !important; }

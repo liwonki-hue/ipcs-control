@@ -1,13 +1,36 @@
 // Steam Blowing(임시 배관) 탭 — SB 조인트 물량만 보여준다 (Permanent 배관과 분리)
 let _sbData = null;
 
+// 화면 배율: 1366x768을 1로 보고, 창이 크면 폭·높이 중 작은 비율만큼 키운다(최대 1.7배)
+function _sbS() { return Math.max(1, Math.min(window.innerWidth / 1366, window.innerHeight / 768, 1.7)); }
+function _sbFs(n) { return Math.round(n * _sbS() * 10) / 10; }
+
+// 배율을 적용하고, 남는 세로 공간을 게이지 줄(58%)과 표 줄(42%)에 나눠 화면을 꽉 채운다
+let _sbLastScale = 0;
+function _sbFit() {
+    const page = document.getElementById("page-steam_blowing"), r2 = document.getElementById("sbRow2"), r3 = document.getElementById("sbRow3");
+    if (!page || !r2 || !r3 || page.classList.contains("hidden")) return;
+    const s = _sbS();
+    document.documentElement.style.setProperty("--sb-s", s.toFixed(3));
+    r2.style.height = ""; r3.style.height = "";
+    const gap = 12 * s, top = r2.getBoundingClientRect().top + window.scrollY;
+    const avail = window.innerHeight - top - 16 * s;
+    const h2 = Math.max(240 * s * 0.9, Math.round((avail - gap) * 0.58)), h3 = Math.max(190, Math.round(avail - gap - h2));
+    r2.style.height = Math.round(h2) + "px"; r3.style.height = h3 + "px";
+    if (Math.abs(s - _sbLastScale) > 0.01 && _sbData) { _sbLastScale = s; _sbDrawWeekly(_sbData.weekly || [], _sbData.schedule || {}, (_sbData.kpi || {}).total_di || 0); }
+}
+let _sbResizeTimer = null;
+window.addEventListener("resize", () => { clearTimeout(_sbResizeTimer); _sbResizeTimer = setTimeout(_sbFit, 150); });
+
 async function loadSteamBlowing() {
     const host = document.getElementById("sbStatus");
     try {
+        _sbFit();
         if (!_sbData) host.textContent = "Loading…";
         _sbData = await apiFetchRetry("/api/sb-summary");
         host.textContent = "";
         renderSteamBlowing(_sbData);
+        _sbFit();
     } catch (e) {
         host.textContent = "Failed to load Steam Blowing data";
         console.error("sb-summary failed", e);
@@ -137,10 +160,10 @@ function _sbDrawWeekly(weekly, sch, totalDi) {
         options: { ...chartOpts(""),
             scales: {
                 x: { ...chartOpts("").scales.x, ticks: { ...chartOpts("").scales.x.ticks, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
-                yL: { type: "linear", position: "left", beginAtZero: true, ticks: { color: "#4a6080", font: { size: 9 } }, title: { display: true, text: "Cumulative DI", color: "#4a6080", font: { size: 9 } } },
-                yR: { type: "linear", position: "right", beginAtZero: true, grid: { display: false }, ticks: { color: "#5b8def", font: { size: 9 } }, title: { display: true, text: "Weekly DI", color: "#5b8def", font: { size: 9 } } }
+                yL: { type: "linear", position: "left", beginAtZero: true, ticks: { color: "#4a6080", font: { size: _sbFs(9) } }, title: { display: true, text: "Cumulative DI", color: "#4a6080", font: { size: _sbFs(9) } } },
+                yR: { type: "linear", position: "right", beginAtZero: true, grid: { display: false }, ticks: { color: "#5b8def", font: { size: _sbFs(9) } }, title: { display: true, text: "Weekly DI", color: "#5b8def", font: { size: _sbFs(9) } } }
             },
-            plugins: { ...chartOpts("").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: 10, padding: 8, font: { size: 10 } } } },
+            plugins: { ...chartOpts("").plugins, legend: { display: true, position: "top", labels: { color: "#7a95b8", boxWidth: _sbFs(10), padding: _sbFs(8), font: { size: _sbFs(10) } } } },
             animation: { duration: 400 } }
     });
 }
