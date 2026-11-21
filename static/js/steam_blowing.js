@@ -74,7 +74,7 @@ function renderSteamBlowing(d) {
         ["Total Support (EA)", fmtNum(sup.total, 0)],
         ["Completed (EA)", fmtNum(sup.completed, 0)],
         ["Remaining (EA)", fmtNum(supRem, 0)],
-        ["Weight", `Piping ${wP}% · Support ${wS}%`]
+        ["Weight (Piping / Support)", `${wP}% / ${wS}%`]
     ]);
 
     _sbDrawTable("sbServiceBody", d.service || []);
@@ -82,7 +82,7 @@ function renderSteamBlowing(d) {
     _sbDrawWeekly(d.weekly || [], sch, total);
 }
 
-// TOTAL 행을 맨 위에 두고 이름순 행을 아래에 둔다 (EP 표와 같은 방식)
+// 이름순 행 아래에 TOTAL 행을 둔다
 function _sbDrawTable(bodyId, rows) {
     const el = document.getElementById(bodyId);
     if (!el) return;
@@ -96,9 +96,10 @@ function _sbDrawTable(bodyId, rows) {
     };
     const sum = rows.reduce((s, r) => ({ total_di: s.total_di + (r.total_di || 0), completed_di: s.completed_di + (r.completed_di || 0), joints: s.joints + (r.joints || 0) }),
         { total_di: 0, completed_di: 0, joints: 0 });
+    // TOTAL 행은 맨 아래에 둔다
     el.innerHTML =
-        `<tr style="background:rgba(37,99,235,0.07);border-bottom:2px solid var(--border);font-weight:700"><td style="${td};color:var(--accent)">TOTAL</td>${cells(sum)}</tr>` +
-        rows.map(r => `<tr><td style="${td}">${esc(r.name || "")}</td>${cells(r)}</tr>`).join("");
+        rows.map(r => `<tr><td style="${td}">${esc(r.name || "")}</td>${cells(r)}</tr>`).join("") +
+        `<tr style="background:rgba(37,99,235,0.07);border-top:2px solid var(--border);font-weight:700"><td style="${td};color:var(--accent)">TOTAL</td>${cells(sum)}</tr>`;
 }
 
 // 일정 기간 안에서 오늘까지 계획 공정률(%) — 총 물량을 일정 기간에 균등 배분한다고 본다
