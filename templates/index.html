@@ -9,7 +9,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/static/css/index.css?v=7.59">
+<link rel="stylesheet" href="/static/css/index.css?v=7.60">
 </head>
 <body>
 
@@ -710,16 +710,17 @@
     <div class="page hidden" id="page-test_master">
       <div class="page-header"><div class="page-bar"></div><div class="page-title">Test Package Register</div></div>
       <div class="panel">
-        <div id="tmKindTabs" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <button class="tm-tab active" data-kind="pressure" onclick="tmSetKind('pressure')">Pressure Test <span class="tm-tab-sub">Hydro / Pneumatic</span></button>
-          <button class="tm-tab" data-kind="visual" onclick="tmSetKind('visual')">Visual Test <span class="tm-tab-sub">VT</span></button>
-          <span id="tmKindNote" style="font-size:11px;color:var(--text-dim)"></span>
-          <input type="hidden" id="tm-kind" value="pressure">
-        </div>
         <div class="jm-top-row" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;height:auto;">
           <input id="tm-search" class="filter-sel" type="text" style="min-width:380px;" placeholder="System / Pkg No. / Method / Test Pressure" onkeydown="if(event.key==='Enter'){tmCurrentPage=0;loadTestMaster();}">
           <select id="tm-system" class="filter-sel" style="min-width:110px;" onchange="tmCurrentPage=0;tmOnSystemChange()"><option value="">All Systems</option></select>
           <select id="tm-package" class="filter-sel" style="min-width:150px;" onchange="tmCurrentPage=0;loadTestMaster()"><option value="">All Packages</option></select>
+          <select id="tm-method" class="filter-sel" style="min-width:120px;" onchange="tmCurrentPage=0;loadTestMaster()">
+            <option value="">All Tests</option>
+            <option value="HYDRO">HYDRO</option>
+            <option value="PNEUMATIC">PNEUMATIC</option>
+            <option value="VISUAL">VISUAL</option>
+            <option value="IN SERVICE">IN SERVICE</option>
+          </select>
           <select id="tm-status" class="filter-sel" style="min-width:100px;" onchange="tmCurrentPage=0;loadTestMaster()">
             <option value="">All Status</option>
             <option value="pass">PASS</option>
@@ -885,7 +886,7 @@
 </style>
 
 
-<script defer src="/static/js/dashboard.js?v=8.22"></script>
+<script defer src="/static/js/dashboard.js?v=8.23"></script>
 <script defer src="/static/js/iso_tools.js?v=26"></script>
 <script defer src="/static/js/steam_blowing.js?v=13"></script>
 <!-- Sign In Modal -->

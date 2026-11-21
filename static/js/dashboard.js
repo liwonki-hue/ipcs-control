@@ -2184,7 +2184,7 @@ async function printPage(pageId){
         },
         "test_master": {
             endpoint: "/api/testpkg-master",
-            params: () => _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"],["tm-kind","kind"]]),
+            params: () => _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"],["tm-method","method"]]),
             render: d => renderTMTable(d), restore: () => renderTMTable(tmData)
         }
     };
@@ -3389,21 +3389,6 @@ const _tmFit = { size: TM_PAGE, cap: Infinity, grewFrom: null, tries: 0 };   // 
 // 전체 패키지 목록 캐시 (System 필터용)
 let _tmAllData = [];
 
-// Pressure Test(Hydro·Pneumatic)와 Visual Test(VT)를 따로 본다. Visual은 배관·Support 설치가 끝난 뒤 하는 점검이라 압력·매체·유지시간 칸이 없다
-function tmSetKind(kind) {
-    const input = document.getElementById("tm-kind");
-    if (!input || input.value === kind) return;
-    input.value = kind;
-    document.querySelectorAll("#tmKindTabs .tm-tab").forEach(b => b.classList.toggle("active", b.dataset.kind === kind));
-    document.getElementById("tmTable")?.classList.toggle("tm-visual", kind === "visual");
-    const note = document.getElementById("tmKindNote");
-    if (note) note.textContent = kind === "visual"
-        ? "Visual test is done after piping and support installation are complete (Ready = piping 100% + supports installed)."
-        : "";
-    tmCurrentPage = 0;
-    loadTestMaster();
-}
-
 async function loadTestMaster() {
     const system  = document.getElementById("tm-system")?.value  || "";
     const pkg     = document.getElementById("tm-package")?.value || "";
@@ -3417,8 +3402,8 @@ async function loadTestMaster() {
         if (pkg)    url += `&test_pkg_no=${encodeURIComponent(pkg)}`;
         if (status) url += `&status=${encodeURIComponent(status)}`;
         if (search) url += `&q=${encodeURIComponent(search)}`;
-        const kind = document.getElementById("tm-kind")?.value || "pressure";
-        url += `&kind=${kind}`;
+        const method = document.getElementById("tm-method")?.value || "";
+        if (method) url += `&method=${encodeURIComponent(method)}`;
         const res = await apiFetch(url);
         tmData = res.data || [];
         document.getElementById("tm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
@@ -3954,7 +3939,7 @@ function _renderRtRepairList(repairList) {
 async function exportTMExcel() {
     await ensureXlsx();
     toast("Loading data...", "info");
-    const params = _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"],["tm-kind","kind"]]);
+    const params = _readFilters([["tm-system","system"],["tm-package","test_pkg_no"],["tm-status","status"],["tm-search","q"],["tm-method","method"]]);
     params.set("skip_readiness", "1");
     const data = await _fetchAllFiltered("/api/testpkg-master", params);
     if (!data.length) { toast("No data", "error"); return; }

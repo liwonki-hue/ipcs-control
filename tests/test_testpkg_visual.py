@@ -18,7 +18,7 @@ def test_visual_packages_are_counted_separately():
     assert agg["-"]["not_started"] == 1 and agg["-"]["v_pending"] == 0                                  # System이 없으면 "-"
 
 
-def test_register_kind_filter_is_accepted(client, monkeypatch):
+def test_register_method_filter_is_accepted(client, monkeypatch):
     seen = []
 
     class Q:
@@ -37,8 +37,8 @@ def test_register_kind_filter_is_accepted(client, monkeypatch):
     monkeypatch.setattr(A, "get_sb", lambda: FakeSb())
     monkeypatch.setattr(A, "_exec_page", lambda q: q)
     monkeypatch.setattr(A, "_load_pkg_stats", lambda sb: {})
-    assert client.get("/api/testpkg-master?kind=visual").status_code == 200
+    assert client.get("/api/testpkg-master?method=visual").status_code == 200       # 대소문자 무관
     assert ("eq", ("method", "VISUAL")) in seen
     seen.clear()
-    assert client.get("/api/testpkg-master?kind=pressure").status_code == 200
-    assert ("or_", ("method.is.null,method.neq.VISUAL",)) in seen
+    assert client.get("/api/testpkg-master").status_code == 200                     # 필터 없으면 method 조건 없음
+    assert not any(n == "eq" and a[0] == "method" for n, a in seen)

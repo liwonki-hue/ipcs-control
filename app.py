@@ -3425,11 +3425,11 @@ def api_testpkg_get():
         pkg_no   = request.args.get("test_pkg_no", "").strip()
         status   = request.args.get("status",      "").strip()
         search   = request.args.get("q",           "").strip()
-        kind     = request.args.get("kind",        "").strip().lower()   # visual = Visual(VT) Test, pressure = 그 외(Hydro·Pneumatic 등)
+        method   = request.args.get("method",      "").strip().upper()   # Test 방법(HYDRO·PNEUMATIC·VISUAL 등) 필터
         skip_readiness = request.args.get("skip_readiness", "0") == "1"
 
         # 필터없는 전체 목록(드롭다운용) 캐시 — 10분 TTL
-        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search, kind])
+        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search, method])
         if is_all_req and limit >= 1000:
             with _lock:
                 cached = _testpkg_all_cache.get("data")
@@ -3443,8 +3443,7 @@ def api_testpkg_get():
         if pkg_no:  q = q.eq("test_pkg_no", pkg_no)
         if status == "pass":    q = q.eq("completed", True)
         if status == "pending": q = q.eq("completed", False)
-        if kind == "visual":    q = q.eq("method", "VISUAL")
-        if kind == "pressure":  q = q.or_("method.is.null,method.neq.VISUAL")
+        if method:              q = q.eq("method", method)
         if search:
             like = f"%{search}%"
             q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
