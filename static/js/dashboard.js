@@ -3389,7 +3389,9 @@ const _tmFit = { size: TM_PAGE, cap: Infinity, grewFrom: null, tries: 0 };   // 
 // 전체 패키지 목록 캐시 (System 필터용)
 let _tmAllData = [];
 
+let _tmReqSeq = 0;   // 필터를 연달아 바꿀 때 늦게 도착한 이전 응답이 화면을 덮어쓰지 않게 한다
 async function loadTestMaster() {
+    const seq = ++_tmReqSeq;
     const system  = document.getElementById("tm-system")?.value  || "";
     const pkg     = document.getElementById("tm-package")?.value || "";
     const status  = document.getElementById("tm-status")?.value  || "";
@@ -3405,13 +3407,20 @@ async function loadTestMaster() {
         const method = document.getElementById("tm-method")?.value || "";
         if (method) url += `&method=${encodeURIComponent(method)}`;
         const res = await apiFetch(url);
+        if (seq !== _tmReqSeq) return;
         tmData = res.data || [];
         document.getElementById("tm-count").textContent = `Total ${(res.count||0).toLocaleString()} rows`;
         _renderTMPagination(tmCurrentPage, res.count || 0);
         renderTMTable(tmData);
         _fitTM();
-        if (!_tmAllData.length) await _loadTMAllForFilters();
-    } catch(e) { toast("Load failed: "+e.message, "error"); }
+    } catch(e) {
+        if (seq !== _tmReqSeq) return;
+        const body = document.getElementById("tmBody");   // 실패하면 Loading...을 그대로 두지 않고 원인과 재시도 방법을 보여준다
+        if (body) body.innerHTML = `<tr><td colspan="13" style="text-align:center;padding:24px;color:#ef4444;font-size:12px">Failed to load (${esc(e.message)}). Press Search to retry.</td></tr>`;
+        toast("Load failed: "+e.message, "error");
+        return;
+    }
+    if (seq === _tmReqSeq && !_tmAllData.length) { try { await _loadTMAllForFilters(); } catch (e) { console.warn("Package filter list failed", e); } }
 }
 
 function _renderTMPagination(curPage, totalRows) {
