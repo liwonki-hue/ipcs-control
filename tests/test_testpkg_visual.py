@@ -42,3 +42,21 @@ def test_register_method_filter_is_accepted(client, monkeypatch):
     seen.clear()
     assert client.get("/api/testpkg-master").status_code == 200                     # 필터 없으면 method 조건 없음
     assert not any(n == "eq" and a[0] == "method" for n, a in seen)
+
+
+def test_register_sort_package_number_order_with_misc_last():
+    rows = [
+        {"system": "GT MISC", "test_pkg_no": "BOP-GM-002"},
+        {"system": "ST MISC", "test_pkg_no": "BOP-SM-001"},
+        {"system": "HW", "test_pkg_no": "BOP-HW-010"},
+        {"system": "GT MISC", "test_pkg_no": "BOP-GM-001"},
+        {"system": "AS", "test_pkg_no": "BOP-AS-002"},
+        {"system": "HW", "test_pkg_no": "BOP-HW-002"},
+        {"system": "AS", "test_pkg_no": "BOP-AS-001"},
+        {"system": None, "test_pkg_no": None},
+    ]
+    rows.sort(key=A._tpm_sort_key)
+    assert [(r["system"], r["test_pkg_no"]) for r in rows] == [
+        (None, None), ("AS", "BOP-AS-001"), ("AS", "BOP-AS-002"),
+        ("HW", "BOP-HW-002"), ("HW", "BOP-HW-010"),                 # 번호는 숫자 순서 (2 < 10)
+        ("GT MISC", "BOP-GM-001"), ("GT MISC", "BOP-GM-002"), ("ST MISC", "BOP-SM-001")]   # MISC는 모두 맨 뒤

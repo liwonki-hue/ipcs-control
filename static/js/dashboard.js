@@ -945,7 +945,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         }
         const support_pct  = support_tot > 0 ? parseFloat((support_comp / support_tot * 100).toFixed(2)) : 0;
         // EP Pressure Test Progress — EP Package만 (서버가 EP 조인트·서포트가 쓰는 Package 기준으로 집계)
-        if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || [], ["GT MISC"]);
+        if (sup) drawTestStageChart("epPressureTestBar", (systems || []).map(r => r.system), sup.testpkg_sys || [], ["GT MISC", "ST MISC"]);
 
         // ── EP KPI Row (replaces global kpiRow on EP page) ────────────
         // Test Package는 Test Package Register에서 Phase=EP로 등록된 것만 집계
@@ -3469,11 +3469,17 @@ async function _loadTMAllForFilters() {
 function tmGoto(p) { tmCurrentPage = p; loadTestMaster(); }
 window.tmGoto = tmGoto;
 
+// Test Package 목록 정렬 — Package 번호 순서(자연 정렬), GT MISC·ST MISC는 모두 Visual Test라 맨 뒤
+const _TP_LAST_SYSTEMS = ["GT MISC", "ST MISC"];
+const _tpRank = s => { const i = _TP_LAST_SYSTEMS.indexOf(s); return i < 0 ? 0 : i + 1; };
+const _tpNat = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+const _tpSystemCmp = (a, b) => _tpRank(a) - _tpRank(b) || _tpNat(a, b);
+
 function _populateTMSystemFilter() {
     const sel = document.getElementById("tm-system");
     if (!sel) return;
     const cur = sel.value;
-    const systems = [...new Set(_tmAllData.map(r => r.system||"").filter(Boolean))].sort();
+    const systems = [...new Set(_tmAllData.map(r => r.system||"").filter(Boolean))].sort(_tpSystemCmp);
     sel.innerHTML = `<option value="">All Systems</option>` +
         systems.map(s => `<option value="${esc(s)}"${s===cur?" selected":""}>${esc(s)}</option>`).join("");
 }
@@ -3482,12 +3488,13 @@ function tmOnSystemChange() {
     const system = document.getElementById("tm-system")?.value || "";
     const pkgSel = document.getElementById("tm-package");
     if (!pkgSel) return;
+    const sysOf = Object.fromEntries(_tmAllData.map(r => [r.test_pkg_no || "", r.system || ""]));
     const pkgs = [...new Set(
         _tmAllData
             .filter(r => !system || r.system === system)
             .map(r => r.test_pkg_no||"")
             .filter(Boolean)
-    )].sort();
+    )].sort((a, b) => _tpSystemCmp(sysOf[a], sysOf[b]) || _tpNat(a, b));
     pkgSel.innerHTML = `<option value="">All Packages</option>` +
         pkgs.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
     tmCurrentPage = 0;

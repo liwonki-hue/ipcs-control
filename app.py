@@ -3391,6 +3391,21 @@ def _load_pkg_stats(sb):
     return pkg_stats
 
 
+# Test Package 목록 정렬: Package 번호 순서(자연 정렬)로 보여 주되, GT MISC·ST MISC는 모두 Visual Test라 모든 System의 맨 뒤에 둔다
+_TP_LAST_SYSTEMS = ("GT MISC", "ST MISC")
+
+
+def _natural_key(s):
+    """'BOP-FG-10' > 'BOP-FG-9'가 되도록 숫자 덩어리를 숫자로 비교한다."""
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s or "")]
+
+
+def _tpm_sort_key(r):
+    sysn = r.get("system") or ""
+    rank = _TP_LAST_SYSTEMS.index(sysn) + 1 if sysn in _TP_LAST_SYSTEMS else 0
+    return (rank, _natural_key(sysn), _natural_key(r.get("test_pkg_no")))
+
+
 def _tp_add(agg, system, method, stage):
     """System별 Test Package 단계 수. 완료된 것은 시험 종류와 상관없이 completed로 센다.
     Visual(VT)은 완료 전 단계만 압력 시험과 따로 센다: v_ready(배관 100% + Support 설치 완료, 점검 대기) / v_pending(그 외)."""
@@ -3450,8 +3465,18 @@ def api_testpkg_get():
         if search:
             like = f"%{search}%"
             q = q.or_(f"system.ilike.{like},test_pkg_no.ilike.{like},method.ilike.{like},test_pressure.ilike.{like}")
-        res = _exec_page(q.order("system").order("test_pkg_no").range(offset, offset + limit - 1))
-        rows = res.data or []
+        # 전체를 읽어 System·Package 번호 순으로 정렬한 뒤 요청한 쪽수만 잘라 준다 (Test Package는 수십~수백 건)
+        qo = q.order("system").order("test_pkg_no")
+        rows_all, total = [], 0
+        for off in range(0, 5000, 1000):
+            part = _exec_page(qo.range(off, off + 999))
+            total = part.count or total
+            rows_all += part.data or []
+            if len(part.data or []) < 1000:
+                break
+        rows_all.sort(key=_tpm_sort_key)
+        rows = rows_all[offset:offset + limit]
+        res = SimpleNamespace(data=rows, count=len(rows_all) if rows_all else total)
 
         # Readiness: piping 70% + support 30% 가중 진행률
         if skip_readiness:
