@@ -47,7 +47,8 @@ function renderSteamBlowing(d) {
     set("sb-kpi-total-sub", `${fmtNum(done, 0)} / ${fmtNum(total, 0)} DI · ${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints` + (planPct == null ? "" : ` · Plan ${planPct.toFixed(2)}%`));
     set("sb-kpi-done", `${supPct.toFixed(2)}%`);
     const sEl = document.getElementById("sb-kpi-done"); if (sEl) sEl.style.color = pctColor(supPct);
-    set("sb-kpi-done-sub", sup.total > 0 ? `${fmtNum(sup.completed, 0)} / ${fmtNum(sup.total, 0)} EA` : "No support data yet");
+    const supRem = Math.max(0, sup.total - sup.completed);
+    set("sb-kpi-done-sub", `Total ${fmtNum(sup.total, 0)} · Done ${fmtNum(sup.completed, 0)} · Remaining ${fmtNum(supRem, 0)} EA`);
     set("sb-kpi-rem", fmtNum(rem, 0));
     set("sb-kpi-rem-sub", total > 0 ? `${(100 - pct).toFixed(2)}% of piping DI` : "—");
 
@@ -57,12 +58,12 @@ function renderSteamBlowing(d) {
     const rows = (el, list) => { const e = document.getElementById(el); if (e) e.innerHTML = list.map(([l, v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join(""); };
     rows("sbStats", [
         ["SB Piping (D/I)", `${fmtNum(done, 0)} / ${fmtNum(total, 0)}`],
-        ["Joints", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()}`],
-        ["ISO Drawings", (k.isos || 0).toLocaleString()],
         ...(planPct == null ? [] : [["Plan (today) / Diff", `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]])
     ]);
     rows("sbSupportStats", [
-        ["Support (EA)", sup.total > 0 ? `${fmtNum(sup.completed, 0)} / ${fmtNum(sup.total, 0)}` : "No data yet"],
+        ["Total Support (EA)", fmtNum(sup.total, 0)],
+        ["Completed (EA)", fmtNum(sup.completed, 0)],
+        ["Remaining (EA)", fmtNum(supRem, 0)],
         ["Weight", `Piping ${SB_WEIGHT.piping * 100}% · Support ${SB_WEIGHT.support * 100}%`]
     ]);
 
