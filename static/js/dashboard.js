@@ -926,7 +926,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         let sup = null;
         try {
             const now = Date.now();
-            if (!_epSupportData || now - _epSupportDataTime > 1200_000 || !(_epSupportData.testpkg_total > 0)) {   // Test Package 조회가 실패해 0이면 재조회
+            if (!_epSupportData || now - _epSupportDataTime > 300_000 || !(_epSupportData.testpkg_total > 0)) {   // Test Package 조회가 실패해 0이면 재조회
                 _epSupportData = await apiFetchRetry("/api/ep-support-summary");
                 _epSupportDataTime = now;
             }
@@ -2386,7 +2386,7 @@ async function epReport() {
         toast("Building PPT report...", "info");
         const [data] = await Promise.all([getDashData(), loadPptxGen()]);
         if (!data.ep_kpi || !(data.ep_sys || []).length) { toast("No Early Power data", "error"); return; }
-        if (!_epSupportData || Date.now() - _epSupportDataTime > 1200_000) {
+        if (!_epSupportData || Date.now() - _epSupportDataTime > 300_000) {
             _epSupportData = await apiFetch("/api/ep-support-summary");
             _epSupportDataTime = Date.now();
         }

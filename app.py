@@ -1762,6 +1762,7 @@ def api_refresh_db_cache():
             _cache.clear()
             _meta_cache["data"] = None
             _meta_cache["time"] = 0
+            _tp_sys_cache["data"] = None           # DB를 직접 바꾼 경우(SQL·스크립트)에도 Test Package 차트가 15분 TTL을 기다리지 않게 한다
             _build_fail = False
             if not _building:
                 _building = True
@@ -1769,6 +1770,8 @@ def api_refresh_db_cache():
                 rebuild_started = True
             else:
                 rebuild_started = False
+        for _wc in (_daily_cache, _wkbd_cache, _welder_daily_cache, _ep_sup_cache):
+            _wc.invalidate()                       # 보조 집계도 낡은 것으로 표시 — 아래 _prewarm_widgets가 최근 쓰인 것만 뒤에서 다시 만든다
         threading.Thread(target=_sync_rev_from_drawing, daemon=True).start()
         _joint_analysis_cache.refresh_async(_build_joint_analysis)   # ISO 현황·데이터 품질·속도 표를 미리 데워 첫 화면이 기다리지 않게 한다
         _prewarm_widgets()                                           # 최근 쓰인 대시보드 보조 집계도 같은 이유로

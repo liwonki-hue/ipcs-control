@@ -191,3 +191,29 @@ def test_other_errors_are_500_without_leaking_details(anon_client, monkeypatch):
     for url in ("/api/ep-support-summary", "/api/weekly-last-breakdown", "/api/welder-daily"):
         r = anon_client.get(url)
         assert r.status_code == 500 and "secret-key-abc" not in r.get_data(as_text=True)
+
+
+def test_refresh_db_cache_invalidates_widget_caches(client, monkeypatch):
+    """DB를 직접 바꾼 뒤 keep-alive(/api/refresh-db-cache)가 불리면 EP·Test Package 차트 같은 보조 집계도 낡은 것으로 표시돼야 한다 (15분 TTL을 기다리지 않게)."""
+    import app as A
+
+    class Rpc:
+        def execute(self):
+            return None
+
+    class Sb:
+        def rpc(self, *_a, **_k):
+            return Rpc()
+
+    monkeypatch.setattr(A, "get_sb", lambda: Sb())
+    monkeypatch.setattr(A, "_build", lambda *a, **k: None)
+    monkeypatch.setattr(A, "_sync_rev_from_drawing", lambda *a, **k: None)
+    monkeypatch.setattr(A, "_prewarm_widgets", lambda: None)
+    monkeypatch.setattr(A._joint_analysis_cache, "refresh_async", lambda *a, **k: False)
+    monkeypatch.setattr(A, "_refresh_last", 0)
+    A._ep_sup_cache._store({"sys": []}, A._ep_sup_cache._gen)
+    A._tp_sys_cache["data"] = {"data": []}
+    assert A._ep_sup_cache.peek()[1] is True                      # 방금 만든 값은 신선하다
+    assert client.get("/api/refresh-db-cache").status_code == 200
+    assert A._ep_sup_cache.peek()[1] is False                     # 호출 뒤에는 낡은 것으로 표시
+    assert A._tp_sys_cache["data"] is None
