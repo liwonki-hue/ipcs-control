@@ -519,3 +519,5 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #sbStats .stat-row, #sbSupportStats .stat-row { flex: 1; align-items: center; padding: 0; }
 #sbStats .stat-label, #sbSupportStats .stat-label { font-size: 11px; }
 #sbStats .stat-value, #sbSupportStats .stat-value { font-size: 12px; }
+/* SB 표: 전체 표의 행 최소 높이(36px)를 0.8배로 낮춘다. 표 영역이 남는 높이를 행에 나눠 준다 */
+#sbServiceBody td, #sbUnitBody td { height: 32px; }
