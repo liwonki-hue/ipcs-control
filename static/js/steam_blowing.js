@@ -33,7 +33,6 @@ function renderSteamBlowing(d) {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
     const color = p => p >= 80 ? "#22d3a1" : p >= 50 ? "#f5c542" : "#ff8c42";
     const sch = d.schedule || {};
-    const planPct = _sbPlanPct(sch);
 
     const supRem = Math.max(0, sup.total - sup.completed);
     const wP = Math.round(SB_WEIGHT.piping * 100), wS = Math.round(SB_WEIGHT.support * 100);
@@ -67,14 +66,12 @@ function renderSteamBlowing(d) {
     rows("sbStats", [
         ["Total DI", fmtNum(total, 0)],
         ["Completed DI", fmtNum(done, 0)],
-        ["Remaining DI", fmtNum(rem, 0)],
-        ["Plan (today) / Diff", planPct == null ? "—" : `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]
+        ["Remaining DI", fmtNum(rem, 0)]
     ]);
     rows("sbSupportStats", [
         ["Total Support (EA)", fmtNum(sup.total, 0)],
         ["Completed (EA)", fmtNum(sup.completed, 0)],
-        ["Remaining (EA)", fmtNum(supRem, 0)],
-        ["Weight (Piping / Support)", `${wP}% / ${wS}%`]
+        ["Remaining (EA)", fmtNum(supRem, 0)]
     ]);
 
     _sbDrawTable("sbServiceBody", d.service || []);
