@@ -5,7 +5,8 @@ let _sbData = null;
 function _sbS() { return Math.max(1, Math.min(window.innerWidth / 1366, window.innerHeight / 768, 1.7)); }
 function _sbFs(n) { return Math.round(n * _sbS() * 10) / 10; }
 
-// 배율을 적용하고, 남는 세로 공간을 게이지 줄(58%)과 표 줄(42%)에 나눠 화면을 꽉 채운다
+const SB_FILL_H = 0.8;   // 남는 세로 공간 중 쓰는 비율 — 내용이 적어서 화면 전체를 채우면 어색하다
+// 배율을 적용하고, 남는 세로 공간의 80%를 게이지 줄(58%)과 표 줄(42%)에 나눠 쓴다
 let _sbLastScale = 0;
 function _sbFit() {
     const page = document.getElementById("page-steam_blowing"), r2 = document.getElementById("sbRow2"), r3 = document.getElementById("sbRow3");
@@ -14,7 +15,7 @@ function _sbFit() {
     document.documentElement.style.setProperty("--sb-s", s.toFixed(3));
     r2.style.height = ""; r3.style.height = "";
     const gap = 12 * s, top = r2.getBoundingClientRect().top + window.scrollY;
-    const avail = window.innerHeight - top - 16 * s;
+    const avail = (window.innerHeight - top - 16 * s) * SB_FILL_H;
     const h2 = Math.max(240 * s * 0.9, Math.round((avail - gap) * 0.58)), h3 = Math.max(190, Math.round(avail - gap - h2));
     r2.style.height = Math.round(h2) + "px"; r3.style.height = h3 + "px";
     if (Math.abs(s - _sbLastScale) > 0.01 && _sbData) { _sbLastScale = s; _sbDrawWeekly(_sbData.weekly || [], _sbData.schedule || {}, (_sbData.kpi || {}).total_di || 0); }
