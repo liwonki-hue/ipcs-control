@@ -513,7 +513,7 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #sbKpiRow .kpi-card { flex: 1 1 0; }
 #sbKpiRow .kpi-card:first-child { flex: 1.35 1 0; }
 /* 게이지 패널: 게이지를 크게 하고, 아래 목록이 남는 높이를 나눠 채워 여백이 남지 않게 한다 */
-#page-steam_blowing .gauge-wrap { flex: 0 0 auto; padding: 6px 0 8px; margin: 0; }
+#page-steam_blowing .gauge-wrap { flex: 0 0 auto; padding: 6px 0 22px !important; margin: 0; }
 #page-steam_blowing .gauge-svg { width: 160px !important; }
 #sbStats, #sbSupportStats { flex: 1; display: flex; flex-direction: column; margin-top: 0 !important; }
 #sbStats .stat-row, #sbSupportStats .stat-row { flex: 1; align-items: center; padding: 0; }
