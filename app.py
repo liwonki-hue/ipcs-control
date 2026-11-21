@@ -499,7 +499,7 @@ _wkbd_cache         = cache_util.TTLCache("weekly_breakdown", 300, scopes=("join
 _welder_daily_cache = cache_util.TTLCache("welder_daily", 900, scopes=("joint",), min_gap=20, stale_when_dirty=False)             # /api/welder-daily
 SB_SCHEDULE = ("2027-02-01", "2027-05-31")   # Steam Blowing 설치 일정(시작, 종료) — 2026-11-21 사용자 지정
 SB_SYSTEM = "SB"   # Steam Blowing — 임시 배관. Permanent 집계(Overview·Weekly·Daily·Welder 등)에서는 제외한다
-_sb_cache           = cache_util.TTLCache("sb_summary", CACHE_TTL, scopes=("joint",), min_gap=20, stale_when_dirty=False)   # /api/sb-summary
+_sb_cache           = cache_util.TTLCache("sb_summary", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/sb-summary
 _ep_sup_cache       = cache_util.TTLCache("ep_support", CACHE_TTL, scopes=("joint", "support"), min_gap=20, stale_when_dirty=False)   # /api/ep-support-summary
 _pkg_stats_cache: dict = {}   # /api/testpkg-master readiness 계산 캐시
 _pkg_cache: dict = {"time": 0, "data": {}}  # /api/joints/packages 시스템별 패키지 목록 캐시
@@ -1210,7 +1210,7 @@ def _build():
                     off, bsz = 0, 10000
                     while True:
                         r = _sb_exec(lambda _c: _c.table("support_master")
-                                     .select("system,unit,area,sub_area,date_completed")
+                                     .select("system,unit,area,sub_area,date_completed").neq("system", SB_SYSTEM)
                                      .order("id").range(off, off + bsz - 1).execute())
                         rows = r.data or []
                         for row in rows:
@@ -2969,7 +2969,7 @@ def _build_ep_support():
     # 서로 필요 없는 조회를 동시에 보낸다: EP Support 행, EP 조인트가 쓰는 Package, Test Package Register, Package별 진행 수치
     with ThreadPoolExecutor(max_workers=4) as ex:
         f_sup = ex.submit(lambda: _fetch_all_pages(lambda sb: sb.table("support_master")
-                                                    .select("system,sub_area,area,date_completed,package").eq("phase", "EP")))
+                                                    .select("system,sub_area,area,date_completed,package").neq("system", SB_SYSTEM).eq("phase", "EP")))
         f_jp = ex.submit(lambda: _with_retry(lambda: _fetch_all_pages(lambda sb: sb.table("joint_master").select("package")
                                                                       .eq("phase", "EP").not_.is_("package", "null"))))
         f_tp = ex.submit(lambda: _with_retry(lambda: _sb_exec(lambda sb: sb.table("test_package_master")
@@ -3052,10 +3052,13 @@ def _build_sb_summary():
             w = weeks[(d - timedelta(days=d.weekday())).isoformat()]     # 그 주 월요일을 주의 이름으로 쓴다
             w["completed_di"] += di
             w["joints"] += 1
+    sup = _fetch_all_pages(lambda sb: sb.table("support_master").select("date_completed").eq("system", SB_SYSTEM))   # 아직 데이터가 없을 수 있다
+    support = {"total": len(sup), "completed": sum(1 for r in sup if r.get("date_completed"))}
     def fin(b):
         return {**b, "total_di": round(b["total_di"], 1), "completed_di": round(b["completed_di"], 1)}
     return {"schedule": {"start": SB_SCHEDULE[0], "end": SB_SCHEDULE[1]},
             "kpi": {**fin(total), "isos": len(isos)},
+            "support": support,
             "service": [{"name": k, **fin(v)} for k, v in sorted(svc.items())],
             "unit": [{"name": k, **fin(v)} for k, v in sorted(unit.items())],
             "weekly": [{"week_start": k, "completed_di": round(v["completed_di"], 1), "joints": v["joints"]} for k, v in sorted(weeks.items())]}
@@ -3631,7 +3634,7 @@ def _compute_daily_report():
                 daily[dc]["welders"].add(w)
 
     supp_res = _sb_exec(lambda sb: sb.table("support_master")
-        .select("date_completed,type,system,sub_area")
+        .select("date_completed,type,system,sub_area").neq("system", SB_SYSTEM)
         .not_.is_("date_completed", "null")
         .gte("date_completed", range_start)
         .lte("date_completed", range_end)
@@ -3798,7 +3801,7 @@ def _scan_table(table, columns, on_row):
 def _build_joint_analysis():
     an = iso_analysis.Analyzer(_joint_accepted, _required_pwht, datetime.now(ALMT).date())
     _scan_table("joint_master", iso_analysis.JOINT_COLUMNS, lambda r: None if r.get("system") == SB_SYSTEM else an.add_joint(r))   # Steam Blowing(임시 배관)은 ISO 현황에서 뺀다
-    _scan_table("support_master", iso_analysis.SUPPORT_COLUMNS, an.add_support)
+    _scan_table("support_master", iso_analysis.SUPPORT_COLUMNS, lambda r: None if r.get("system") == SB_SYSTEM else an.add_support(r))
     result = an.result()   # Data Quality 화면을 없앴으므로 Drawing DB·Test Package 대조는 더 읽지 않는다
     result["built_at"] = datetime.now(ALMT).strftime("%Y-%m-%d %H:%M")
     _malloc_trim()

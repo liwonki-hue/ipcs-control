@@ -26,6 +26,7 @@ def test_sb_summary_groups_by_service_unit_and_week(monkeypatch):
     assert {s["name"]: s["total_di"] for s in res["service"]} == {"HS": 24.0, "LS": 6.0}
     assert {u["name"]: u["completed_di"] for u in res["unit"]} == {"B1": 12.0, "B2": 6.0}
     assert res["weekly"] == [{"week_start": "2026-11-16", "completed_di": 18.0, "joints": 2}]
+    assert set(res["support"]) == {"total", "completed"}                              # SB Support(데이터가 없으면 0/0)
     assert res["schedule"] == {"start": "2027-02-01", "end": "2027-05-31"}        # 설치 일정(사용자 지정)
 
 
@@ -45,5 +46,10 @@ def test_permanent_queries_exclude_sb():
             'lambda r: None if r.get("system") == SB_SYSTEM else an.add_joint(r)']                    # ISO Status
     for s in must:
         assert s in src, s
-    # SB 탭 전용 조회는 eq(SB)로만 읽는다
-    assert len(re.findall(r'\.eq\("system", SB_SYSTEM\)', src)) == 1
+    # Support 집계도 SB를 뺀다 (데이터가 들어오기 전부터 막아 둔다)
+    for t in ('select("system,unit,area,sub_area,date_completed").neq("system", SB_SYSTEM)',      # 대시보드 Support 집계
+              'select("date_completed,type,system,sub_area").neq("system", SB_SYSTEM)',            # Daily Report Support
+              'lambda r: None if r.get("system") == SB_SYSTEM else an.add_support(r)'):          # ISO Status Support
+        assert t in src, t
+    # SB 탭 전용 조회(Joint·Support)는 eq(SB)로만 읽는다
+    assert len(re.findall(r'\.eq\("system", SB_SYSTEM\)', src)) == 2

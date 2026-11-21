@@ -14,42 +14,57 @@ async function loadSteamBlowing() {
     }
 }
 
+// Steam Blowing은 Hydro Test가 없어 Piping 80% · Support 20%로 관리한다 (Test Package 가중치 없음)
+const SB_WEIGHT = { piping: 0.8, support: 0.2 };
+
+function _sbGauge(pathId, textId, pct, color) {
+    const gp = document.getElementById(pathId);
+    if (gp) { gp.style.stroke = color; gp.style.strokeDashoffset = Math.PI * 84 * (1 - Math.min(pct / 100, 1)); }
+    const gt = document.getElementById(textId);
+    if (gt) { gt.textContent = `${pct.toFixed(2)}%`; gt.style.fill = color; }
+}
+
 function renderSteamBlowing(d) {
-    const k = d.kpi || {};
+    const k = d.kpi || {}, sup = d.support || { total: 0, completed: 0 };
     const total = k.total_di || 0, done = k.completed_di || 0, rem = Math.max(0, total - done);
     const pct = total > 0 ? parseFloat((done / total * 100).toFixed(2)) : 0;
+    const supPct = sup.total > 0 ? parseFloat((sup.completed / sup.total * 100).toFixed(2)) : 0;
+    const overall = parseFloat((pct * SB_WEIGHT.piping + supPct * SB_WEIGHT.support).toFixed(2));
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-
-    set("sb-kpi-pct", `${pct.toFixed(2)}%`);
-    const pctEl = document.getElementById("sb-kpi-pct"); if (pctEl) pctEl.style.color = pctColor(pct);
-    const bar = document.getElementById("sb-kpi-bar");
-    if (bar) { bar.style.width = `${Math.min(pct, 100)}%`; bar.style.background = pctColor(pct); }
+    const color = p => p >= 80 ? "#22d3a1" : p >= 50 ? "#f5c542" : "#ff8c42";
     const sch = d.schedule || {};
     const planPct = _sbPlanPct(sch);
-    set("sb-kpi-pct-sub", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints` + (planPct == null ? "" : ` · Plan ${planPct.toFixed(2)}%`));
-    set("sbSchedule", sch.start ? `Schedule ${sch.start} ~ ${sch.end}` : "");
-    set("sb-kpi-total", fmtNum(total, 0));
-    set("sb-kpi-total-sub", `${(k.joints || 0).toLocaleString()} joints · ${(k.isos || 0).toLocaleString()} ISO`);
-    set("sb-kpi-done", fmtNum(done, 0));
-    set("sb-kpi-done-sub", total > 0 ? `${pct.toFixed(2)}% of total DI` : "—");
-    set("sb-kpi-rem", fmtNum(rem, 0));
-    set("sb-kpi-rem-sub", total > 0 ? `${(100 - pct).toFixed(2)}% of total DI` : "—");
 
-    // 게이지 — EP 탭과 같은 모양
-    const circ = Math.PI * 84, gc = pct >= 80 ? "#22d3a1" : pct >= 50 ? "#f5c542" : "#ff8c42";
-    const gp = document.getElementById("sbGaugePath");
-    if (gp) { gp.style.stroke = gc; gp.style.strokeDashoffset = circ * (1 - Math.min(pct / 100, 1)); }
-    const gt = document.getElementById("sbGaugeText");
-    if (gt) { gt.textContent = `${pct.toFixed(2)}%`; gt.style.fill = gc; }
-    const stats = document.getElementById("sbStats");
-    if (stats) {
-        stats.innerHTML = [
-            ["SB Piping (D/I)", `${fmtNum(done, 0)} / ${fmtNum(total, 0)}`],
-            ["Joints", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()}`],
-            ["ISO Drawings", (k.isos || 0).toLocaleString()],
-            ...(planPct == null ? [] : [["Plan (today) / Diff", `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]])
-        ].map(([l, v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join("");
-    }
+    // KPI 행 — SB Progress = Piping 80% + Support 20%
+    set("sb-kpi-pct", `${overall.toFixed(2)}%`);
+    const pctEl = document.getElementById("sb-kpi-pct"); if (pctEl) pctEl.style.color = pctColor(overall);
+    const bar = document.getElementById("sb-kpi-bar");
+    if (bar) { bar.style.width = `${Math.min(overall, 100)}%`; bar.style.background = pctColor(overall); }
+    set("sb-kpi-pct-sub", `PIPING ${pct.toFixed(2)}% · SUPPORT ${supPct.toFixed(2)}%`);
+    set("sbSchedule", sch.start ? `Schedule ${sch.start} ~ ${sch.end}` : "");
+    set("sb-kpi-total", `${pct.toFixed(2)}%`);
+    const tEl = document.getElementById("sb-kpi-total"); if (tEl) tEl.style.color = pctColor(pct);
+    set("sb-kpi-total-sub", `${fmtNum(done, 0)} / ${fmtNum(total, 0)} DI · ${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()} joints` + (planPct == null ? "" : ` · Plan ${planPct.toFixed(2)}%`));
+    set("sb-kpi-done", `${supPct.toFixed(2)}%`);
+    const sEl = document.getElementById("sb-kpi-done"); if (sEl) sEl.style.color = pctColor(supPct);
+    set("sb-kpi-done-sub", sup.total > 0 ? `${fmtNum(sup.completed, 0)} / ${fmtNum(sup.total, 0)} EA` : "No support data yet");
+    set("sb-kpi-rem", fmtNum(rem, 0));
+    set("sb-kpi-rem-sub", total > 0 ? `${(100 - pct).toFixed(2)}% of piping DI` : "—");
+
+    // 게이지 — EP 탭과 같은 모양 (Piping, Support)
+    _sbGauge("sbGaugePath", "sbGaugeText", pct, color(pct));
+    _sbGauge("sbSupportGaugePath", "sbSupportGaugeText", supPct, color(supPct));
+    const rows = (el, list) => { const e = document.getElementById(el); if (e) e.innerHTML = list.map(([l, v]) => `<div class="stat-row"><span class="stat-label">${l}</span><span class="stat-value">${v}</span></div>`).join(""); };
+    rows("sbStats", [
+        ["SB Piping (D/I)", `${fmtNum(done, 0)} / ${fmtNum(total, 0)}`],
+        ["Joints", `${(k.completed_joints || 0).toLocaleString()} / ${(k.joints || 0).toLocaleString()}`],
+        ["ISO Drawings", (k.isos || 0).toLocaleString()],
+        ...(planPct == null ? [] : [["Plan (today) / Diff", `${planPct.toFixed(2)}% / ${(pct - planPct >= 0 ? "+" : "")}${(pct - planPct).toFixed(2)}%`]])
+    ]);
+    rows("sbSupportStats", [
+        ["Support (EA)", sup.total > 0 ? `${fmtNum(sup.completed, 0)} / ${fmtNum(sup.total, 0)}` : "No data yet"],
+        ["Weight", `Piping ${SB_WEIGHT.piping * 100}% · Support ${SB_WEIGHT.support * 100}%`]
+    ]);
 
     _sbDrawTable("sbServiceBody", d.service || []);
     _sbDrawTable("sbUnitBody", d.unit || []);
