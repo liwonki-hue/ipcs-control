@@ -226,12 +226,13 @@ function _updateLoader(msg) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-    await checkAuthStatus();
+    const authReady = checkAuthStatus();   // 로그인 확인과 대시보드 조회를 동시에 시작한다(예전엔 확인이 끝나야 조회를 시작했다)
     showLoader(true);
     let _loadError = false;
     try {
         // getDashData() 먼저 대기 → 캐시 빌드 완료 후 meta도 즉시 반환됨
         const data = await getDashData();
+        await authReady;
         await loadMeta();
         // Overview 페이지를 visible로 전환 후 렌더링 (Chart.js는 hidden 캔버스에서 크기 0으로 그림)
         document.querySelectorAll(".nav-btn").forEach(b => b.classList.toggle("active", b.dataset.page === "overview"));

@@ -147,6 +147,7 @@ app = Flask(__name__,
             template_folder=os.path.join(base_dir, "templates"),
             static_folder=os.path.join(base_dir, "static"),
             static_url_path="/static")
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 7 * 24 * 3600   # /static은 ?v=로 버전이 붙어 있어 오래 캐시해도 안전하다(수정하면 index.html의 v를 올린다)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "dev-secret-change-me")
 app.config["SESSION_COOKIE_HTTPONLY"] = True
