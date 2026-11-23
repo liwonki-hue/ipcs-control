@@ -509,16 +509,16 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #drSubSysTable th, #drSubSysTable td { border-right: 1px solid var(--border2); }
 #drSubSysTable th:last-child, #drSubSysTable td:last-child { border-right: none; }
 
-/* Steam Blowing — 화면 크기에 비례해 커진다. --sb-s는 1366x768 기준 배율(JS가 창 크기로 정한다, 최소 1).
-   KPI·글자·게이지·열 폭이 같은 배율로 커지고, 세로는 JS가 남는 높이를 게이지 줄과 표 줄에 나눠 준다 */
+/* Steam Blowing — 게이지·열 폭·여백은 화면 크기에 비례해 커진다(--sb-s는 1366x768 기준 배율, JS가 창 크기로 정한다, 최소 1).
+   글자 크기는 다른 탭과 같은 고정 값이다(2026-11-23). 세로는 JS가 남는 높이를 게이지 줄과 표 줄에 나눠 준다 */
 #sbKpiRow .kpi-card { flex: 1 1 0; padding: calc(12px * var(--sb-s, 1)) calc(14px * var(--sb-s, 1)); }
 #sbKpiRow .kpi-card:first-child { flex: 1.35 1 0; }
-#sbKpiRow .kpi-label { font-size: calc(9px * var(--sb-s, 1)); margin-bottom: calc(3px * var(--sb-s, 1)); }
-#sbKpiRow .kpi-value { font-size: calc(26px * var(--sb-s, 1)); }
-#sbKpiRow .kpi-sub { font-size: calc(11px * var(--sb-s, 1)); margin-top: calc(4px * var(--sb-s, 1)); }
+#sbKpiRow .kpi-label { font-size: 9px; margin-bottom: calc(3px * var(--sb-s, 1)); }
+#sbKpiRow .kpi-value { font-size: 26px; }
+#sbKpiRow .kpi-sub { font-size: 11px; margin-top: calc(4px * var(--sb-s, 1)); }
 #sbKpiRow .kpi-bar-wrap { margin-top: calc(6px * var(--sb-s, 1)); }
 #page-steam_blowing .panel { padding: calc(10px * var(--sb-s, 1)); margin-bottom: 0; }
-#page-steam_blowing .panel-title { font-size: calc(11px * var(--sb-s, 1)); margin-bottom: calc(8px * var(--sb-s, 1)); }
+#page-steam_blowing .panel-title { font-size: 11px; margin-bottom: calc(8px * var(--sb-s, 1)); }
 #page-steam_blowing .panel-title::before { height: calc(14px * var(--sb-s, 1)); }
 #sbRow2 { display: grid; grid-template-columns: calc(230px * var(--sb-s, 1)) calc(230px * var(--sb-s, 1)) minmax(0, 1fr); gap: calc(12px * var(--sb-s, 1)); margin-bottom: calc(12px * var(--sb-s, 1)); align-items: stretch; }
 #sbRow3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: calc(12px * var(--sb-s, 1)); align-items: stretch; min-height: 190px; }
@@ -527,8 +527,8 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 #page-steam_blowing .gauge-svg { width: calc(160px * var(--sb-s, 1)) !important; }
 #sbStats, #sbSupportStats { flex: 1; display: flex; flex-direction: column; margin-top: 0 !important; }
 #sbStats .stat-row, #sbSupportStats .stat-row { flex: 1; align-items: center; padding: 0; }
-#sbStats .stat-label, #sbSupportStats .stat-label { font-size: calc(11px * var(--sb-s, 1)); }
-#sbStats .stat-value, #sbSupportStats .stat-value { font-size: calc(12px * var(--sb-s, 1)); }
+#sbStats .stat-label, #sbSupportStats .stat-label { font-size: 11px; }
+#sbStats .stat-value, #sbSupportStats .stat-value { font-size: 12px; }
 /* SB 표: 행은 표 영역의 남는 높이를 나눠 갖는다 */
-#page-steam_blowing .data-table thead th { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(30px * var(--sb-s, 1)); }
-#sbServiceBody td, #sbUnitBody td { font-size: calc(11px * var(--sb-s, 1)) !important; height: calc(26px * var(--sb-s, 1)); padding-top: 2px !important; padding-bottom: 2px !important; }
+#page-steam_blowing .data-table thead th { font-size: 11px !important; height: calc(30px * var(--sb-s, 1)); }
+#sbServiceBody td, #sbUnitBody td { font-size: 11px !important; height: calc(26px * var(--sb-s, 1)); padding-top: 2px !important; padding-bottom: 2px !important; }

@@ -3,7 +3,7 @@ let _sbData = null;
 
 // 화면 배율: 1366x768을 1로 보고, 창이 크면 폭·높이 중 작은 비율만큼 키운다(최대 1.7배)
 function _sbS() { return Math.max(1, Math.min(window.innerWidth / 1366, window.innerHeight / 768, 1.7)); }
-function _sbFs(n) { return Math.round(n * _sbS() * 10) / 10; }
+function _sbFs(n) { return n; }   // 차트 글자 크기는 다른 탭과 같은 고정 값
 
 const SB_FILL_H = 0.8;   // 남는 세로 공간 중 쓰는 비율 — 내용이 적어서 화면 전체를 채우면 어색하다
 // 배율을 적용하고, 남는 세로 공간의 80%를 게이지 줄(58%)과 표 줄(42%)에 나눠 쓴다
