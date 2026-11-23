@@ -532,3 +532,14 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 /* SB 표: 행은 표 영역의 남는 높이를 나눠 갖는다 */
 #page-steam_blowing .data-table thead th { font-size: 11px !important; height: calc(30px * var(--sb-s, 1)); }
 #sbServiceBody td, #sbUnitBody td { font-size: 11px !important; height: calc(26px * var(--sb-s, 1)); padding-top: 2px !important; padding-bottom: 2px !important; }
+
+/* Early Power를 1페이지(스크롤 없이)에 맞춘다 — JS(_epFit)가 --ep-z(0=원래 크기, 1=가장 촘촘)를 화면 높이에 맞게 정하고,
+   게이지·차트 높이·표 글자와 행·KPI 여백이 그 값에 따라 함께 줄어든다 */
+:root { --ep-cut: calc(var(--ep-z, 0) * 80px); }
+#page-early_power .ep-gauge-col .gauge-svg { width: calc(115px - 35px * var(--ep-z, 0)) !important; }
+#page-early_power .ep-gauge-col > .panel { padding: calc(10px - 4px * var(--ep-z, 0)); }
+#epSysTableBody td, #epAreaTableBody td { height: calc(17px - 3px * var(--ep-z, 0)); font-size: calc(11px - 1px * var(--ep-z, 0)) !important; }
+#page-early_power .data-table thead th { font-size: calc(11px - 1px * var(--ep-z, 0)) !important; }
+#epKpiRow { padding-top: calc(14px - 6px * var(--ep-z, 0)); padding-bottom: calc(10px - 4px * var(--ep-z, 0)); }
+#epKpiRow .kpi-card { padding: calc(12px - 4px * var(--ep-z, 0)) 14px; }
+#epKpiRow .kpi-value { font-size: calc(26px - 4px * var(--ep-z, 0)); }

@@ -914,6 +914,20 @@ async function loadEarlyPower() {
     renderEarlyPower(data.ep_kpi ? data.ep_kpi[0] : null, data.ep_unit, data.ep_sys, data.ep_area, data.ep_weekly, data.kpi, data.weekly);
 }
 
+// Early Power 탭을 화면 높이(스크롤 없이 1페이지)에 맞춘다. 넘치면 압축 정도(--ep-z, 0~1)를 0.1씩 올려 게이지·차트·표·KPI를 함께 줄인다.
+// 1.0까지 줄여도 넘치는 작은 화면에서는 스크롤이 남는다.
+function _epFit() {
+    const pg = document.getElementById("page-early_power");
+    if (!pg || pg.classList.contains("hidden")) return;
+    const root = document.documentElement;
+    const over = () => document.documentElement.scrollHeight - window.innerHeight;   // 문서 전체 높이 기준(페이지 아래 여백 포함)
+    let z = 0;
+    root.style.setProperty("--ep-z", "0");
+    while (over() > 0 && z < 1) { z = Math.round((z + 0.1) * 10) / 10; root.style.setProperty("--ep-z", String(z)); }
+}
+let _epFitTimer = null;
+window.addEventListener("resize", () => { clearTimeout(_epFitTimer); _epFitTimer = setTimeout(_epFit, 150); });
+
 async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeekly) {
     if(!d) return;
     try {
@@ -1147,6 +1161,7 @@ async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeek
         }
 
     } catch(e) { console.error("EP Overview failed", e); }
+    _epFit();
 }
 
 // ================================================================================
