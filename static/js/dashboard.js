@@ -2153,13 +2153,17 @@ async function _fetchAllFiltered(endpoint, params) {
     return all;
 }
 
+// Joint Master 화면의 필터 전부(화면 id → 서버 인자). Export·Print가 화면과 같은 조건으로 조회하도록 이 목록을 함께 쓴다.
+// 화면에 필터를 추가하면 여기에도 넣어야 한다 — tests/test_joint_filters.py가 빠진 것을 걸러 준다.
+const _JM_FILTER_FIELDS = [
+    ["jm-unit","unit"], ["jm-system","system"], ["jm-status","status"], ["jm-iso","iso"], ["jm-subarea","sub_area"],
+    ["jm-phase","phase"], ["jm-package","package"], ["jm-inspection","inspection"], ["jm-pwht","pwht"], ["jm-mat","mat"], ["jm-size","size"]
+];
+
 async function exportJMExcel(){
     await ensureXlsx();
     toast("Loading data...", "info");
-    const params = _readFilters([
-        ["jm-unit","unit"],["jm-system","system"],["jm-status","status"],
-        ["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]
-    ]);
+    const params = _readFilters(_JM_FILTER_FIELDS);
     const data = await _fetchAllFiltered("/api/joints", params);
     if(!data.length){toast("No data to export","error");return;}
     const exportData=data.map(r=>({
@@ -2180,7 +2184,7 @@ async function printPage(pageId){
     const _PRINT_TABS = {
         "joint_master": {
             endpoint: "/api/joints",
-            params: () => _readFilters([["jm-unit","unit"],["jm-system","system"],["jm-status","status"],["jm-iso","iso"],["jm-subarea","sub_area"],["jm-phase","phase"],["jm-inspection","inspection"]]),
+            params: () => _readFilters(_JM_FILTER_FIELDS),
             render: d => renderJMTable(d), restore: () => renderJMTable(jmData)
         },
         "support_master": {
