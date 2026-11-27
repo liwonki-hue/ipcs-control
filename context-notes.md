@@ -419,3 +419,13 @@
 - 대신 "Permanent 집계에서 SB 제외"가 핵심이다. 직접 집계하는 Python은 `system != 'SB'`로 거르고, DB 함수·뷰(mv_dashboard_v17 등)는 정의가 저장소에 없어서 사용자가 SQL Editor에서 정의를 내려받아 주어야 안전하게 고칠 수 있다(추측으로 고치면 Overview가 깨질 수 있다).
 - SB 탭은 EP 탭의 형태(KPI 행 + 게이지 + 표)를 따른다. 단 SB는 System이 전부 SB라 System 표가 의미 없어서 Line No 끝의 서비스(AS/HS/LS)와 Unit으로 나눈다. S-Curve 계획선·시험 패키지는 SB에 해당 자료가 없어 넣지 않는다.
 - 2026-11-18 이전까지 Overview KPI는 SB 963건(DI 9,232)을 포함한 상태다. D단계 SQL이 적용되기 전까지는 그대로다.
+
+---
+
+## 2026-11-27 화면·집계 수정 — 결정과 이유
+
+- Sub Area 준비율은 D/I 70% + Support 30% (사용자 지정). Test Package는 Sub Area로 나누지 않아(Register의 Sub Area가 모두 빈 값) 항목에서 뺐다. System·Unit·Area는 70/20/10 그대로이며 계산은 `_readiness` 한 곳에서 한다. Register의 DB `sub_area` 컬럼은 남겨 두었고 앱은 읽거나 쓰지 않는다.
+- Test Pkg Joint Check는 `/api/joints`와 같은 `joint_no_num` 정렬을 쓴다. 상태 필터 캐시의 파이썬 정렬 키(`_tp_sort_key`)도 `_joint_no_key`로 맞췄다. 스캔 시간은 문자순과 차이 없음(3회 비교).
+- Overview는 1650px 이하에서 Monthly·Pressure Test 차트를 위아래로 쌓는다. System 20여 개의 가로 라벨(사용자 지정)은 좁은 칸에서 겹치기 때문이다. S-Curve 범례도 같은 폭에서 가운데 고정을 푼다. `screen` 한정이라 인쇄는 그대로다.
+- Welder 월별 차트는 실적이 6개월을 넘으면 최근 6개월을 보여 준다(첫 달 고정이면 7번째 달부터 사라짐).
+- `/api/refresh-db-cache`가 Support·Test Package 집계(2시간 캐시)도 다시 읽게 했다. DB를 직접 바꾼 뒤 Area·Unit·System의 Support 합계가 옛 값으로 남던 원인. `time`만 0으로 두어 재조회 실패 시 이전 값을 쓴다. 비용은 갱신 1회당 조회 3건.

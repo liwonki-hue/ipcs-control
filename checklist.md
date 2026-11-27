@@ -312,3 +312,10 @@ Plan: ISO Drawing 단위로 진행 상황을 한눈에 보는 "ISO Status" 탭, 
 
 ## E. 검증
 - [x] pytest 195건 · SB 탭 로컬 확인 · 커밋 (D단계 SQL 적용 후 KPI 재확인 남음)
+
+## 2026-11-27 화면·집계 수정
+- [x] Welder 월별 차트 최근 6개월 표시, Pressure Test 라벨 겹침 수정
+- [x] 1650px 이하 Overview 차트 배치·S-Curve 범례 겹침 수정(1366·1920 확인)
+- [x] Test Pkg Joint Check Joint 번호 숫자순 정렬
+- [x] Sub Area 준비율 D/I 70% + Support 30%, Register의 Sub Area 처리 삭제
+- [x] refresh-db-cache가 Support 집계 캐시도 갱신(테스트 추가)
