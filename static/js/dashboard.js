@@ -1252,13 +1252,12 @@ async function loadSubArea() {
         document.getElementById("subareaBars").innerHTML = sortedSub.map(s => {
             const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
             const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
-            const p3 = s.testpkg_total > 0 ? Math.round((s.testpkg_comp / s.testpkg_total) * 100) : 0;
-            const unified = Math.round((p1 * 0.7) + (p2 * 0.2) + (p3 * 0.1));
-            const warn = (p3 > p1 || p3 > p2) ? `<span title="Test Pkg ahead of DI/Support" style="color:#d97706"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg></span>` : "";
+            // Sub Area는 Test Package를 나누지 않으므로 D/I와 Support만 7:2로 계산한다(서버 _readiness와 같은 규칙)
+            const unified = Math.round((p1 * 7 + p2 * 2) / 9);
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">
-                    <span class="prog-name" style="font-weight:700; color:#1e293b">${esc(s.sub_area)}${SUBAREA_FULL_NAMES[s.sub_area] ? ` (${SUBAREA_FULL_NAMES[s.sub_area]})` : ""} ${warn}</span>
+                    <span class="prog-name" style="font-weight:700; color:#1e293b">${esc(s.sub_area)}${SUBAREA_FULL_NAMES[s.sub_area] ? ` (${SUBAREA_FULL_NAMES[s.sub_area]})` : ""}</span>
                     <span style="font-size:12px; font-weight:bold; color:${pctColor(unified)}">${unified}%</span>
                 </div>
                 <div class="triple-bar-container">
@@ -1269,10 +1268,6 @@ async function loadSubArea() {
                     <div class="bar-group">
                         <div class="bar-label"><span>Supports</span><span>${p2}%</span></div>
                         <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p2,100)}%; background:${pctColor(p2)}"></div></div>
-                    </div>
-                    <div class="bar-group">
-                        <div class="bar-label"><span>Testing</span><span>${p3}%</span></div>
-                        <div class="bar-track"><div class="bar-fill" style="width:${Math.min(p3,100)}%; background:${pctColor(p3)}"></div></div>
                     </div>
                 </div>
             </div>`;

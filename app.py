@@ -320,6 +320,14 @@ def _sb_exec(fn):
         raise
 
 # ── RPC data processing ────────────────────────────────────────────────
+def _readiness(item, di_pct, sup_pct, tst_pct=0):
+    """준비율. System·Unit·Area는 D/I 70% + Support 20% + Test 10%. Sub Area는 Test Package를 나누지 않으므로
+    Test를 빼고 D/I와 Support를 같은 비율(7:2)로 100%에 맞춘다."""
+    if "sub_area" in item:
+        return round((di_pct * 7 + sup_pct * 2) / 9, 2)
+    return round(di_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
+
+
 def _parse_rpc(raw):
     if not isinstance(raw, dict):
         raw = {}
@@ -377,8 +385,7 @@ def _parse_rpc(raw):
             item["progress_pct"]      = di_pct
             item["support_pct"]       = sup_pct
             item["testpkg_pct"]       = tst_pct
-            # D/I 70%, Support 20%, Test 10% (consistent with KPI weights)
-            item["unified_readiness"] = round(di_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
+            item["unified_readiness"] = _readiness(item, di_pct, sup_pct, tst_pct)
         return arr
 
     actual_raw    = lst(raw.get("weekly") or raw.get("act"))
@@ -586,9 +593,7 @@ def _fast_kpi_sync(target=None):
             tdiv = item.get("total_di") or 0
             p = round(new_cdi / tdiv * 100, 2) if tdiv else 0
             item["progress_pct"] = p
-            item["unified_readiness"] = round(
-                p * 0.7 + (item.get("support_pct") or 0) * 0.2
-                + (item.get("testpkg_pct") or 0) * 0.1, 2)
+            item["unified_readiness"] = _readiness(item, p, item.get("support_pct") or 0, item.get("testpkg_pct") or 0)
         for item in (cur.get("systems")  or []):
             s = item.get("system") or ""
             if s in sys_m:  _repct(item, sys_m[s])
@@ -740,7 +745,7 @@ def _apply_kpi_override(ko, target=None):
             item["progress_pct"] = new_pct
             sup_pct = item.get("support_pct") or 0
             tst_pct = item.get("testpkg_pct") or 0
-            item["unified_readiness"] = round(new_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
+            item["unified_readiness"] = _readiness(item, new_pct, sup_pct, tst_pct)
 
         for item in (cur.get("systems") or []):
             s = item.get("system") or ""
@@ -909,7 +914,7 @@ def _build_secondary_caches_impl():
                     _soff += 10000
                 m_sub = sorted(sub_total.keys())
                 area_map = {sa: max(c.items(), key=lambda kv: kv[1])[0] for sa, c in sub_area_cnt.items() if c}
-                # 기존 subareas의 Support/Test 필드 보존 (덮어쓰기로 사라지지 않도록 병합)
+                # 기존 subareas의 Support 필드 보존 (덮어쓰기로 사라지지 않도록 병합)
                 with _lock:
                     _old_subareas = {
                         o.get("sub_area"): o for o in ((_cache.get("data") or {}).get("subareas") or [])
@@ -920,10 +925,8 @@ def _build_secondary_caches_impl():
                     t = sub_total[sa]; c = sub_comp.get(sa, 0)
                     old = _old_subareas.get(sa) or {}
                     sup_tot = old.get("support_total", 0) or 0; sup_comp = old.get("support_comp", 0) or 0
-                    tst_tot = old.get("testpkg_total", 0) or 0; tst_comp = old.get("testpkg_comp", 0) or 0
                     di_pct  = round(c / t * 100, 2) if t > 0 else 0.0
                     sup_pct = round(sup_comp / sup_tot * 100, 2) if sup_tot > 0 else 0.0
-                    tst_pct = round(tst_comp / tst_tot * 100, 2) if tst_tot > 0 else 0.0
                     subareas.append({
                         "sub_area":         sa,
                         "area":             area_map.get(sa, ""),
@@ -934,10 +937,7 @@ def _build_secondary_caches_impl():
                         "support_total":    sup_tot,
                         "support_comp":     sup_comp,
                         "support_pct":      sup_pct,
-                        "testpkg_total":    tst_tot,
-                        "testpkg_comp":     tst_comp,
-                        "testpkg_pct":      tst_pct,
-                        "unified_readiness": round(di_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2),
+                        "unified_readiness": _readiness({"sub_area": sa}, di_pct, sup_pct),
                     })
                 with _lock:
                     _sub_area_cache["data"] = m_sub
@@ -1201,7 +1201,6 @@ def _build():
                 _sup_a_tot  = _st_data["sup_area_tot"]; _sup_a_done  = _st_data["sup_area_done"]
                 _sup_sa_tot = _st_data["sup_sub_tot"];  _sup_sa_done = _st_data["sup_sub_done"]
                 _tst_s_tot  = _st_data["tst_sys_tot"];  _tst_s_done  = _st_data["tst_sys_done"]
-                _tst_sa_tot = _st_data["tst_sub_tot"];  _tst_sa_done = _st_data["tst_sub_done"]
                 print(f"[cache] Support/TestPkg cache HIT ({int(_st_age)}s old)")
             else:
                 def _fetch_support_breakdown():
@@ -1229,25 +1228,22 @@ def _build():
                     return sys_tot, sys_done, unit_tot, unit_done, area_tot, area_done, sub_tot, sub_done
 
                 def _fetch_test_breakdown():
-                    """test_package_master 전체 스캔 — system/sub_area 집계 (unit/area 컬럼 없음)"""
-                    sys_tot={}; sys_done={}; sub_tot={}; sub_done={}
+                    """test_package_master 전체 스캔 — system 집계 (Package는 Unit·Area·Sub Area로 나누지 않는다)"""
+                    sys_tot={}; sys_done={}
                     off, bsz = 0, 10000
                     while True:
                         r = _sb_exec(lambda _c: _c.table("test_package_master")
-                                     .select("system,sub_area,completed")
+                                     .select("system,completed")
                                      .order("id").range(off, off + bsz - 1).execute())
                         rows = r.data or []
                         for row in rows:
                             done = 1 if row.get("completed") else 0
-                            for key, tot_m, done_m in (
-                                (row.get("system")   or "", sys_tot, sys_done),
-                                (row.get("sub_area") or "", sub_tot, sub_done),
-                            ):
-                                tot_m[key]  = tot_m.get(key, 0) + 1
-                                done_m[key] = done_m.get(key, 0) + done
+                            key = row.get("system") or ""
+                            sys_tot[key]  = sys_tot.get(key, 0) + 1
+                            sys_done[key] = sys_done.get(key, 0) + done
                         if len(rows) < bsz: break
                         off += bsz
-                    return sys_tot, sys_done, sub_tot, sub_done
+                    return sys_tot, sys_done
 
                 _sup_ex = ThreadPoolExecutor(max_workers=2)
                 _sup_ok = _tst_ok = False
@@ -1272,16 +1268,15 @@ def _build():
                             _sup_a_tot, _sup_a_done, _sup_sa_tot, _sup_sa_done = {}, {}, {}, {}
                     _remaining = max(1.0, 60 - (time.time() - _t0))
                     try:
-                        _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = _fut_tst.result(timeout=_remaining)
+                        _tst_s_tot, _tst_s_done = _fut_tst.result(timeout=_remaining)
                         _tst_ok = True
                     except Exception as _te:
                         print(f"[cache] testpkg breakdown failed: {_te}")
                         if _st_data is not None:
                             print("[cache] testpkg breakdown: keeping previous cached values")
                             _tst_s_tot, _tst_s_done = _st_data["tst_sys_tot"], _st_data["tst_sys_done"]
-                            _tst_sa_tot, _tst_sa_done = _st_data["tst_sub_tot"], _st_data["tst_sub_done"]
                         else:
-                            _tst_s_tot, _tst_s_done, _tst_sa_tot, _tst_sa_done = {}, {}, {}, {}
+                            _tst_s_tot, _tst_s_done = {}, {}
                 finally:
                     _sup_ex.shutdown(wait=False)
 
@@ -1293,7 +1288,6 @@ def _build():
                             "sup_area_tot": _sup_a_tot,  "sup_area_done": _sup_a_done,
                             "sup_sub_tot": _sup_sa_tot,  "sup_sub_done": _sup_sa_done,
                             "tst_sys_tot": _tst_s_tot,   "tst_sys_done": _tst_s_done,
-                            "tst_sub_tot": _tst_sa_tot,  "tst_sub_done": _tst_sa_done,
                         }
                         _sup_test_cache["time"] = time.time()
                 else:
@@ -1336,8 +1330,6 @@ def _build():
                 if _sa_area.get(_sa): _item["area"] = _sa_area[_sa]
                 _item["support_total"] = _sup_sa_tot.get(_sa, 0)
                 _item["support_comp"]  = _sup_sa_done.get(_sa, 0)
-                _item["testpkg_total"] = _tst_sa_tot.get(_sa, 0)
-                _item["testpkg_comp"]  = _tst_sa_done.get(_sa, 0)
             print(f"[cache] Support {s_comp}/{s_total}, TestPkg {t_comp}/{t_total}, "
                   f"systems={len(raw.get('systems', []))} units={len(raw.get('units', []))} "
                   f"areas={len(raw.get('areas', []))} subareas={len(raw.get('subareas', []))}")
@@ -3447,7 +3439,6 @@ def api_testpkg_get():
         limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
         offset  = int(request.args.get("offset",   0))
         system   = request.args.get("system",      "").strip()
-        subarea  = request.args.get("sub_area",    "").strip()
         pkg_no   = request.args.get("test_pkg_no", "").strip()
         status   = request.args.get("status",      "").strip()
         search   = request.args.get("q",           "").strip()
@@ -3455,7 +3446,7 @@ def api_testpkg_get():
         skip_readiness = request.args.get("skip_readiness", "0") == "1"
 
         # 필터없는 전체 목록(드롭다운용) 캐시 — 10분 TTL
-        is_all_req = skip_readiness and not any([system, subarea, pkg_no, status, search, method])
+        is_all_req = skip_readiness and not any([system, pkg_no, status, search, method])
         if is_all_req and limit >= 1000:
             with _lock:
                 cached = _testpkg_all_cache.get("data")
@@ -3465,7 +3456,6 @@ def api_testpkg_get():
 
         q = sb.table("test_package_master").select("*", count="exact")
         if system:  q = q.eq("system",      system)
-        if subarea: q = q.eq("sub_area",    subarea)
         if pkg_no:  q = q.eq("test_pkg_no", pkg_no)
         if status == "pass":    q = q.eq("completed", True)
         if status == "pending": q = q.eq("completed", False)
@@ -3586,7 +3576,7 @@ def api_testpkg_sync():
 
         pkgs, off = [], 0
         while True:
-            r = sb.table("joint_master").select("system,sub_area,package,phase") \
+            r = sb.table("joint_master").select("system,package,phase") \
                     .not_.is_("package", "null").order("id").range(off, off + 9999).execute()
             pkgs.extend(r.data or [])
             if len(r.data or []) < 10000: break
@@ -3597,12 +3587,12 @@ def api_testpkg_sync():
         for row in pkgs:
             key = (row.get("system") or "", row.get("package") or "")
             if key[1] and key not in seen:
-                seen[key] = (row.get("sub_area") or "", row.get("phase") or None)
+                seen[key] = row.get("phase") or None
         del pkgs
 
         to_insert = [
-            {"system": sys, "sub_area": sub, "phase": ph, "test_pkg_no": pkg, "completed": False}
-            for (sys, pkg), (sub, ph) in seen.items()
+            {"system": sys, "phase": ph, "test_pkg_no": pkg, "completed": False}
+            for (sys, pkg), ph in seen.items()
             if (sys, pkg) not in existing_set
         ]
 
