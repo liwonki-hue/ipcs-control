@@ -213,7 +213,10 @@ def test_refresh_db_cache_invalidates_widget_caches(client, monkeypatch):
     monkeypatch.setattr(A, "_refresh_last", 0)
     A._ep_sup_cache._store({"sys": []}, A._ep_sup_cache._gen)
     A._tp_sys_cache["data"] = {"data": []}
+    monkeypatch.setattr(A, "_sup_test_cache", {"data": {"sup_sys_tot": {}}, "time": time.time()})
     assert A._ep_sup_cache.peek()[1] is True                      # 방금 만든 값은 신선하다
     assert client.get("/api/refresh-db-cache").status_code == 200
     assert A._ep_sup_cache.peek()[1] is False                     # 호출 뒤에는 낡은 것으로 표시
     assert A._tp_sys_cache["data"] is None
+    assert A._sup_test_cache["time"] == 0                         # Support 집계(2시간 캐시)도 다음 빌드에서 다시 읽는다
+    assert A._sup_test_cache["data"] is not None                  # 다시 읽기에 실패하면 쓸 수 있게 이전 값은 남긴다

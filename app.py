@@ -1756,6 +1756,7 @@ def api_refresh_db_cache():
             _meta_cache["data"] = None
             _meta_cache["time"] = 0
             _tp_sys_cache["data"] = None           # DB를 직접 바꾼 경우(SQL·스크립트)에도 Test Package 차트가 15분 TTL을 기다리지 않게 한다
+            _sup_test_cache["time"] = 0            # Support·Test Package 집계(2시간 캐시)도 이어지는 빌드에서 다시 읽는다. 실패하면 이전 값을 쓴다
             _build_fail = False
             if not _building:
                 _building = True
