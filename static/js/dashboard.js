@@ -830,7 +830,9 @@ function drawTestStageChart(canvasId, systemNames, rows, lastNames = []) {
                          color: "#0f172a", font: {weight: "bold", size: 10}, anchor: "center", align: "center", clamp: true}
         }))},
         options: {...opts, layout: {padding: {top: 4}},
-            scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 0, maxRotation: 0}},
+            scales: {x: {...opts.scales.x, stacked: true, ticks: {...tick, autoSkip: false, minRotation: 0, maxRotation: 0,
+                                                                  // 항목이 많으면 "GT MISC"처럼 띄어 쓴 이름을 두 줄로 나눠 옆 라벨과 겹치지 않게 한다
+                                                                  callback(v) { const n = this.getLabelForValue(v); return names.length > 12 ? n.split(" ") : n; }}},
                      y: {...opts.scales.y, stacked: true, max: 100, grace: 0, ticks: {...tick, stepSize: 50, callback: v => v + "%"}}},
             plugins: {...opts.plugins, legend: {display: true, position: "top", labels: {...opts.plugins.legend.labels, boxWidth: 10, padding: 8, font: {family: "DM Mono, monospace", size: 9}}},
                       tooltip: {...opts.plugins.tooltip, callbacks: {label: ctx => `${ctx.dataset.label}: ${cnt(names[ctx.dataIndex], STAGES[ctx.datasetIndex].key)} / ${total(names[ctx.dataIndex])} pkg`}}}}
@@ -925,9 +927,9 @@ function _epFit() {
     root.style.setProperty("--ep-z", "0");
     while (over() > 0 && z < 1) { z = Math.round((z + 0.1) * 10) / 10; root.style.setProperty("--ep-z", String(z)); }
 }
-let _epFitTimer = null;
-window.addEventListener("resize", () => { clearTimeout(_epFitTimer); _epFitTimer = setTimeout(_epFit, 150); });
-
+let _epFitTimer = null;
+window.addEventListener("resize", () => { clearTimeout(_epFitTimer); _epFitTimer = setTimeout(_epFit, 150); });
+
 async function renderEarlyPower(d, _units, systems, areas, weekly, kpi, mainWeekly) {
     if(!d) return;
     try {
@@ -2701,20 +2703,19 @@ function renderWelder(data) {
         });
     }
 
-    // ── Monthly chart: fixed 6-month frame starting from first active month ─────
+    // ── Monthly chart: 6-month frame (from the first active month, then the latest 6) ─────
     destroyChart("welderSysChart");
     const sysEl = document.getElementById("welderSysChart");
     const monthlyAll = data.monthly || [];
-    // Anchor = first (earliest) month in data → show 6 months forward
-    const _anchorMonth = monthlyAll.length
-        ? monthlyAll[0].month
-        : (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`; })();
-    const [_ay, _am] = _anchorMonth.split("-").map(Number);
-    const moFrame = Array.from({length: 6}, (_, i) => {
-        let mo = _am + i, yr = _ay;
-        while (mo > 12) { mo -= 12; yr++; }
-        return `${yr}-${String(mo).padStart(2, "0")}`;
-    });
+    // 실적이 6개월 이하면 첫 달부터 앞으로, 넘으면 최신 달이 마지막 칸에 오게 한다(첫 달 고정이면 7번째 달부터 화면에서 사라진다)
+    const _moIdx = m => { const [y, mo] = m.split("-").map(Number); return y * 12 + mo - 1; };
+    const _idxs = monthlyAll.map(m => _moIdx(m.month));
+    const _now = new Date();
+    const _start = _idxs.length
+        ? Math.max(Math.min(..._idxs), Math.max(..._idxs) - 5)
+        : _now.getFullYear() * 12 + _now.getMonth();
+    const moFrame = Array.from({length: 6}, (_, i) =>
+        `${Math.floor((_start + i) / 12)}-${String((_start + i) % 12 + 1).padStart(2, "0")}`);
     const moMap = {};
     monthlyAll.forEach(m => moMap[m.month] = m);
     const moSlice = moFrame.map(mo => moMap[mo] || { month: mo, total_di: null, avg_di_per_welder: null });
