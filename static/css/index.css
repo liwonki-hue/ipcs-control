@@ -405,6 +405,14 @@ input[type="date"].date-empty:focus::-webkit-datetime-edit-fields-wrapper { colo
 .rg-ep-top { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:10px; }
 .rg7    { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:10px; }
 
+/* Overview S-Curve 범례 — 넓으면 제목 줄 가운데, 좁으면 제목 아래 줄(가운데 고정이면 제목과 겹친다) */
+.scurve-title { position:relative; flex-wrap:wrap; }
+.scurve-legend { position:absolute; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:14px; font-size:11px; font-weight:500; color:#334155; white-space:nowrap; }
+@media screen and (max-width:1650px) { .scurve-legend { position:static; transform:none; margin-left:auto; } }
+/* Monthly DI · Pressure Test 차트 — System 20여 개의 가로 라벨은 좁은 칸에서 겹치므로 위아래로 쌓아 폭을 다 준다 */
+.rg-ov-charts { display:grid; grid-template-columns:minmax(0,2fr) minmax(0,3fr); gap:8px; }
+@media screen and (max-width:1650px) { .rg-ov-charts { grid-template-columns:minmax(0,1fr); } }
+
 /* 1400px — 폰트·여백 소폭 압축 */
 @media (max-width:1400px) {
   .kpi-value { font-size:22px; }
