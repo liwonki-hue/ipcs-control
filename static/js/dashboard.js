@@ -1252,8 +1252,8 @@ async function loadSubArea() {
         document.getElementById("subareaBars").innerHTML = sortedSub.map(s => {
             const p1 = s.total_di > 0 ? Math.round((s.completed_di / s.total_di) * 100) : 0;
             const p2 = s.support_total > 0 ? Math.round((s.support_comp / s.support_total) * 100) : 0;
-            // Sub Area는 Test Package를 나누지 않으므로 D/I와 Support만 7:2로 계산한다(서버 _readiness와 같은 규칙)
-            const unified = Math.round((p1 * 7 + p2 * 2) / 9);
+            // Sub Area는 Test Package를 나누지 않으므로 D/I 70% + Support 30%로 계산한다(서버 _readiness와 같은 규칙)
+            const unified = Math.round(p1 * 0.7 + p2 * 0.3);
 
             return `<div class="prog-row" style="margin-bottom:15px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                 <div class="prog-head">

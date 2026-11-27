@@ -322,9 +322,9 @@ def _sb_exec(fn):
 # ── RPC data processing ────────────────────────────────────────────────
 def _readiness(item, di_pct, sup_pct, tst_pct=0):
     """준비율. System·Unit·Area는 D/I 70% + Support 20% + Test 10%. Sub Area는 Test Package를 나누지 않으므로
-    Test를 빼고 D/I와 Support를 같은 비율(7:2)로 100%에 맞춘다."""
+    D/I 70% + Support 30%로 계산한다."""
     if "sub_area" in item:
-        return round((di_pct * 7 + sup_pct * 2) / 9, 2)
+        return round(di_pct * 0.7 + sup_pct * 0.3, 2)
     return round(di_pct * 0.7 + sup_pct * 0.2 + tst_pct * 0.1, 2)
 
 
