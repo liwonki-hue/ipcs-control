@@ -2678,8 +2678,8 @@ def _clear_tp_status_cache():
 
 
 def _tp_sort_key(r):
-    """화면 정렬(package, iso_drawing, joint_no, id; package NULL은 마지막)과 같은 순서의 키."""
-    return (r.get("package") is None, r.get("package") or "", r.get("iso_drawing") or "", str(r.get("joint_no") or ""), r["id"])
+    """화면 정렬(package, iso_drawing, joint_no 숫자순, id; package NULL은 마지막)과 같은 순서의 키."""
+    return (r.get("package") is None, r.get("package") or "", r.get("iso_drawing") or "", *_joint_no_key(r))
 
 
 def _tp_row_matches(r, key):
@@ -2740,6 +2740,7 @@ _TP_SCAN_PAGE = 5000        # 한 번에 읽는 행 수(1만=3.5s·+17MB, 5천=4
 _tp_scan_lock = threading.Lock()   # 상태 필터 전체 스캔은 한 번에 하나만(같은 요청 동시 6개가 각자 스캔하던 문제)
 @app.route("/api/testpkg-joints", methods=["GET"])
 def api_testpkg_joints():
+    global _jno_num_state, _jno_num_checked
     try:
         sb      = get_sb()
         limit   = min(int(request.args.get("limit",  100)), _MAX_PAGE_ROWS)
@@ -2749,6 +2750,7 @@ def api_testpkg_joints():
         status  = request.args.get("status",   "").strip()
         iso     = request.args.get("iso",      "").strip()
         insp    = request.args.get("inspection", "").strip()
+        by_num  = _jno_num_available()   # DB의 joint_no_num으로 숫자순(1,2,...,10) 정렬. /api/joints와 같은 방식
 
         def query(count=None, cols=_TP_JOINT_COLS):   # postgrest 빌더는 제자리에서 바뀌므로 조회마다 새로 만든다
             q = sb.table("joint_master").select(cols, count=count).neq("system", SB_SYSTEM).or_("package.not.is.null,inspection.in.(VT,RT,MT,PT)")
@@ -2756,7 +2758,9 @@ def api_testpkg_joints():
             if iso:    q = q.ilike("iso_drawing", f"%{iso}%")
             if insp:   q = q.eq("inspection", insp)
             if system: q = q.eq("system",  system)
-            return q.order("package").order("iso_drawing").order("joint_no").order("id")
+            q = q.order("package").order("iso_drawing")
+            if by_num: q = q.order("joint_no_num")
+            return q.order("joint_no").order("id")
 
         if status in ("completed", "pending"):
             # 완료 기준(_joint_accepted: VT + 지정 NDE(RT 재촬영 포함) + PWHT)은 DB 조건식으로 옮기면 표의 STATUS와
@@ -2813,6 +2817,9 @@ def api_testpkg_joints():
 
         return jsonify({"data": rows, "count": res.count})
     except Exception as e:
+        if _jno_num_state is not False and _is_missing_jno_num(e):   # 컬럼이 없는 환경이면 문자열 정렬로 한 번 다시 조회
+            _jno_num_state, _jno_num_checked = False, time.time()
+            return api_testpkg_joints()
         return jsonify({"error": _err_text(e)}), 500
 
 
